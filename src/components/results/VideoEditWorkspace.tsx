@@ -26,6 +26,7 @@ import ClipTimeline, { type TimelineClip } from "@/components/results/ClipTimeli
 import StudioButton from "@/components/results/StudioButton";
 import TrueRatioMedia from "@/components/results/TrueRatioMedia";
 import useClipPosters from "@/hooks/useClipPosters";
+import useClipDurations from "@/hooks/useClipDurations";
 import { cachedDuration } from "@/lib/videoPoster";
 import { persistSourceDuration, type EditSegment } from "@/services/campaignEditor";
 import type { useCampaignEditor } from "@/hooks/useCampaignEditor";
@@ -108,15 +109,32 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
   const posters = useClipPosters(posterSources, { allowedIds, concurrency: 2 });
 
   /**
-   * Metadata durations land with the posters (same metadata load). They are the
-   * source of truth for labels, totals and trim ranges; stored values are only a
-   * fallback until metadata arrives.
+   * Lengths are measured for EVERY clip, never gated behind the viewport: a
+   * metadata-only probe fetches headers, not the file, so a 10-clip run still
+   * knows all its real durations while only the active clip streams fully.
+   */
+  const durationSources = useMemo(
+    () =>
+      segments.map((segment) => ({
+        id: segment.id,
+        url: segment.url,
+        cacheKey: `edit-segment:${segment.id}`,
+        knownMs: segment.source_duration_ms || null,
+        skip: isImageSegment(segment.source_path),
+      })),
+    [segments],
+  );
+  const probed = useClipDurations(durationSources, { concurrency: 3 });
+
+  /**
+   * Metadata durations are the source of truth for labels, totals and trim
+   * ranges; stored values are only a fallback until metadata arrives.
    */
   useEffect(() => {
     setMeasured((current) => {
       let next = current;
       for (const segment of segments) {
-        const real = cachedDuration(segment.url, `edit-segment:${segment.id}`);
+        const real = probed[segment.id] ?? cachedDuration(segment.url, `edit-segment:${segment.id}`);
         if (real && current[segment.id] !== real) {
           if (next === current) next = { ...current };
           next[segment.id] = real;
@@ -124,7 +142,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
       }
       return next;
     });
-  }, [posters, segments]);
+  }, [posters, probed, segments]);
 
   const durationOf = useCallback(
     (segment: EditSegment) => {
@@ -136,19 +154,42 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     [measured],
   );
 
-  /** Write a measured correction back once per clip — best effort, silent. */
+  /**
+   * SELF-HEALING DURATIONS — write each measured length back once per clip,
+   * debounced and serialized, silently. Runs whose `source_duration_ms` was
+   * never stored get real lengths persisted so trims stay valid next session.
+   */
   const projectId = editor?.project?.id ?? null;
   const revision = editor?.project?.revision ?? 0;
+  const patchSourceDuration = editor?.patchSourceDuration;
+  const healTimerRef = useRef<number | null>(null);
+  const healingRef = useRef(false);
   useEffect(() => {
     if (!projectId) return;
-    for (const segment of segments) {
-      const real = measured[segment.id];
-      if (!real || correctedRef.current.has(segment.id)) continue;
-      if (Math.abs(real - (Number(segment.source_duration_ms) || 0)) < 250) continue;
-      correctedRef.current.add(segment.id);
-      void persistSourceDuration(projectId, revision, segment.id, real);
-    }
-  }, [measured, segments, projectId, revision]);
+    if (healTimerRef.current) window.clearTimeout(healTimerRef.current);
+    healTimerRef.current = window.setTimeout(() => {
+      void (async () => {
+        if (healingRef.current) return;
+        healingRef.current = true;
+        try {
+          for (const segment of segments) {
+            const real = measured[segment.id];
+            if (!real || correctedRef.current.has(segment.id)) continue;
+            if (Math.abs(real - (Number(segment.source_duration_ms) || 0)) < 250) continue;
+            correctedRef.current.add(segment.id);
+            /* Local state first, so labels/total/trim ranges are valid instantly. */
+            patchSourceDuration?.(segment.id, real);
+            await persistSourceDuration(projectId, revision, segment.id, real);
+          }
+        } finally {
+          healingRef.current = false;
+        }
+      })();
+    }, 400);
+    return () => {
+      if (healTimerRef.current) window.clearTimeout(healTimerRef.current);
+    };
+  }, [measured, segments, projectId, revision, patchSourceDuration]);
 
   /* ------------------------------ playback ------------------------------ */
 
@@ -255,15 +296,17 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     };
   };
 
-  /** Total ticks in realtime: swap the dragged clip's span into the saved total. */
-  const liveDurationMs = (() => {
-    if (!liveTrim) return editor.durationMs;
-    const segment = segments.find((item) => item.id === liveTrim.id);
-    if (!segment) return editor.durationMs;
-    const savedSpan = Math.max(0, segment.trim_end_ms - segment.trim_start_ms);
-    const nextSpan = Math.max(0, liveTrim.trimEndMs - liveTrim.trimStartMs);
-    return Math.max(0, editor.durationMs - savedSpan + nextSpan);
-  })();
+  /**
+   * Total is computed from the REAL (measured) lengths, so a run with no stored
+   * durations never reads 0:00, and it ticks live while a handle is held.
+   */
+  const spanOf = (segment: (typeof segments)[number]) => {
+    const duration = durationOf(segment);
+    const { trimStartMs, trimEndMs } = liveSpan(segment);
+    if (trimEndMs > trimStartMs) return trimEndMs - trimStartMs;
+    return duration > 0 ? duration - Math.min(trimStartMs, duration) : 0;
+  };
+  const liveDurationMs = segments.reduce((sum, segment) => sum + spanOf(segment), 0);
 
   const clips: TimelineClip[] = segments.map((segment, index) => ({
     id: segment.id,
@@ -273,7 +316,11 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     kind: isImageSegment(segment.source_path) ? "image" : "video",
     sourceDurationMs: Math.max(1, durationOf(segment) || 1),
     trimStartMs: liveSpan(segment).trimStartMs,
-    trimEndMs: liveSpan(segment).trimEndMs,
+    /* An unset/zero trim end means "whole clip" once the real length is known. */
+    trimEndMs:
+      liveSpan(segment).trimEndMs > liveSpan(segment).trimStartMs
+        ? liveSpan(segment).trimEndMs
+        : Math.max(1, durationOf(segment) || 1),
     muted: segment.muted,
     incomplete: segment.removed || !segment.source_path,
     durationUnknown: durationOf(segment) <= 0,
@@ -344,7 +391,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
           payload: {
             segment_id: selected.id,
             trim_start_ms: 0,
-            trim_end_ms: Math.max(1, selected.source_duration_ms),
+            trim_end_ms: Math.max(1, durationOf(selected) || selected.source_duration_ms),
           },
         },
         { op: "mute", payload: { segment_id: selected.id, muted: false } },

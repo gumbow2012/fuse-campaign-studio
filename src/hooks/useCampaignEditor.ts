@@ -48,15 +48,18 @@ function applyLocally(segments: EditSegment[], op: EditOp): EditSegment[] {
       });
     }
     case "trim":
-      return segments.map((segment) =>
-        segment.id === op.payload.segment_id
-          ? {
-              ...segment,
-              trim_start_ms: Math.max(0, Math.round(op.payload.trim_start_ms)),
-              trim_end_ms: Math.min(segment.source_duration_ms, Math.round(op.payload.trim_end_ms)),
-            }
-          : segment,
-      );
+      return segments.map((segment) => {
+        if (segment.id !== op.payload.segment_id) return segment;
+        const end = Math.round(op.payload.trim_end_ms);
+        /* A stored length of 0 means "unknown" — it must never clamp a trim to 0. */
+        const known = Number(segment.source_duration_ms) > 0 ? segment.source_duration_ms : 0;
+        return {
+          ...segment,
+          source_duration_ms: known > 0 ? known : Math.max(0, end),
+          trim_start_ms: Math.max(0, Math.round(op.payload.trim_start_ms)),
+          trim_end_ms: known > 0 ? Math.min(known, end) : Math.max(0, end),
+        };
+      });
     case "mute":
       return segments.map((segment) =>
         segment.id === op.payload.segment_id ? { ...segment, muted: op.payload.muted } : segment,
@@ -369,12 +372,49 @@ export function useCampaignEditor(projectId: string | undefined) {
     [drain],
   );
 
-  /** Manual retry after a failed save — the queued ops are still intact. */
+  /**
+   * Manual retry after a failed save — the queued ops are still intact. The
+   * newest server revision is re-fetched first (without touching the user's local
+   * edits) so a stale revision can't reject the retry again.
+   */
   const retrySave = useCallback(() => {
     setSaveError(null);
-    setSaveState(queueRef.current.length ? "dirty" : "saved");
-    void drain();
-  }, [drain]);
+    setSaveState(queueRef.current.length ? "saving" : "saved");
+    void (async () => {
+      if (projectId) {
+        try {
+          const state = await loadEditorState(projectId);
+          adoptRevision(state.project);
+        } catch {
+          /* fall through — the conflict path inside drain() still reconciles */
+        }
+      }
+      await drain();
+    })();
+  }, [drain, projectId, adoptRevision]);
+
+  /**
+   * Locally record a clip length measured from media metadata (self-healing for
+   * runs whose `source_duration_ms` was never stored). No history entry: it is a
+   * correction of missing data, not a user edit.
+   */
+  const patchSourceDuration = useCallback((segmentId: string, sourceDurationMs: number) => {
+    const ms = Math.round(sourceDurationMs);
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    setSegments((current) => {
+      const next = current.map((segment) =>
+        segment.id === segmentId
+          ? {
+              ...segment,
+              source_duration_ms: ms,
+              trim_end_ms: segment.trim_end_ms > segment.trim_start_ms ? Math.min(segment.trim_end_ms, ms) : ms,
+            }
+          : segment,
+      );
+      segmentsRef.current = next;
+      return next;
+    });
+  }, []);
 
 
   /** Public mutation entry point — optimistic UI first, then autosave. */
@@ -544,6 +584,7 @@ export function useCampaignEditor(projectId: string | undefined) {
     saveState,
     saveError,
     retrySave,
+    patchSourceDuration,
     selectedId,
     setSelectedId,
     runOp,

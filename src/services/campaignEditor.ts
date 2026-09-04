@@ -176,6 +176,11 @@ export async function applyEditOp(
 /**
  * Persist a measured clip length outside the edit queue: best-effort, never
  * surfaces an error to the user and never blocks an edit.
+ *
+ * On a revision conflict the newest revision comes back in the response, so the
+ * write is retried once against it. If the dedicated duration op is not
+ * supported, the length is written through the always-supported `trim` op (full
+ * span 0 → measured), which is also what an untrimmed clip should hold.
  */
 export async function persistSourceDuration(
   projectId: string,
@@ -183,15 +188,37 @@ export async function persistSourceDuration(
   segmentId: string,
   sourceDurationMs: number,
 ): Promise<number | null> {
-  try {
-    const result = await applyEditOp(projectId, expectedRevision, {
-      op: "set_source_duration",
-      payload: { segment_id: segmentId, source_duration_ms: Math.round(sourceDurationMs) },
-    });
-    return result.status === "ok" && result.project ? result.project.revision : null;
-  } catch {
-    return null;
+  const durationMs = Math.round(sourceDurationMs);
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return null;
+
+  const attempt = async (revision: number, op: EditOp) => {
+    try {
+      return await applyEditOp(projectId, revision, op);
+    } catch {
+      return { status: "error" as const };
+    }
+  };
+
+  const durationOp: EditOp = {
+    op: "set_source_duration",
+    payload: { segment_id: segmentId, source_duration_ms: durationMs },
+  };
+  const trimOp: EditOp = {
+    op: "trim",
+    payload: { segment_id: segmentId, trim_start_ms: 0, trim_end_ms: durationMs },
+  };
+
+  let revision = expectedRevision;
+  for (const op of [durationOp, trimOp]) {
+    let result = await attempt(revision, op);
+    if (result.status === "conflict" && result.project) {
+      revision = result.project.revision;
+      result = await attempt(revision, op);
+    }
+    if (result.status === "ok" && result.project) return result.project.revision;
+    if (result.project) revision = result.project.revision;
   }
+  return null;
 }
 
 export type ExportResult = {
