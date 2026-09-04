@@ -108,15 +108,32 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
   const posters = useClipPosters(posterSources, { allowedIds, concurrency: 2 });
 
   /**
-   * Metadata durations land with the posters (same metadata load). They are the
-   * source of truth for labels, totals and trim ranges; stored values are only a
-   * fallback until metadata arrives.
+   * Lengths are measured for EVERY clip, never gated behind the viewport: a
+   * metadata-only probe fetches headers, not the file, so a 10-clip run still
+   * knows all its real durations while only the active clip streams fully.
+   */
+  const durationSources = useMemo(
+    () =>
+      segments.map((segment) => ({
+        id: segment.id,
+        url: segment.url,
+        cacheKey: `edit-segment:${segment.id}`,
+        knownMs: segment.source_duration_ms || null,
+        skip: isImageSegment(segment.source_path),
+      })),
+    [segments],
+  );
+  const probed = useClipDurations(durationSources, { concurrency: 3 });
+
+  /**
+   * Metadata durations are the source of truth for labels, totals and trim
+   * ranges; stored values are only a fallback until metadata arrives.
    */
   useEffect(() => {
     setMeasured((current) => {
       let next = current;
       for (const segment of segments) {
-        const real = cachedDuration(segment.url, `edit-segment:${segment.id}`);
+        const real = probed[segment.id] ?? cachedDuration(segment.url, `edit-segment:${segment.id}`);
         if (real && current[segment.id] !== real) {
           if (next === current) next = { ...current };
           next[segment.id] = real;
@@ -124,7 +141,7 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
       }
       return next;
     });
-  }, [posters, segments]);
+  }, [posters, probed, segments]);
 
   const durationOf = useCallback(
     (segment: EditSegment) => {
