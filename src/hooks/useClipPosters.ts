@@ -19,7 +19,25 @@ export interface PosterSource {
 
 const CONCURRENCY = 2;
 
-export function useClipPosters(sources: PosterSource[]): Record<string, string | null> {
+export interface ClipPosterOptions {
+  /**
+   * When provided, ONLY these clips extract a poster (near/in the viewport plus
+   * the active clip). Keeps a ten-clip timeline from opening ten videos at once.
+   */
+  allowedIds?: Iterable<string> | null;
+  concurrency?: number;
+}
+
+export function useClipPosters(
+  sources: PosterSource[],
+  options?: ClipPosterOptions,
+): Record<string, string | null> {
+  const allowed = useMemo(
+    () => (options?.allowedIds ? new Set(options.allowedIds) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [options?.allowedIds ? Array.from(options.allowedIds).sort().join("|") : ""],
+  );
+  const concurrency = Math.max(1, Math.min(3, options?.concurrency ?? CONCURRENCY));
   const signature = useMemo(
     () => sources.map((source) => `${source.id}:${source.cacheKey ?? ""}:${source.url ?? ""}:${source.poster ?? ""}`).join("|"),
     [sources],
@@ -38,7 +56,11 @@ export function useClipPosters(sources: PosterSource[]): Record<string, string |
     setPosters(seed);
 
     const queue = sources.filter(
-      (source) => !seed[source.id] && !!source.url && !posterFailed(source.url, source.cacheKey ?? source.id),
+      (source) =>
+        !seed[source.id] &&
+        !!source.url &&
+        (!allowed || allowed.has(source.id)) &&
+        !posterFailed(source.url, source.cacheKey ?? source.id),
     );
     if (!queue.length) return;
 
@@ -54,13 +76,13 @@ export function useClipPosters(sources: PosterSource[]): Record<string, string |
       }
     };
 
-    void Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
+    void Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
 
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature]);
+  }, [signature, allowed, concurrency]);
 
   return posters;
 }

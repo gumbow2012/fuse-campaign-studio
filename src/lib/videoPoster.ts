@@ -13,12 +13,22 @@ const urlCacheKey = (url: string) => url.split("?")[0];
 const resolveCacheKey = (url: string, stableKey?: string) => stableKey?.trim() || urlCacheKey(url);
 
 const posters = new Map<string, string>();
+/** Real media length in ms, read from the same metadata load as the poster. */
+const durations = new Map<string, number>();
 const failed = new Set<string>();
 const inflight = new Map<string, Promise<string | null>>();
 
 export function cachedPoster(url: string | null | undefined, stableKey?: string): string | null {
   if (!url) return null;
   return posters.get(resolveCacheKey(url, stableKey)) ?? null;
+}
+
+/** Measured media duration (ms) for a clip whose metadata we already loaded. */
+export function cachedDuration(url: string | null | undefined, stableKey?: string): number | null {
+  if (!url && !stableKey) return null;
+  const key = stableKey?.trim() || (url ? urlCacheKey(url) : "");
+  const value = key ? durations.get(key) : null;
+  return value && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export function posterFailed(url: string | null | undefined, stableKey?: string) {
@@ -45,7 +55,7 @@ function drawFrame(video: HTMLVideoElement): string | null {
   }
 }
 
-async function grab(url: string, timeoutMs: number): Promise<string | null> {
+async function grab(url: string, timeoutMs: number, key: string): Promise<string | null> {
   return await new Promise<string | null>((resolve) => {
     const video = document.createElement("video");
     let settled = false;
@@ -70,6 +80,7 @@ async function grab(url: string, timeoutMs: number): Promise<string | null> {
     video.onerror = () => finish(null);
     video.onloadedmetadata = () => {
       const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      if (duration > 0) durations.set(key, Math.round(duration * 1000));
       /* ~10% in, but never past the clip and never before the first frame. */
       const at = duration > 0 ? Math.min(Math.max(0.1, duration * 0.1), Math.max(0.05, duration - 0.05)) : 0.1;
       video.onseeked = () => finish(drawFrame(video));
@@ -101,7 +112,7 @@ export async function extractPoster(
   const pending = inflight.get(key);
   if (pending) return await pending;
 
-  const task = grab(url, options?.timeoutMs ?? 9000)
+  const task = grab(url, options?.timeoutMs ?? 9000, key)
     .then((value) => {
       if (value) posters.set(key, value);
       else failed.add(key);
