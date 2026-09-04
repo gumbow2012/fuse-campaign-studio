@@ -32,6 +32,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { findEditProjectForRun } from "@/services/campaignEditor";
 import { downloadAllOutputs, downloadSignedOutput } from "@/services/resultDownloads";
+import { normalizeExportSettings } from "@/services/exportSettings";
 import type { CampaignLiveStatus } from "@/services/campaignLiveStatus";
 import type { CustomizeState } from "@/lib/customizeGating";
 import { cn } from "@/lib/utils";
@@ -292,7 +293,7 @@ export function CampaignResultsStage({
             exportReady={exporter.phase === "ready"}
             onExport={() =>
               void exporter.start(
-                editor.project?.export_settings ?? { aspect_ratio: "9:16" as never },
+                editor.project?.export_settings ?? normalizeExportSettings(null, "9:16"),
               )
             }
             onDownloadExport={exporter.download}
