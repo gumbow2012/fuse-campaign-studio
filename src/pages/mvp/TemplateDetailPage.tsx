@@ -2,19 +2,24 @@
  * CAMPAIGN PRODUCT PAGE — /templates/:slug
  *
  * Ecommerce-style PDP for a campaign template: one unified media gallery on the
- * left, a sticky product panel on the right (deliverables, uploads, cost and a
- * contextual CTA), then a short "how it works" strip, related campaigns and an
- * optional collapsed detail accordion.
+ * left, a sticky product panel on the right (deliverables, uploads, cost) and a
+ * short "how it works" strip, related campaigns and a collapsed detail accordion.
  *
- * Presentation only. Credit cost comes from the same catalog the marketplace
- * cards read, entitlement state comes from the existing auth/profile context,
- * and `/templates/:slug/build` remains the single path into the builder.
+ * The ENTIRE run flow is inline: the sticky panel hosts
+ * InlineCampaignRunPanel (CTA → uploads → generate → progress → results), which
+ * reuses the builder's components and run pipeline unchanged. This page never
+ * routes into the builder.
+
  */
 
-import { useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useMemo, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, ChevronDown } from "lucide-react";
+import { ArrowLeft, ChevronDown } from "lucide-react";
+import InlineCampaignRunPanel, {
+  type RunInputField,
+} from "@/components/templates/InlineCampaignRunPanel";
+
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
@@ -49,10 +54,15 @@ function PanelBlock({ label, children }: { label: string; children: React.ReactN
 
 export default function TemplateDetailPage() {
   const { slug = "" } = useParams();
-  const navigate = useNavigate();
-  const { user, profile, isAdmin, isCreator } = useAuth();
+  const { isAdmin } = useAuth();
   const { canFavorite, isFavorite, toggleFavorite } = useTemplateFavorites();
   const [aboutOpen, setAboutOpen] = useState(false);
+  /** Lifecycle of the in-page run — drives the mobile bar's label only. */
+  const [runPhase, setRunPhase] = useState<"idle" | "inputs" | "running" | "complete" | "failed">(
+    "idle",
+  );
+  const runPanelRef = useRef<HTMLDivElement>(null);
+
 
   const detailQuery = useQuery({
     queryKey: ["template-detail-page", slug],
@@ -93,7 +103,6 @@ export default function TemplateDetailPage() {
   const costLabel =
     creditCost != null ? `${creditCost} credits` : catalogQuery.isLoading ? "…" : "See builder";
   const favoriteId = String(catalogEntry?.id ?? template?.id ?? "");
-  const buildPath = slug ? `/templates/${encodeURIComponent(slug)}/build` : "/app/templates";
 
   /** Merchandised media: hero first (video-first), then the returned order. */
   const galleryItems = useMemo<TemplateGalleryItem[]>(() => {
@@ -128,17 +137,29 @@ export default function TemplateDetailPage() {
     ? `${countLabel(template.image_count, "image")} · ${countLabel(template.video_count, "video clip")}`
     : "";
 
-  const balance = Number(profile?.credits_balance ?? 0);
-  const privileged = isAdmin || isCreator;
-  const freeEligible = !user && catalogEntry?.free_preview_enabled === true;
-  const shortOnCredits =
-    !!user && !privileged && creditCost != null && balance < creditCost;
+  /** Run fields: the catalog schema when present, else the detail page inputs. */
+  const inputFields = useMemo<RunInputField[]>(() => {
+    const schema = catalogEntry?.input_schema;
+    if (Array.isArray(schema) && schema.length) {
+      return schema.map((entry) => ({
+        key: String(entry.key),
+        label: String(entry.label || entry.key),
+        type: String(entry.type || "image"),
+        required: entry.required !== false,
+      }));
+    }
+    return (template?.required_inputs ?? []).map((input) => ({
+      key: input.name,
+      label: input.label || input.name,
+      type: String(input.expected || "image"),
+      required: true,
+    }));
+  }, [catalogEntry, template]);
 
-  const cta = freeEligible
-    ? { label: "Try your first video free", sub: "Create an account and generate one video with your product." }
-    : shortOnCredits
-      ? { label: "Unlock access", sub: null }
-      : { label: "Run campaign", sub: null };
+  const runVersionId = catalogEntry
+    ? String(catalogEntry.versionId ?? catalogEntry.id)
+    : null;
+  const runTemplateId = String(catalogEntry?.templateId ?? template?.id ?? "");
 
   /** Other campaigns with a real preview, deduped by name. */
   const related = useMemo(() => {
@@ -156,16 +177,20 @@ export default function TemplateDetailPage() {
     return out;
   }, [catalogQuery.data, catalogEntry]);
 
-  const ctaButton = (
-    <Button
-      type="button"
-      onClick={() => navigate(buildPath)}
-      className="w-full rounded-full bg-[hsl(var(--electric-cyan))] py-6 text-[12px] font-semibold uppercase tracking-[0.18em] text-slate-950 shadow-[0_0_40px_-12px_hsl(var(--electric-cyan)/0.85)] hover:bg-[hsl(var(--electric-blue))]"
-    >
-      {cta.label}
-      <ArrowRight className="h-4 w-4" />
-    </Button>
-  );
+  /* The whole run flow lives in this panel — the page never routes away. */
+  const runPanel = runTemplateId ? (
+    <InlineCampaignRunPanel
+      templateId={runTemplateId}
+      versionId={runVersionId}
+      templateName={template?.name ?? "Campaign"}
+      slug={slug}
+      creditCost={creditCost}
+      freePreviewEnabled={catalogEntry?.free_preview_enabled === true}
+      inputFields={inputFields}
+      onPhaseChange={setRunPhase}
+    />
+  ) : null;
+
 
   return (
     <SiteShell>
@@ -249,11 +274,9 @@ export default function TemplateDetailPage() {
                     </PanelBlock>
                   </div>
 
-                  <div className="mt-6 space-y-3">
-                    {ctaButton}
-                    {cta.sub ? (
-                      <p className="text-center text-[11px] leading-5 text-slate-400">{cta.sub}</p>
-                    ) : null}
+                  <div ref={runPanelRef} className="mt-6 space-y-3 scroll-mt-24">
+                    {runPanel}
+
                     {canFavorite && favoriteId ? (
                       <div className="flex justify-center">
                         <FavoriteTemplateButton
@@ -383,11 +406,18 @@ export default function TemplateDetailPage() {
             </div>
             <Button
               type="button"
-              onClick={() => navigate(buildPath)}
+              onClick={() =>
+                runPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+              }
               className="shrink-0 rounded-full bg-[hsl(var(--electric-cyan))] px-5 py-5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-[hsl(var(--electric-blue))]"
             >
-              {cta.label}
+              {runPhase === "complete"
+                ? "See results"
+                : runPhase === "running"
+                  ? "Generating…"
+                  : "Run campaign"}
             </Button>
+
           </div>
         </div>
       ) : null}
