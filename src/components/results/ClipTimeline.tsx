@@ -7,7 +7,7 @@
  * Nothing here mutates media — every gesture is reported upward and persisted
  * as an edit op, so original files are untouched.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Film, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,14 @@ export interface ClipTimelineProps {
   onReorder?: (order: string[]) => void;
   /** `commit` is true on release — that's when a history entry is recorded. */
   onTrim?: (id: string, trimStartMs: number, trimEndMs: number, commit: boolean) => void;
+  /**
+   * Live drag feedback (rAF-throttled, no network): lets the parent scrub the
+   * main player to the boundary frame and tick the total duration in realtime.
+   * `edge` is null on release.
+   */
+  onTrimPreview?: (
+    preview: { id: string; trimStartMs: number; trimEndMs: number; edge: "start" | "end" } | null,
+  ) => void;
   onRetry?: (id: string) => void;
   /** Playhead position inside the selected clip, in ms of its trimmed span. */
   playheadRatio?: number | null;
@@ -40,11 +48,14 @@ export interface ClipTimelineProps {
 }
 
 const MIN_CLIP_MS = 300;
+/** Card width when a clip's full source length is kept. */
+const CARD_WIDTH = 160;
+const MIN_CARD_WIDTH = 76;
 
 const seconds = (ms: number) => `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
 const pad = (value: number) => String(value).padStart(2, "0");
 
-type TrimDraft = { id: string; startMs: number; endMs: number };
+type TrimDraft = { id: string; startMs: number; endMs: number; edge: "start" | "end" };
 
 export function ClipTimeline({
   clips,
@@ -52,6 +63,7 @@ export function ClipTimeline({
   onSelect,
   onReorder,
   onTrim,
+  onTrimPreview,
   onRetry,
   playheadRatio = null,
   className,
@@ -60,6 +72,15 @@ export function ClipTimeline({
   const [overId, setOverId] = useState<string | null>(null);
   /** Visual-only trim while dragging — persisted once, on release. */
   const [draft, setDraft] = useState<TrimDraft | null>(null);
+  /** rAF handle + latest pointer x, so a drag never renders more than once a frame. */
+  const frame = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (frame.current != null) cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
 
   const reorder = useCallback(
     (fromId: string, toId: string) => {
@@ -94,28 +115,54 @@ export function ClipTimeline({
     const startAt = Math.min(Math.max(0, clip.trimStartMs), duration - MIN_CLIP_MS);
     const endAt = Math.min(duration, Math.max(startAt + MIN_CLIP_MS, clip.trimEndMs));
 
+    /* px → ms from the card geometry captured at drag start, so the mapping
+       stays stable even though the card itself resizes while dragging. */
     const compute = (clientX: number): TrimDraft => {
       const ratio = Math.min(1, Math.max(0, (clientX - card.left) / card.width));
       const at = Math.round(ratio * duration);
       if (edge === "start") {
-        return { id: clip.id, startMs: Math.min(Math.max(0, at), endAt - MIN_CLIP_MS), endMs: endAt };
+        return { id: clip.id, edge, startMs: Math.min(Math.max(0, at), endAt - MIN_CLIP_MS), endMs: endAt };
       }
-      return { id: clip.id, startMs: startAt, endMs: Math.max(startAt + MIN_CLIP_MS, Math.min(duration, at)) };
+      return {
+        id: clip.id,
+        edge,
+        startMs: startAt,
+        endMs: Math.max(startAt + MIN_CLIP_MS, Math.min(duration, at)),
+      };
     };
 
-    const onMove = (moveEvent: PointerEvent) => setDraft(compute(moveEvent.clientX));
+    const publish = (next: TrimDraft) => {
+      setDraft(next);
+      onTrimPreview?.({ id: next.id, trimStartMs: next.startMs, trimEndMs: next.endMs, edge });
+    };
+
+    let pendingX: number | null = null;
+    const onMove = (moveEvent: PointerEvent) => {
+      pendingX = moveEvent.clientX;
+      if (frame.current != null) return;
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null;
+        if (pendingX == null) return;
+        publish(compute(pendingX));
+      });
+    };
     const onEnd = (endEvent: PointerEvent) => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onEnd);
       window.removeEventListener("pointercancel", onEnd);
-      const next = compute(endEvent.clientX);
+      if (frame.current != null) {
+        cancelAnimationFrame(frame.current);
+        frame.current = null;
+      }
+      const next = compute(endEvent.clientX ?? pendingX ?? card.left);
       setDraft(null);
+      onTrimPreview?.(null);
       if (next.startMs !== startAt || next.endMs !== endAt) {
         onTrim(clip.id, next.startMs, next.endMs, true);
       }
     };
 
-    setDraft({ id: clip.id, startMs: startAt, endMs: endAt });
+    publish({ id: clip.id, edge, startMs: startAt, endMs: endAt });
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onEnd);
     window.addEventListener("pointercancel", onEnd);
@@ -133,7 +180,13 @@ export function ClipTimeline({
         const startPct = (trimStartMs / source) * 100;
         const endPct = (trimEndMs / source) * 100;
         const duration = Math.max(0, trimEndMs - trimStartMs);
-
+        /* The card is a real ruler of the clip: full source width while a handle
+           is being dragged (so the cut region can dim under the cursor), and
+           proportional to the kept span the rest of the time — it visibly grows
+           and shrinks as the trim changes. */
+        const cardWidth = live
+          ? CARD_WIDTH
+          : Math.max(MIN_CARD_WIDTH, Math.round(CARD_WIDTH * (duration / source)) || MIN_CARD_WIDTH);
 
         return (
           <li key={clip.id} className="shrink-0">
@@ -141,7 +194,8 @@ export function ClipTimeline({
               data-clip-card
               role="button"
               tabIndex={0}
-              draggable={!!onReorder}
+              draggable={!!onReorder && !live}
+              style={{ width: cardWidth }}
               aria-current={selected}
               aria-label={`Clip ${pad(clip.number)} — ${seconds(duration)}`}
               onClick={() => onSelect(clip.id)}
@@ -168,7 +222,8 @@ export function ClipTimeline({
                 setOverId(null);
               }}
               className={cn(
-                "group relative h-[112px] w-[160px] overflow-hidden rounded-xl border bg-slate-950 transition-[border-color,box-shadow,transform] duration-200 motion-reduce:transition-none",
+                "group relative h-[112px] overflow-hidden rounded-xl border bg-slate-950 transition-[border-color,box-shadow,transform,width] duration-200 motion-reduce:transition-none",
+                live ? "transition-none select-none" : "",
                 selected
                   ? "border-cyan-300 shadow-[0_0_0_2px_rgba(103,232,249,0.28),0_10px_30px_-12px_rgba(103,232,249,0.5)]"
                   : "border-white/12 hover:border-white/30",
@@ -206,17 +261,26 @@ export function ClipTimeline({
               )}
 
 
-              {/* Trimmed-out head and tail, shown only while the clip is selected. */}
+              {/* Trimmed-out head and tail, shown only while the clip is selected.
+                  While dragging the card spans the full source, so the cut region
+                  dims live under the cursor; at rest the card IS the kept span and
+                  the handles sit on its edges. */}
               {selected && onTrim ? (
                 <>
                   <span
-                    className="pointer-events-none absolute inset-y-0 left-0 bg-slate-950/70"
-                    style={{ width: `${startPct}%` }}
+                    className="pointer-events-none absolute inset-y-0 left-0 bg-slate-950/75"
+                    style={{ width: `${live ? startPct : 0}%` }}
                   />
                   <span
-                    className="pointer-events-none absolute inset-y-0 right-0 bg-slate-950/70"
-                    style={{ width: `${100 - endPct}%` }}
+                    className="pointer-events-none absolute inset-y-0 right-0 bg-slate-950/75"
+                    style={{ width: `${live ? 100 - endPct : 0}%` }}
                   />
+                  {live ? (
+                    <span
+                      className="pointer-events-none absolute inset-y-0 z-[5] border-x-2 border-cyan-300/90 bg-cyan-300/[0.06]"
+                      style={{ left: `${startPct}%`, width: `${Math.max(0, endPct - startPct)}%` }}
+                    />
+                  ) : null}
                   <span
                     role="slider"
                     aria-label={`Trim start of clip ${pad(clip.number)}`}
@@ -226,7 +290,7 @@ export function ClipTimeline({
                     tabIndex={-1}
                     onPointerDown={(event) => beginTrim(event, clip, "start")}
                     className="absolute inset-y-0 z-10 flex w-3 touch-none cursor-ew-resize items-center justify-center bg-cyan-300/80"
-                    style={{ left: `calc(${startPct}% - 1px)` }}
+                    style={{ left: `calc(${live ? startPct : 0}% - 1px)` }}
                   >
                     <span className="h-6 w-[2px] rounded bg-slate-950/70" />
                   </span>
@@ -239,7 +303,7 @@ export function ClipTimeline({
                     tabIndex={-1}
                     onPointerDown={(event) => beginTrim(event, clip, "end")}
                     className="absolute inset-y-0 z-10 flex w-3 touch-none cursor-ew-resize items-center justify-center bg-cyan-300/80"
-                    style={{ left: `calc(${endPct}% - 11px)` }}
+                    style={{ left: `calc(${live ? endPct : 100}% - 11px)` }}
                   >
                     <span className="h-6 w-[2px] rounded bg-slate-950/70" />
                   </span>
@@ -252,7 +316,10 @@ export function ClipTimeline({
                 <span
                   className="pointer-events-none absolute inset-y-0 z-20 w-[2px] bg-white/90"
                   style={{
-                    left: `${startPct + Math.min(1, Math.max(0, playheadRatio)) * (endPct - startPct)}%`,
+                    left: `${
+                      (live ? startPct : 0) +
+                      Math.min(1, Math.max(0, playheadRatio)) * ((live ? endPct : 100) - (live ? startPct : 0))
+                    }%`,
                   }}
                 />
               ) : null}
