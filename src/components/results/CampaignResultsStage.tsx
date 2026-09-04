@@ -192,7 +192,7 @@ export function CampaignResultsStage({
         <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-5">
           <div className="min-w-0 flex-1">
             <p className="font-display text-[12px] font-semibold uppercase tracking-[0.22em] text-cyan-100">
-              {executionComplete ? "Your campaign is ready" : status.job.headline}
+              {executionComplete ? "Your campaign is ready" : "Campaign in progress"}
             </p>
             <div className="mt-3">
               <EditableCampaignName
