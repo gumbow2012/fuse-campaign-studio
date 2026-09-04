@@ -571,6 +571,12 @@ export default function InlineCampaignRunPanel({
             </div>
           ))}
 
+          {error ? (
+            <p className="rounded-xl border border-rose-400/25 bg-rose-500/[0.07] px-4 py-3 text-sm leading-6 text-rose-100">
+              {error}
+            </p>
+          ) : null}
+
           <Button
             type="button"
             onClick={() => void runNow()}
