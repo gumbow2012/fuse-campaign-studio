@@ -48,11 +48,14 @@ export interface ClipTimelineProps {
 }
 
 const MIN_CLIP_MS = 300;
+/** Card width when a clip's full source length is kept. */
+const CARD_WIDTH = 160;
+const MIN_CARD_WIDTH = 76;
 
 const seconds = (ms: number) => `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
 const pad = (value: number) => String(value).padStart(2, "0");
 
-type TrimDraft = { id: string; startMs: number; endMs: number };
+type TrimDraft = { id: string; startMs: number; endMs: number; edge: "start" | "end" };
 
 export function ClipTimeline({
   clips,
@@ -60,6 +63,7 @@ export function ClipTimeline({
   onSelect,
   onReorder,
   onTrim,
+  onTrimPreview,
   onRetry,
   playheadRatio = null,
   className,
@@ -68,6 +72,15 @@ export function ClipTimeline({
   const [overId, setOverId] = useState<string | null>(null);
   /** Visual-only trim while dragging — persisted once, on release. */
   const [draft, setDraft] = useState<TrimDraft | null>(null);
+  /** rAF handle + latest pointer x, so a drag never renders more than once a frame. */
+  const frame = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (frame.current != null) cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
 
   const reorder = useCallback(
     (fromId: string, toId: string) => {
