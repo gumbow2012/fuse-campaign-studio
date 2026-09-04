@@ -24,11 +24,14 @@ import { cn } from "@/lib/utils";
 function campaignHref(run: CampaignRun) {
   // Any run with usable outputs opens the RESULTS view — including terminal
   // partial runs. Only a run with nothing usable goes back to the builder.
-  if (run.status === "failed" && !hasUsableOutputs(run)) {
-    return `/app/templates?template=${encodeURIComponent(run.templateName ?? "")}`;
+  if (run.status === "failed") {
+    return hasUsableOutputs(run)
+      ? `/app/runs/${encodeURIComponent(run.id)}`
+      : `/app/templates?template=${encodeURIComponent(run.templateName ?? "")}`;
   }
   return `/app/templates?run=${encodeURIComponent(run.id)}`;
 }
+
 
 function CampaignGridCard({ run, onOpen }: { run: CampaignRun; onOpen: (run: CampaignRun) => void }) {
   const status = describeCampaignStatus(run);
