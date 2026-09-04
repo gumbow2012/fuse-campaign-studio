@@ -113,26 +113,33 @@ const Dashboard = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {recentRuns.map((run) => (
-                <Link key={run.id} to={`/app/jobs/${run.id}`} className="block">
-                  <div className="rounded-xl border border-border/30 bg-card p-4 hover:border-primary/30 transition-colors flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{run.templateName ?? "Template"}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {run.startedAt ? new Date(run.startedAt).toLocaleDateString() : "Pending"}
-                      </p>
+              {recentRuns.map((run) => {
+                const status = describeCampaignStatus(run as unknown as CampaignRun);
+                // Terminal run with usable outputs → its Results view, never the builder.
+                const href = hasUsableOutputs(run as unknown as CampaignRun) || run.status !== "failed"
+                  ? `/app/templates?run=${encodeURIComponent(run.id)}`
+                  : `/app/templates?template=${encodeURIComponent(run.templateName ?? "")}`;
+
+                return (
+                  <Link key={run.id} to={href} className="block">
+                    <div className="rounded-xl border border-border/30 bg-card p-4 hover:border-primary/30 transition-colors flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{run.templateName ?? "Template"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {run.startedAt ? new Date(run.startedAt).toLocaleDateString() : "Pending"}
+                        </p>
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                        status.tone === "ready" ? "bg-green-500/20 text-green-400" :
+                        status.tone === "building" ? "bg-primary/20 text-primary" :
+                        "bg-muted text-muted-foreground"
+                      }`}>
+                        {status.detail ?? status.label}
+                      </span>
                     </div>
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                      run.status === "complete" ? "bg-green-500/20 text-green-400" :
-                      run.status === "running" || run.status === "queued" ? "bg-primary/20 text-primary" :
-                      run.status === "failed" ? "bg-red-500/20 text-red-400" :
-                      "bg-muted text-muted-foreground"
-                    }`}>
-                      {run.status}
-                    </span>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>
