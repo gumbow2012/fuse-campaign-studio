@@ -33,7 +33,7 @@ export interface TemplateDetailPageData {
   image_count: number;
   video_count: number;
   total_outputs: number;
-  required_inputs: Array<{ name: string; expected: TemplateMediaType | string }>;
+  required_inputs: Array<{ name: string; label: string; expected: TemplateMediaType | string }>;
   est_generation_seconds: number | null;
   allow_customer_edit: boolean;
   hero: { media_type: TemplateMediaType; url: string; poster_url: string | null } | null;
@@ -93,9 +93,13 @@ function normalizeDetail(raw: unknown): TemplateDetailPageData | null {
             const input = entry as Record<string, unknown>;
             const inputName = str(input.name);
             if (!inputName) return null;
-            return { name: inputName, expected: str(input.expected) || "image" };
+            return {
+              name: inputName,
+              label: str(input.label) || inputName,
+              expected: str(input.expected) || "image",
+            };
           })
-          .filter((entry): entry is { name: string; expected: string } => !!entry)
+          .filter((entry): entry is { name: string; label: string; expected: string } => !!entry)
       : [],
     est_generation_seconds:
       row.est_generation_seconds == null ? null : Number(row.est_generation_seconds) || 0,
