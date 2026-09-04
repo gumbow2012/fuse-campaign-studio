@@ -265,11 +265,9 @@ export default function TemplateDetailPage() {
                     </PanelBlock>
                   </div>
 
-                  <div className="mt-6 space-y-3">
-                    {ctaButton}
-                    {cta.sub ? (
-                      <p className="text-center text-[11px] leading-5 text-slate-400">{cta.sub}</p>
-                    ) : null}
+                  <div ref={runPanelRef} className="mt-6 space-y-3 scroll-mt-24">
+                    {runPanel}
+
                     {canFavorite && favoriteId ? (
                       <div className="flex justify-center">
                         <FavoriteTemplateButton
