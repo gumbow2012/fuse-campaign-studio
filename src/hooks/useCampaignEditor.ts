@@ -584,6 +584,7 @@ export function useCampaignEditor(projectId: string | undefined) {
     saveState,
     saveError,
     retrySave,
+    patchSourceDuration,
     selectedId,
     setSelectedId,
     runOp,
