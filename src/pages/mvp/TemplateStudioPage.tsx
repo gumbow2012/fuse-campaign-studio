@@ -37,7 +37,7 @@ import {
 import { campaignInputGroups } from "@/lib/campaignInputGroups";
 import InlineCampaignBuilder from "@/components/templates/InlineCampaignBuilder";
 import CastSelector, { PRIMARY_CAST_SLOT, type CastSelection } from "@/components/templates/CastSelector";
-import CampaignFusingStage from "@/components/generation/CampaignFusingStage";
+import CampaignResultsStage from "@/components/results/CampaignResultsStage";
 import { CampaignBuildGraph, type PublicGraph } from "@/components/templates/CampaignBuildGraph";
 import CampaignResults from "@/components/templates/CampaignResults";
 import CampaignReadyBanner from "@/components/editor/CampaignReadyBanner";
@@ -3656,99 +3656,25 @@ export default function TemplateStudioPage() {
                   Current run {activeRunId ? <span className="font-mono text-slate-100">{activeRunId}</span> : "has not started yet"}.
                 </p>
               </div>
-              {result?.status ? (
-                <div className={`rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${
-                  result.status === "failed"
-                    ? "bg-rose-400/10 text-rose-100"
-                    : result.status === "complete"
-                      ? "bg-emerald-400/10 text-emerald-100"
-                      : "bg-cyan-300/10 text-cyan-100"
-                }`}>
-                  {result.status.replace("_", " ")}
-                </div>
-              ) : null}
+
             </div>
 
-              {/* Live "Fusing" experience — server-truthful for the whole active run. */}
-              {result && ACTIVE_RUN_STATUSES.has(result.status) ? (
-                <CampaignFusingStage
+              {/* Canonical customer Results experience — workflow, video edit,
+                  photoshoot — server-truthful for the whole run lifecycle. */}
+              {result ? (
+                <CampaignResultsStage
                   jobId={activeRunId ?? null}
                   resolveLatest={!activeRunId}
                   templateName={workspaceTemplateName}
+                  customizeState={customizeState}
+                  onCustomizeWorkflow={() => void handleCustomizeWorkflow()}
+                  onLockedCustomize={() => setWorkflowUpgradeDialogOpen(true)}
                   className="mt-6"
                 />
               ) : null}
 
-              {/* P0: the workflow graph stays attached for the ENTIRE run lifecycle —
-                  queued → running → video_pending → complete / failed. */}
-              {result && result.publicGraph && result.publicGraph.nodes.length > 0 &&
-              !ACTIVE_RUN_STATUSES.has(result.status) ? (
-                <div className="mt-6 space-y-4">
-                  <CampaignBuildGraph
-                    graph={result.publicGraph}
-                    runStatus={result.status}
-                    statusMessage={result.statusMessage}
-                    progress={result.progress}
-                    customizeState={customizeState}
-                    onCustomizeWorkflow={() => void handleCustomizeWorkflow()}
-                    onLockedCustomize={() => setWorkflowUpgradeDialogOpen(true)}
-                  />
-                </div>
-              ) : null}
-
-
-              {/* Recovery: successful deliverables of a failed/partial run stay reachable. */}
-              {showRecoveryView && recovered ? (
-                <div className="mt-6">
-                  <RecoveredCampaignResults
-                    recovery={recovered}
-                    templateName={workspaceTemplateName}
-                    downloadState={campaignRecovery.downloadState}
-                    onDownload={handleRecoveredDownload}
-                    onRefresh={() => void campaignRecovery.refresh()}
-                    refreshing={campaignRecovery.loading}
-                  />
-                </div>
-              ) : null}
-
-              {result?.status === "failed" && !showRecoveryView && !result.publicGraph?.nodes.length ? (
-                <div className="mt-6 rounded-[1.5rem] border border-rose-400/20 bg-rose-400/10 p-5">
-                  <p className="text-sm font-semibold text-rose-100">
-                    {readPublicFailure(result.publicFailure).title}
-                  </p>
-                  <p className="mt-1 text-sm text-rose-50/90">
-                    {readPublicFailure(result.publicFailure).message}
-                  </p>
-                </div>
-              ) : null}
-
               {result?.status === "complete" ? (
                 <div className="mt-6 space-y-5">
-                  {/* Additive: editor entry point once the run is done. */}
-                  <CampaignReadyBanner
-                    jobId={activeRunId}
-                    videoCount={completedVideoOutputCount}
-                    failedCount={Math.max(0, expectedVideoOutputCount - completedVideoOutputCount)}
-                    onViewOutputs={() => {
-                      outputsGridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }}
-                  />
-                  <div ref={outputsGridRef} />
-
-                  <CampaignResults
-                    outputs={displayOutputs}
-                    onDownload={(output, index) => {
-                      if (freeRunJobId && activeRunId === freeRunJobId) {
-                        trackFreeVideo("free_video_downloaded", {
-                          template_id: selectedTemplate ? String(selectedTemplate.templateId) : null,
-                        });
-                      }
-                      handleDownloadSingleOutput(output, index);
-                    }}
-                    onRegenerate={(outputNumber) => void regeneration.requestRegenerate(outputNumber)}
-                    revisionsByOutput={regeneration.revisionsByOutput}
-                  />
-
                   {freeRunJobId && activeRunId === freeRunJobId ? (
                     <KeepCreatingPanel templateId={selectedTemplate ? String(selectedTemplate.id) : null} />
                   ) : null}

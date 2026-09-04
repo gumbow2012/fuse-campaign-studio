@@ -64,7 +64,7 @@ export function useCampaignLiveStatus(jobId: string | null, options: Options = {
       maxProgressRef.current = next.job.progress_pct;
       setMaxProgress(next.job.progress_pct);
     }
-    if (next.job.status === "complete") {
+    if (next.job.execution_complete || next.job.status === "complete") {
       maxProgressRef.current = 100;
       setMaxProgress(100);
     }
@@ -85,7 +85,8 @@ export function useCampaignLiveStatus(jobId: string | null, options: Options = {
         if (cancelled) return;
         setStatus(next);
         setError(null);
-        if (isLiveJobActive(next.job.status)) {
+        /* Stop the moment the server says execution is over. */
+        if (!next.job.execution_complete && isLiveJobActive(next.job.status)) {
           timer = window.setTimeout(tick, POLL_MS);
         } else if (terminalNotified.current !== id) {
           terminalNotified.current = id;
