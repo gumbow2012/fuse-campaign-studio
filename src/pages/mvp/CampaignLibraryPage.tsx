@@ -16,13 +16,17 @@ import {
   formatRelativeCampaignTime,
   type CampaignFilterKey,
   type CampaignRun,
+  hasUsableOutputs,
 } from "@/lib/campaignHistory";
 import { cn } from "@/lib/utils";
 
 /** Deep-links into the Studio workspace using the existing `?run=` flow. */
 function campaignHref(run: CampaignRun) {
-  // A run that didn't finish opens its RESULTS view, never the upload flow.
-  if (run.status === "failed") return `/app/runs/${encodeURIComponent(run.id)}`;
+  // Any run with usable outputs opens the RESULTS view — including terminal
+  // partial runs. Only a run with nothing usable goes back to the builder.
+  if (run.status === "failed" && !hasUsableOutputs(run)) {
+    return `/app/templates?template=${encodeURIComponent(run.templateName ?? "")}`;
+  }
   return `/app/templates?run=${encodeURIComponent(run.id)}`;
 }
 

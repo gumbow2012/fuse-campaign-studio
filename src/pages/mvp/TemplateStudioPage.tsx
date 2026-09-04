@@ -1229,8 +1229,10 @@ export default function TemplateStudioPage() {
 
   /** Open a previous run directly into the expanded campaign workspace. */
   const handleOpenHistoricalRun = (run: RecentRun) => {
-    // "Didn't finish" runs open their results view instead of the upload flow.
-    if (run.status === "failed") {
+    // Terminal runs with usable outputs open the calm Results view in place;
+    // only a run with nothing usable falls back to the recovery/results route.
+    const usableOutputs = (Array.isArray(run.outputs) ? run.outputs : []).filter((output) => !!output?.url);
+    if (run.status === "failed" && !usableOutputs.length) {
       navigate(`/app/runs/${encodeURIComponent(run.id)}`);
       return;
     }
