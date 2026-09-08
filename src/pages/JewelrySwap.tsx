@@ -6523,7 +6523,7 @@ export default function JewelrySwap() {
                     <Button
                       size="sm"
                       onClick={runSelectedSwaps}
-                      disabled={swapping}
+                      disabled={swapping || Boolean(sourceBlockedReason)}
                       className="ml-auto rounded-xl bg-[hsl(var(--primary))] text-xs font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
                     >
                       {swapping ? <Loader2 size={13} className="animate-spin" /> : <Gem size={13} />}
