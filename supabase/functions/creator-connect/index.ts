@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
             },
             defaults: {
               currency: "usd",
-              responsibilities: { fees_collector: "stripe", losses_collector: "stripe" },
+              responsibilities: { fees_collector: "application", losses_collector: "application" },
               locales: ["en-US"],
             },
             metadata: { fuse_user_id: user.id, env: "test" },
