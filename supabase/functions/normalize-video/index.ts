@@ -69,23 +69,30 @@ Deno.serve(async (req) => {
       error: null, attempts: (existing?.attempts ?? 0) + 1, updated_at: new Date().toISOString(),
     }, { onConflict: "source_path" });
 
-    let kicked: Response | null = null;
-    try {
-      kicked = await fetch(`${workerUrl.replace(/\/$/, "")}/normalize`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-normalize-key": workerKey },
-        body: JSON.stringify({
-          sourcePath, normalizedPath: normPath,
-          downloadUrl: dl.data.signedUrl, uploadUrl: ul.data.signedUrl,
-          callbackUrl: `${SUPABASE_URL}/functions/v1/normalize-callback`, callbackToken,
-        }),
-      });
-    } catch (e) {
-      return fail(svc, sourcePath, userId, `worker unreachable: ${e}`);
-    }
-    if (!kicked.ok && kicked.status !== 202) {
-      return fail(svc, sourcePath, userId, `worker ${kicked.status}`);
-    }
+    // The worker processes synchronously (keeps its Cloud Run request in-flight so the
+    // instance stays alive + CPU allocated until the job finishes). We fire it via
+    // waitUntil so this response returns immediately; the client then polls for status.
+    const kick = fetch(`${workerUrl.replace(/\/$/, "")}/normalize`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-normalize-key": workerKey },
+      body: JSON.stringify({
+        sourcePath, normalizedPath: normPath,
+        downloadUrl: dl.data.signedUrl, uploadUrl: ul.data.signedUrl,
+        callbackUrl: `${SUPABASE_URL}/functions/v1/normalize-callback`, callbackToken,
+      }),
+    }).then(async (r) => {
+      if (r.status === 400 || r.status === 401) {
+        await svc.from("video_normalizations").update({
+          status: "failed", error: `worker rejected (${r.status})`, updated_at: new Date().toISOString(),
+        }).eq("source_path", sourcePath);
+      }
+    }).catch(async (e) => {
+      await svc.from("video_normalizations").update({
+        status: "failed", error: `worker unreachable: ${e}`, updated_at: new Date().toISOString(),
+      }).eq("source_path", sourcePath);
+    });
+    // @ts-ignore EdgeRuntime is provided by the Supabase edge runtime
+    try { EdgeRuntime.waitUntil(kick); } catch { await kick; }
 
     const { data: row } = await svc.from("video_normalizations").select("*").eq("source_path", sourcePath).maybeSingle();
     return json(row);
