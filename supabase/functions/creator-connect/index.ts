@@ -1,7 +1,9 @@
-// creator-connect — real Stripe Connect (Express) onboarding for creators.
+// creator-connect — Stripe Connect (Accounts v2) onboarding for creators as PAYOUT RECIPIENTS.
 // TEST MODE ONLY (livemode=false) until live money is explicitly authorized.
-// Status is always derived from Stripe's actual account requirements — never hand-set,
-// and connect_status=ACTIVE can never substitute for Stripe verification.
+// FUSE collects ALL customer payments; creators only RECEIVE transfers + bank payouts, so the
+// connected account uses the v2 `recipient` configuration (stripe_balance.stripe_transfers) —
+// NOT merchant/card_payments. Onboarding status is always read LIVE from Stripe, never from a
+// stored flag, so an admin-set value can never substitute for real Stripe verification.
 import {
   createAdminClient,
   requireUser,
@@ -11,7 +13,8 @@ import {
   corsHeaders,
 } from "../_shared/supabase-admin.ts";
 
-const LIVEMODE = false; // test-mode build; flip only under explicit live authorization
+const LIVEMODE = false;                       // test-mode build; flip only under explicit live authorization
+const STRIPE_VERSION = "2026-08-26.dahlia";   // V2 Core endpoints require an explicit version header
 
 function stripeKey() {
   const k = Deno.env.get("STRIPE_SECRET_KEY_TEST") || "";
@@ -20,33 +23,57 @@ function stripeKey() {
   return k;
 }
 
-async function stripe(path: string, method = "POST", form?: Record<string, string>) {
-  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+// V2 Core API: JSON body + Stripe-Version header. Optional idempotency key for safe retries.
+async function stripeV2(path: string, method: "POST" | "GET", body?: unknown, idempotencyKey?: string) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${stripeKey()}`,
+    "Stripe-Version": STRIPE_VERSION,
+  };
+  if (body) headers["Content-Type"] = "application/json";
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+  const res = await fetch(`https://api.stripe.com/${path}`, {
     method,
-    headers: {
-      Authorization: `Bearer ${stripeKey()}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: form ? new URLSearchParams(form).toString() : undefined,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message || data?.message || `Stripe ${res.status}`);
+  return data;
+}
+
+// Express-dashboard login links still live on the v1 endpoint and accept v2 account ids.
+async function stripeV1Form(path: string, form: Record<string, string>) {
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${stripeKey()}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(form).toString(),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error?.message || `Stripe ${res.status}`);
   return data;
 }
 
-/** Derive a clear onboarding state from the real Stripe account object. */
+const transferCapStatus = (acct: any): string | undefined =>
+  acct?.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status;
+
+/** Clear onboarding state derived from the recipient transfer capability + requirements. */
 function mapStatus(acct: any): string {
-  const req = acct.requirements ?? {};
-  const currentlyDue = (req.currently_due ?? []).length;
-  const pastDue = (req.past_due ?? []).length;
-  const pending = (req.pending_verification ?? []).length;
-  const disabled = req.disabled_reason as string | null;
-  if (acct.charges_enabled && acct.payouts_enabled && currentlyDue === 0) return "ready";
-  if (disabled && /reject|fraud|terms|listed|platform_paused|other/i.test(disabled)) return "restricted";
-  if (pastDue > 0) return "action_required";
-  if (pending > 0) return "verification_pending";
-  if (!acct.details_submitted) return "not_started";
-  return "action_required";
+  const cap = transferCapStatus(acct); // active | pending | inactive | unrequested | restricted | undefined
+  const reqStatus = acct?.requirements?.summary?.minimum_deadline?.status; // e.g. currently_due | past_due
+  const hasDue = reqStatus === "currently_due" || reqStatus === "past_due";
+  if (cap === "active") return "ready";
+  if (cap === "restricted") return "restricted";
+  if (cap === "pending") return "verification_pending";
+  if (hasDue) return "action_required";
+  return "not_started";
+}
+
+function acctInclude() {
+  const q = new URLSearchParams();
+  q.append("include", "configuration.recipient");
+  q.append("include", "requirements");
+  q.append("include", "identity");
+  return q.toString();
 }
 
 Deno.serve(async (req) => {
@@ -67,69 +94,108 @@ Deno.serve(async (req) => {
       .from("creator_connect_accounts")
       .select("*").eq("user_id", user.id).eq("livemode", LIVEMODE).maybeSingle();
 
+    // Reconcile our row from the live Stripe account so a stale DB flag can never lie.
     async function sync(acctId: string) {
-      const acct = await stripe(`accounts/${acctId}`, "GET");
+      const acct = await stripeV2(`v2/core/accounts/${acctId}?${acctInclude()}`, "GET");
+      const status = mapStatus(acct);
       const patch = {
-        onboarding_status: mapStatus(acct),
-        charges_enabled: !!acct.charges_enabled,
-        payouts_enabled: !!acct.payouts_enabled,
-        details_submitted: !!acct.details_submitted,
-        disabled_reason: acct.requirements?.disabled_reason ?? null,
-        requirements: acct.requirements ?? {},
-        default_currency: acct.default_currency ?? null,
-        country: acct.country ?? null,
+        onboarding_status: status,
+        charges_enabled: false, // recipients never charge customers
+        payouts_enabled: transferCapStatus(acct) === "active",
+        details_submitted: status === "ready" || status === "verification_pending",
+        disabled_reason: acct?.requirements?.summary?.minimum_deadline?.status ?? null,
+        requirements: acct?.requirements ?? {},
+        default_currency: acct?.defaults?.currency ?? null,
+        country: acct?.identity?.country ?? null,
         last_synced_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       await admin.from("creator_connect_accounts").update(patch).eq("stripe_account_id", acctId);
-      return patch;
+      return { patch, acct };
     }
 
-    // Read-only status (also reconciles from Stripe so a stale DB flag can't lie).
+    // Read-only status (also reconciles from Stripe).
     if (action === "status") {
       if (!existing) return json({ connected: false, status: "not_started", payouts_enabled: false });
-      const p = await sync(existing.stripe_account_id);
+      const { patch, acct } = await sync(existing.stripe_account_id);
       return json({
-        connected: true, status: p.onboarding_status,
-        payouts_enabled: p.payouts_enabled, charges_enabled: p.charges_enabled,
-        details_submitted: p.details_submitted, disabled_reason: p.disabled_reason,
-        requirements_currently_due: (p.requirements as any)?.currently_due ?? [],
+        connected: true,
+        status: patch.onboarding_status,
+        payouts_enabled: patch.payouts_enabled,
+        details_submitted: patch.details_submitted,
+        transfer_capability: transferCapStatus(acct) ?? "unrequested",
+        requirements_status: acct?.requirements?.summary?.minimum_deadline?.status ?? null,
       });
     }
 
-    // Create or reuse the Express account, then hand back a fresh hosted onboarding link.
+    // Create or reuse the v2 recipient account, then hand back a fresh hosted onboarding link.
     if (action === "onboard" || action === "refresh_link") {
       let acctId = existing?.stripe_account_id as string | undefined;
       if (!acctId) {
-        const acct = await stripe("accounts", "POST", {
-          type: "express",
-          "capabilities[transfers][requested]": "true",
-          business_type: "individual",
-          "metadata[fuse_user_id]": user.id,
-          "metadata[env]": "test",
-        });
+        const displayName =
+          (user.user_metadata?.full_name as string) ||
+          (user.user_metadata?.name as string) ||
+          (user.email ? user.email.split("@")[0] : "FUSE Creator");
+        const acct = await stripeV2(
+          "v2/core/accounts",
+          "POST",
+          {
+            contact_email: user.email,
+            display_name: displayName,
+            dashboard: "express", // Stripe-hosted payouts dashboard for the creator
+            identity: { country: "us" }, // entity_type collected during hosted onboarding
+            configuration: {
+              recipient: {
+                capabilities: {
+                  // receive platform transfers + bank payouts (replaces v1 `transfers`)
+                  stripe_balance: { stripe_transfers: { requested: true } },
+                },
+              },
+            },
+            defaults: {
+              currency: "usd",
+              responsibilities: { fees_collector: "stripe", losses_collector: "stripe" },
+              locales: ["en-US"],
+            },
+            metadata: { fuse_user_id: user.id, env: "test" },
+            include: ["configuration.recipient", "requirements", "identity"],
+          },
+          `connect-create-${user.id}-${LIVEMODE}`, // idempotent: double-clicks can't make two accounts
+        );
         acctId = acct.id;
-        await admin.from("creator_connect_accounts").insert({
-          user_id: user.id, livemode: LIVEMODE, stripe_account_id: acctId,
-          account_type: "express", country: acct.country ?? null,
-          default_currency: acct.default_currency ?? null, onboarding_status: "not_started",
-        });
+        await admin.from("creator_connect_accounts").upsert(
+          {
+            user_id: user.id,
+            livemode: LIVEMODE,
+            stripe_account_id: acctId,
+            account_type: "recipient",
+            country: acct?.identity?.country ?? "us",
+            default_currency: acct?.defaults?.currency ?? "usd",
+            onboarding_status: mapStatus(acct),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,livemode", ignoreDuplicates: false },
+        );
       }
-      const link = await stripe("account_links", "POST", {
-        account: acctId!,
-        refresh_url: `${origin}${ret}?connect=refresh`,
-        return_url: `${origin}${ret}?connect=return`,
-        type: "account_onboarding",
+
+      const link = await stripeV2("v2/core/account_links", "POST", {
+        account: acctId,
+        use_case: {
+          type: "account_onboarding",
+          account_onboarding: {
+            configurations: ["recipient"],
+            refresh_url: `${origin}${ret}?connect=refresh`,
+            return_url: `${origin}${ret}?connect=return`,
+          },
+        },
       });
-      return json({ url: link.url, expires_at: link.expires_at, account_id: acctId });
+      return json({ url: link.url, account_id: acctId });
     }
 
-    // Express dashboard login link — only meaningful once the account can transact.
+    // Stripe-hosted Express dashboard login link (only meaningful once onboarding progressed).
     if (action === "dashboard") {
       if (!existing) return json({ error: "No connected account yet" }, 400);
-      const p = await sync(existing.stripe_account_id);
-      if (!p.details_submitted) return json({ error: "Finish onboarding first" }, 400);
-      const login = await stripe(`accounts/${existing.stripe_account_id}/login_links`, "POST", {});
+      const login = await stripeV1Form(`accounts/${existing.stripe_account_id}/login_links`, {});
       return json({ url: login.url });
     }
 
