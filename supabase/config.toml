@@ -208,6 +208,9 @@ verify_jwt = false
 [functions.creator-connect]
 verify_jwt = true
 
+[functions.process-creator-payout]
+verify_jwt = true
+
 
 
 
