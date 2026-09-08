@@ -20,6 +20,60 @@ const inflight = new Map<string, Promise<string | null>>();
 /** Metadata-only duration probes, de-duplicated per stable key. */
 const durationInflight = new Map<string, Promise<number | null>>();
 
+/* ------------------------------------------------------------------------- *
+ * GLOBAL MEDIA QUEUE
+ *
+ * Every hidden <video> this module opens — poster extraction AND duration
+ * probes — passes through one bounded scheduler, so a 10-clip timeline never
+ * has more than MAX_CONCURRENT media elements alive. Lower `priority` runs
+ * first (visible/active clips), and the queue yields to the main thread
+ * between items so scrolling and clicks stay responsive.
+ * ------------------------------------------------------------------------- */
+
+const MAX_CONCURRENT = 2;
+
+type QueueEntry = { priority: number; run: () => void };
+
+const waiting: QueueEntry[] = [];
+let active = 0;
+
+const yieldToMain = () =>
+  new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
+
+function pump() {
+  while (active < MAX_CONCURRENT && waiting.length) {
+    waiting.sort((a, b) => a.priority - b.priority);
+    const next = waiting.shift();
+    if (!next) return;
+    active += 1;
+    next.run();
+  }
+}
+
+function schedule<T>(priority: number, task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    waiting.push({
+      priority,
+      run: () => {
+        task()
+          .then(resolve, reject)
+          .finally(async () => {
+            /* Release the slot only after a frame, so decoding one clip never
+               chains straight into the next on the same tick. */
+            await yieldToMain();
+            active -= 1;
+            pump();
+          });
+      },
+    });
+    pump();
+  });
+}
+
+
 export function cachedPoster(url: string | null | undefined, stableKey?: string): string | null {
   if (!url) return null;
   return posters.get(resolveCacheKey(url, stableKey)) ?? null;
