@@ -1,7 +1,9 @@
 // process-creator-payout — platform-initiated creator payouts (TEST MODE only).
-// Sums a creator's MATURED, unpaid earnings and moves money via a Stripe TRANSFER
-// (platform balance -> creator's connected balance). Idempotent per creator per month.
-// Payout-ready is verified LIVE from Stripe, never a flag. Auth: scheduled-job secret OR admin/dev JWT.
+// Claim-then-pay: atomically claim a creator's matured, unpaid earnings (set payout_id BEFORE
+// transferring, so concurrent runs can't double-pay), then move money via a Stripe TRANSFER
+// (platform balance -> creator's connected balance). Fresh idempotency key per attempt; a failed
+// transfer RELEASES the claim so it can be retried. Payout-ready verified LIVE from Stripe.
+// Auth: scheduled-job secret OR admin/dev JWT.
 import {
   createAdminClient, requireUser, getUserRoles, json, errorMessage, corsHeaders,
 } from "../_shared/supabase-admin.ts";
@@ -35,7 +37,6 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const admin = createAdminClient();
-    // Auth: either the scheduled-job secret (x-admin-secret) OR an admin/dev JWT.
     let authed = false;
     const secret = req.headers.get("x-admin-secret");
     if (secret) {
@@ -70,7 +71,7 @@ Deno.serve(async (req) => {
     const nowIso = new Date().toISOString();
     const { data: earnings } = await admin
       .from("creator_earnings")
-      .select("id, creator_earning_cents, status, available_at, payout_id")
+      .select("id, creator_earning_cents, available_at, payout_id")
       .eq("creator_id", creatorId).is("payout_id", null)
       .in("status", ["available", "pending"]).lte("available_at", nowIso);
     const eligible = (earnings ?? []).filter((e) => Number(e.creator_earning_cents) > 0);
@@ -83,6 +84,7 @@ Deno.serve(async (req) => {
     if (eligible.length === 0) return json({ error: "No eligible earnings" }, 400);
     if (amount < minCents) return json({ error: `Below minimum payout ($${(minCents / 100).toFixed(2)})`, amount_cents: amount }, 400);
 
+    // Live payout-ready check (never a stored flag).
     const { data: acct } = await admin
       .from("creator_connect_accounts").select("stripe_account_id").eq("user_id", creatorId).eq("livemode", LIVEMODE).maybeSingle();
     if (!acct?.stripe_account_id) return json({ error: "Creator has no connected account" }, 400);
@@ -90,32 +92,39 @@ Deno.serve(async (req) => {
     const transfersActive = liveAcct?.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === "active";
     if (!transfersActive) return json({ error: "Creator payouts not enabled on Stripe" }, 400);
 
-    const period = nowIso.slice(0, 7);
-    const idemKey = `payout-${creatorId}-${LIVEMODE}-${period}`;
-    const periodStart = eligible.reduce((min, e) => (e.available_at && e.available_at < min ? e.available_at : min), nowIso);
-
+    // Fresh payout row per attempt; its id is the transfer idempotency key.
+    const payoutId = crypto.randomUUID();
     const { data: payout, error: insErr } = await admin
       .from("creator_payouts")
-      .insert({ creator_id: creatorId, livemode: LIVEMODE, currency, amount_cents: amount, earning_count: eligible.length, status: "pending", idempotency_key: idemKey, period_start: periodStart, period_end: nowIso })
+      .insert({ id: payoutId, creator_id: creatorId, livemode: LIVEMODE, currency, amount_cents: amount, earning_count: eligible.length, status: "pending", idempotency_key: payoutId, period_start: nowIso, period_end: nowIso })
       .select().single();
-    if (insErr) {
-      const { data: existingP } = await admin.from("creator_payouts").select("*").eq("idempotency_key", idemKey).maybeSingle();
-      if (existingP) return json({ payout_id: existingP.id, status: existingP.status, stripe_transfer_id: existingP.stripe_transfer_id, amount_cents: existingP.amount_cents, idempotent: true });
-      throw new Error(insErr.message);
+    if (insErr || !payout) throw new Error(insErr?.message || "could not open payout");
+
+    // CLAIM the earnings atomically (only ones still unclaimed) BEFORE moving money.
+    const { data: claimed } = await admin
+      .from("creator_earnings").update({ payout_id: payoutId })
+      .in("id", eligible.map((e) => e.id)).is("payout_id", null)
+      .select("id, creator_earning_cents");
+    const claimedAmount = (claimed ?? []).reduce((s, e) => s + Number(e.creator_earning_cents), 0);
+    if (!claimed || claimed.length === 0 || claimedAmount <= 0) {
+      await admin.from("creator_payouts").update({ status: "failed", failure_reason: "nothing to claim (already paid?)", updated_at: nowIso }).eq("id", payoutId);
+      return json({ error: "Earnings already claimed by another payout", payout_id: payoutId }, 409);
     }
 
     let transfer: any;
     try {
-      transfer = await stripeForm("transfers", { amount: String(amount), currency, destination: acct.stripe_account_id, "metadata[fuse_payout_id]": payout.id, "metadata[fuse_creator_id]": creatorId }, idemKey);
+      transfer = await stripeForm("transfers", { amount: String(claimedAmount), currency, destination: acct.stripe_account_id, "metadata[fuse_payout_id]": payoutId, "metadata[fuse_creator_id]": creatorId }, payoutId);
     } catch (e) {
-      await admin.from("creator_payouts").update({ status: "failed", failure_reason: String((e as any)?.message ?? e), updated_at: nowIso }).eq("id", payout.id);
-      return json({ error: `Transfer failed: ${(e as any)?.message ?? e}`, payout_id: payout.id }, 502);
+      // RELEASE the claim so it can be retried, and mark the payout failed.
+      await admin.from("creator_earnings").update({ payout_id: null }).eq("payout_id", payoutId);
+      await admin.from("creator_payouts").update({ status: "failed", amount_cents: claimedAmount, failure_reason: String((e as any)?.message ?? e), updated_at: nowIso }).eq("id", payoutId);
+      return json({ error: `Transfer failed: ${(e as any)?.message ?? e}`, payout_id: payoutId }, 502);
     }
 
-    await admin.from("creator_earnings").update({ status: "paid", paid_at: nowIso, payout_id: payout.id }).in("id", eligible.map((e) => e.id)).is("payout_id", null);
-    await admin.from("creator_payouts").update({ status: "transferred", stripe_transfer_id: transfer.id, transfer_created_at: nowIso, updated_at: nowIso }).eq("id", payout.id);
+    await admin.from("creator_earnings").update({ status: "paid", paid_at: nowIso }).eq("payout_id", payoutId);
+    await admin.from("creator_payouts").update({ status: "transferred", amount_cents: claimedAmount, stripe_transfer_id: transfer.id, transfer_created_at: nowIso, updated_at: nowIso }).eq("id", payoutId);
 
-    return json({ payout_id: payout.id, status: "transferred", stripe_transfer_id: transfer.id, amount_cents: amount, earning_count: eligible.length });
+    return json({ payout_id: payoutId, status: "transferred", stripe_transfer_id: transfer.id, amount_cents: claimedAmount, earning_count: claimed.length });
   } catch (e) {
     return json({ error: errorMessage(e) }, 500);
   }
