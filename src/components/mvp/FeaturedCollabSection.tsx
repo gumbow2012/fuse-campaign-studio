@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { templateDetailPath } from "@/lib/templateSlug";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ImageOff, Play, Timer, Video as VideoIcon } from "lucide-react";
+import { ArrowRight, ImageOff, Timer, Video as VideoIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics/track";
 import { campaignDisplayName } from "@/lib/campaignDisplayName";
@@ -111,13 +111,6 @@ function DropMedia({ template }: { template: FeaturedDropTemplate }) {
       )}
       {/* Diagonal sheen so previews never read as flat black */}
       <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,hsl(var(--electric-blue)/0.16),transparent_42%,transparent_62%,hsl(var(--navy-deep)/0.72))]" />
-      {template.media_type === "video" ? (
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[hsl(var(--navy-deep)/0.65)] ring-1 ring-[hsl(var(--electric-cyan)/0.35)] backdrop-blur-sm">
-            <Play className="h-4 w-4 translate-x-[1px] fill-foreground text-foreground" />
-          </span>
-        </span>
-      ) : null}
     </>
   );
 }
