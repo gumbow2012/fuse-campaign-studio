@@ -18,17 +18,16 @@ export interface DurationSource {
   knownMs?: number | null;
   /** Images have no media length to measure. */
   skip?: boolean;
+  /** Lower runs earlier in the shared media queue (active/visible clips first). */
+  priority?: number;
 }
 
-const CONCURRENCY = 3;
-
-export function useClipDurations(
-  sources: DurationSource[],
-  options?: { concurrency?: number },
-): Record<string, number> {
-  const concurrency = Math.max(1, Math.min(4, options?.concurrency ?? CONCURRENCY));
+export function useClipDurations(sources: DurationSource[]): Record<string, number> {
   const signature = useMemo(
-    () => sources.map((s) => `${s.id}:${s.cacheKey ?? ""}:${s.url ?? ""}:${s.skip ? 1 : 0}`).join("|"),
+    () =>
+      sources
+        .map((s) => `${s.id}:${s.cacheKey ?? ""}:${s.url ?? ""}:${s.skip ? 1 : 0}:${s.priority ?? ""}`)
+        .join("|"),
     [sources],
   );
 
@@ -48,27 +47,27 @@ export function useClipDurations(
     const queue = sources.filter((source) => !source.skip && !!source.url && !seed[source.id]);
     if (!queue.length) return;
 
-    let cursor = 0;
-    const worker = async () => {
-      while (!cancelled) {
-        const next = queue[cursor];
-        cursor += 1;
-        if (!next?.url) return;
-        const ms = await measureDuration(next.url, { cacheKey: next.cacheKey ?? next.id });
-        if (cancelled) return;
-        if (ms && ms > 0) setDurations((current) => ({ ...current, [next.id]: ms }));
-      }
-    };
-
-    void Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
+    /* Every probe goes through the shared, concurrency-limited media queue in
+       videoPoster: at most two hidden <video> elements exist at any moment, each
+       released before the next starts, so a 10-clip run never floods the tab. */
+    queue.forEach((source, index) => {
+      void measureDuration(source.url as string, {
+        cacheKey: source.cacheKey ?? source.id,
+        priority: source.priority ?? 100 + index,
+      }).then((ms) => {
+        if (cancelled || !ms || ms <= 0) return;
+        setDurations((current) => (current[source.id] === ms ? current : { ...current, [source.id]: ms }));
+      });
+    });
 
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature, concurrency]);
+  }, [signature]);
 
   return durations;
 }
+
 
 export default useClipDurations;
