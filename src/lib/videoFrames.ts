@@ -64,37 +64,47 @@ export class VideoDecodeError extends Error {
  * it throws VideoDecodeError instead.
  */
 export async function loadVideoForExtraction(url: string, timeoutMs = 30000) {
-  const video = document.createElement("video");
-  video.crossOrigin = "anonymous";
-  video.muted = true;
-  video.playsInline = true;
-  video.preload = "auto";
-  video.src = url;
+  const attempt = () =>
+    new Promise<HTMLVideoElement>((resolve, reject) => {
+      const video = document.createElement("video");
+      video.crossOrigin = "anonymous";
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.src = url;
 
-  await new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const done = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      video.removeEventListener("loadeddata", onLoadedData);
-      video.removeEventListener("error", onError);
-      error ? reject(error) : resolve();
-    };
-    const onLoadedData = () => done();
-    const onError = () => done(new VideoDecodeError());
-    const timer = setTimeout(
-      () => done(new VideoDecodeError("Timed out reading that clip")),
-      timeoutMs,
-    );
-    video.addEventListener("loadeddata", onLoadedData);
-    video.addEventListener("error", onError);
-    if (video.readyState >= 2) done();
-  });
+      let settled = false;
+      const done = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        video.removeEventListener("loadeddata", onLoadedData);
+        video.removeEventListener("error", onError);
+        if (error) return reject(error);
+        if (!video.videoWidth || !video.videoHeight) return reject(new VideoDecodeError());
+        resolve(video);
+      };
+      const onLoadedData = () => done();
+      const onError = () => done(new VideoDecodeError());
+      const timer = setTimeout(
+        () => done(new VideoDecodeError("Timed out reading that clip")),
+        timeoutMs,
+      );
+      video.addEventListener("loadeddata", onLoadedData);
+      video.addEventListener("error", onError);
+      if (video.readyState >= 2) done();
+    });
 
-  if (!video.videoWidth || !video.videoHeight) throw new VideoDecodeError();
-  return video;
+  try {
+    return await attempt();
+  } catch {
+    // One clean retry — a fresh element usually succeeds when the first load
+    // stalled under concurrent media decoding. If it truly can't decode, this
+    // throws VideoDecodeError just like before.
+    return await attempt();
+  }
 }
+
 
 
 export function readMeta(video: HTMLVideoElement): VideoMeta {
