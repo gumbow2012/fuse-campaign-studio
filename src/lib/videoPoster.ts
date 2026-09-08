@@ -120,10 +120,18 @@ async function grab(url: string, timeoutMs: number, key: string): Promise<string
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
+      /* Release immediately: stop the fetch and drop the element's source so
+         memory and bandwidth are free before the next queued clip starts. */
+      try {
+        video.pause();
+      } catch {
+        /* not playing */
+      }
       video.removeAttribute("src");
       video.load();
       resolve(value);
     };
+
 
     const timer = window.setTimeout(() => finish(null), timeoutMs);
 
