@@ -6,7 +6,7 @@
  * a drop opens the normal builder/run flow — no new run path is introduced.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { templateDetailPath } from "@/lib/templateSlug";
 import { useQuery } from "@tanstack/react-query";
@@ -68,10 +68,36 @@ function DropMedia({ template }: { template: FeaturedDropTemplate }) {
   const [state, setState] = useState<"loading" | "ready" | "error">(
     template.preview_url ? "loading" : "error",
   );
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const isVideo =
     template.media_type === "video" ||
     /\.(mp4|webm)(\?|#|$)/i.test(template.preview_url ?? "");
+
+  useEffect(() => {
+    const node = videoRef.current;
+    if (!node || !isVideo) return;
+
+    // React's `muted` prop does not reliably set the DOM attribute — do it here.
+    node.muted = true;
+    node.defaultMuted = true;
+    node.setAttribute("muted", "");
+
+    const tryPlay = () => {
+      node.load?.();
+      void node.play().catch(() => undefined);
+    };
+    tryPlay();
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) void node.play().catch(() => undefined);
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isVideo, template.preview_url]);
 
   if (!template.preview_url || state === "error") {
     return <Placeholder video={isVideo} />;
@@ -82,6 +108,7 @@ function DropMedia({ template }: { template: FeaturedDropTemplate }) {
       {state === "loading" ? <div className="absolute inset-0 fuse-skeleton" /> : null}
       {isVideo ? (
         <video
+          ref={videoRef}
           src={template.preview_url}
           className={cn(
             "h-full w-full object-cover object-center transition-transform duration-700 group-hover:scale-[1.03]",
@@ -91,7 +118,7 @@ function DropMedia({ template }: { template: FeaturedDropTemplate }) {
           muted
           loop
           playsInline
-          preload="metadata"
+          preload="auto"
           onLoadedData={() => setState("ready")}
           onError={() => setState("error")}
         />
@@ -114,6 +141,7 @@ function DropMedia({ template }: { template: FeaturedDropTemplate }) {
     </>
   );
 }
+
 
 export default function FeaturedCollabSection() {
   const { data: featured, isLoading } = useQuery({
