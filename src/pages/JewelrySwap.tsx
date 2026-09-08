@@ -3345,7 +3345,16 @@ export default function JewelrySwap() {
     } catch {
       setOpticsStatus("error");
     }
-  }, [opticsSourceKey, videoUrl, frames, opticsStoneContext]);
+  }, [
+    opticsSourceKey,
+    videoUrl,
+    frames,
+    opticsStoneContext,
+    normalization.preparing,
+    normalization.failed,
+    decodeBlocked,
+  ]);
+
 
   useEffect(() => {
     if (!opticsSourceKey) {
