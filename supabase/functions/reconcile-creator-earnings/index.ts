@@ -12,9 +12,19 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const admin = createAdminClient();
-    const user = await requireUser(req, admin);
-    const roles = await getUserRoles(user.id, admin);
-    if (!roles.includes("admin") && !roles.includes("dev")) return json({ error: "Admin access required" }, 403);
+    // Auth: either the scheduled-job secret (x-admin-secret) OR an admin/dev JWT.
+    let authed = false;
+    const secret = req.headers.get("x-admin-secret");
+    if (secret) {
+      const { data: sc } = await admin.from("service_config").select("value").eq("key", "reconcile_secret").maybeSingle();
+      authed = !!sc?.value && sc.value === secret;
+    }
+    if (!authed) {
+      const authUser = await requireUser(req, admin);
+      const roles = await getUserRoles(authUser.id, admin);
+      authed = roles.includes("admin") || roles.includes("dev");
+    }
+    if (!authed) return json({ error: "Admin access required" }, 403);
 
     const { action = "preview", limit = 200 } = await req.json().catch(() => ({}));
     const dry = action !== "run";
