@@ -193,7 +193,7 @@ export async function extractPoster(
  */
 export async function measureDuration(
   url: string,
-  options?: { timeoutMs?: number; cacheKey?: string },
+  options?: { timeoutMs?: number; cacheKey?: string; priority?: number },
 ): Promise<number | null> {
   const key = resolveCacheKey(url, options?.cacheKey);
   const known = durations.get(key);
@@ -202,7 +202,13 @@ export async function measureDuration(
   const pending = durationInflight.get(key);
   if (pending) return await pending;
 
-  const task = new Promise<number | null>((resolve) => {
+  const task = schedule(options?.priority ?? 20, () => new Promise<number | null>((resolve) => {
+    /* Cheap win: a poster pass may have measured this clip while we queued. */
+    const already = durations.get(key);
+    if (already && already > 0) {
+      resolve(already);
+      return;
+    }
     const video = document.createElement("video");
     let settled = false;
     const finish = (value: number | null) => {
@@ -211,6 +217,12 @@ export async function measureDuration(
       window.clearTimeout(timer);
       video.onloadedmetadata = null;
       video.onerror = null;
+      /* Release before the next queued clip starts: stop the fetch, drop the src. */
+      try {
+        video.pause();
+      } catch {
+        /* not playing */
+      }
       video.removeAttribute("src");
       video.load();
       resolve(value);
@@ -234,9 +246,10 @@ export async function measureDuration(
       finish(null);
     };
     video.src = url;
-  }).finally(() => {
+  })).finally(() => {
     durationInflight.delete(key);
   });
+
 
   durationInflight.set(key, task);
   return await task;
