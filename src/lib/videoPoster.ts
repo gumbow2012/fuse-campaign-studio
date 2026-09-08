@@ -158,7 +158,7 @@ async function grab(url: string, timeoutMs: number, key: string): Promise<string
  */
 export async function extractPoster(
   url: string,
-  options?: { timeoutMs?: number; cacheKey?: string },
+  options?: { timeoutMs?: number; cacheKey?: string; priority?: number },
 ): Promise<string | null> {
   const key = resolveCacheKey(url, options?.cacheKey);
   const known = posters.get(key);
@@ -168,7 +168,7 @@ export async function extractPoster(
   const pending = inflight.get(key);
   if (pending) return await pending;
 
-  const task = grab(url, options?.timeoutMs ?? 9000, key)
+  const task = schedule(options?.priority ?? 10, () => grab(url, options?.timeoutMs ?? 9000, key))
     .then((value) => {
       if (value) posters.set(key, value);
       else failed.add(key);
@@ -181,6 +181,7 @@ export async function extractPoster(
   inflight.set(key, task);
   return await task;
 }
+
 
 /**
  * DURATION ONLY — metadata probe for a clip whose length is not stored.
