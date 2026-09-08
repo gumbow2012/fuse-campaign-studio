@@ -4841,6 +4841,9 @@ export default function JewelrySwap() {
 
     setVideoUrl(null);
     setVideoPreview(null);
+    setSourcePath(null);
+    setDecodeBlocked(false);
+
     setMeta(null);
     setFrames([]);
     setSelectedFrames(new Set());
