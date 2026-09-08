@@ -1253,40 +1253,40 @@ export default function JewelrySwap() {
 
   /* ---------------------------- 1. Source video ---------------------------- */
 
-  const handleVideoFile = useCallback(async (file: File) => {
-    const objectUrl = URL.createObjectURL(file);
-    setVideoPreview(objectUrl);
-    setFrames([]);
-    setSwaps({});
-    setAltSwaps({});
-    setFrameGenerations({});
-    setFrameRevision({});
-    setChosenModel({});
-    setFramePreferredRole({});
-    setFrameReason({});
-    setApprovedGenerationId({});
+  /** Which URL we already extracted frames from, so effects never loop. */
+  const extractedFrom = useRef<string | null>(null);
 
-    setSelectedFrames(new Set());
-    // The video library is intentionally preserved across new source clips.
-
+  /**
+   * Decode-guarded frame extraction. The video must fire 'loadeddata' AND
+   * report videoWidth > 0, and every frame is drawn only AFTER its 'seeked'
+   * event. A clip the browser can't decode returns false instead of producing
+   * black frames — darkness itself is never a rejection reason.
+   */
+  const extractFromUrl = useCallback(async (url: string): Promise<boolean> => {
+    let element: HTMLVideoElement;
     try {
-      const element = await loadVideo(objectUrl);
-      const nextMeta = readMeta(element);
-      setMeta(nextMeta);
+      element = await loadVideoForExtraction(url);
+    } catch {
+      setDecodeBlocked(true);
+      return false;
+    }
+    setDecodeBlocked(false);
+    extractedFrom.current = url;
 
+    const nextMeta = readMeta(element);
+    setMeta(nextMeta);
+    setExtracting(true);
+    setExtractProgress(0);
+    try {
       const folder = await createOutfitSwapFolder();
-
-      setUploadingVideo(true);
-      const uploadedVideo = await uploadToStorage(folder, file, file.name);
-      setVideoUrl(uploadedVideo.url);
-
-      // Extract ~1 frame/second plus the final frame, then upload each frame.
-      setExtracting(true);
-      setExtractProgress(0);
       const times = frameTimestamps(nextMeta.duration);
       const captured = await extractFrames(element, times, (done, total) =>
         setExtractProgress(Math.round((done / total) * 50)),
       );
+      if (!captured.length) {
+        setDecodeBlocked(true);
+        return false;
+      }
 
       const uploaded = await uploadWithConcurrency(
         captured,
@@ -1303,15 +1303,63 @@ export default function JewelrySwap() {
         .map((_, index) => index)
         .filter((index) => index % Math.max(1, Math.ceil(uploaded.length / 4)) === 0);
       setSelectedFrames(new Set(spread));
+      setSourceNotice(null);
       toast.success(`${uploaded.length} source frames extracted`);
-
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not process that video");
+      return true;
     } finally {
-      setUploadingVideo(false);
       setExtracting(false);
+      element.pause?.();
+      element.removeAttribute("src");
+      element.load?.();
     }
   }, []);
+
+  const handleVideoFile = useCallback(
+    async (file: File) => {
+      const objectUrl = URL.createObjectURL(file);
+      setVideoPreview(objectUrl);
+      setFrames([]);
+      setSwaps({});
+      setAltSwaps({});
+      setFrameGenerations({});
+      setFrameRevision({});
+      setChosenModel({});
+      setFramePreferredRole({});
+      setFrameReason({});
+      setApprovedGenerationId({});
+      setSourcePath(null);
+      setDecodeBlocked(false);
+      extractedFrom.current = null;
+
+      setSelectedFrames(new Set());
+      // The video library is intentionally preserved across new source clips.
+
+      try {
+        const folder = await createOutfitSwapFolder();
+
+        setUploadingVideo(true);
+        const uploadedVideo = await uploadToStorage(folder, file, file.name);
+        setVideoUrl(uploadedVideo.url);
+        // Kicks `normalize-video` (and its polling) for this object path.
+        setSourcePath(uploadedVideo.path);
+        setUploadingVideo(false);
+
+        const ok = await extractFromUrl(objectUrl);
+        if (!ok) {
+          setSourceNotice(
+            "This clip needs converting before FUSE can read it — preparing your video…",
+          );
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not process that video");
+      } finally {
+        setUploadingVideo(false);
+        setExtracting(false);
+      }
+    },
+    [extractFromUrl],
+  );
+
 
   /* ------------------- Library picker (already-made assets) ----------------- */
 
