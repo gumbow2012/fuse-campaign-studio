@@ -208,6 +208,12 @@ verify_jwt = false
 [functions.creator-connect]
 verify_jwt = true
 
+[functions.reconcile-creator-earnings]
+verify_jwt = false
+
+[functions.process-creator-payout]
+verify_jwt = false
+
 
 
 
