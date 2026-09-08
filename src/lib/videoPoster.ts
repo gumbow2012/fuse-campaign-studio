@@ -20,6 +20,60 @@ const inflight = new Map<string, Promise<string | null>>();
 /** Metadata-only duration probes, de-duplicated per stable key. */
 const durationInflight = new Map<string, Promise<number | null>>();
 
+/* ------------------------------------------------------------------------- *
+ * GLOBAL MEDIA QUEUE
+ *
+ * Every hidden <video> this module opens — poster extraction AND duration
+ * probes — passes through one bounded scheduler, so a 10-clip timeline never
+ * has more than MAX_CONCURRENT media elements alive. Lower `priority` runs
+ * first (visible/active clips), and the queue yields to the main thread
+ * between items so scrolling and clicks stay responsive.
+ * ------------------------------------------------------------------------- */
+
+const MAX_CONCURRENT = 2;
+
+type QueueEntry = { priority: number; run: () => void };
+
+const waiting: QueueEntry[] = [];
+let active = 0;
+
+const yieldToMain = () =>
+  new Promise<void>((resolve) => {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
+
+function pump() {
+  while (active < MAX_CONCURRENT && waiting.length) {
+    waiting.sort((a, b) => a.priority - b.priority);
+    const next = waiting.shift();
+    if (!next) return;
+    active += 1;
+    next.run();
+  }
+}
+
+function schedule<T>(priority: number, task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    waiting.push({
+      priority,
+      run: () => {
+        task()
+          .then(resolve, reject)
+          .finally(async () => {
+            /* Release the slot only after a frame, so decoding one clip never
+               chains straight into the next on the same tick. */
+            await yieldToMain();
+            active -= 1;
+            pump();
+          });
+      },
+    });
+    pump();
+  });
+}
+
+
 export function cachedPoster(url: string | null | undefined, stableKey?: string): string | null {
   if (!url) return null;
   return posters.get(resolveCacheKey(url, stableKey)) ?? null;
@@ -66,10 +120,18 @@ async function grab(url: string, timeoutMs: number, key: string): Promise<string
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
+      /* Release immediately: stop the fetch and drop the element's source so
+         memory and bandwidth are free before the next queued clip starts. */
+      try {
+        video.pause();
+      } catch {
+        /* not playing */
+      }
       video.removeAttribute("src");
       video.load();
       resolve(value);
     };
+
 
     const timer = window.setTimeout(() => finish(null), timeoutMs);
 
@@ -104,7 +166,7 @@ async function grab(url: string, timeoutMs: number, key: string): Promise<string
  */
 export async function extractPoster(
   url: string,
-  options?: { timeoutMs?: number; cacheKey?: string },
+  options?: { timeoutMs?: number; cacheKey?: string; priority?: number },
 ): Promise<string | null> {
   const key = resolveCacheKey(url, options?.cacheKey);
   const known = posters.get(key);
@@ -114,7 +176,7 @@ export async function extractPoster(
   const pending = inflight.get(key);
   if (pending) return await pending;
 
-  const task = grab(url, options?.timeoutMs ?? 9000, key)
+  const task = schedule(options?.priority ?? 10, () => grab(url, options?.timeoutMs ?? 9000, key))
     .then((value) => {
       if (value) posters.set(key, value);
       else failed.add(key);
@@ -128,6 +190,7 @@ export async function extractPoster(
   return await task;
 }
 
+
 /**
  * DURATION ONLY — metadata probe for a clip whose length is not stored.
  *
@@ -138,7 +201,7 @@ export async function extractPoster(
  */
 export async function measureDuration(
   url: string,
-  options?: { timeoutMs?: number; cacheKey?: string },
+  options?: { timeoutMs?: number; cacheKey?: string; priority?: number },
 ): Promise<number | null> {
   const key = resolveCacheKey(url, options?.cacheKey);
   const known = durations.get(key);
@@ -147,7 +210,13 @@ export async function measureDuration(
   const pending = durationInflight.get(key);
   if (pending) return await pending;
 
-  const task = new Promise<number | null>((resolve) => {
+  const task = schedule(options?.priority ?? 20, () => new Promise<number | null>((resolve) => {
+    /* Cheap win: a poster pass may have measured this clip while we queued. */
+    const already = durations.get(key);
+    if (already && already > 0) {
+      resolve(already);
+      return;
+    }
     const video = document.createElement("video");
     let settled = false;
     const finish = (value: number | null) => {
@@ -156,6 +225,12 @@ export async function measureDuration(
       window.clearTimeout(timer);
       video.onloadedmetadata = null;
       video.onerror = null;
+      /* Release before the next queued clip starts: stop the fetch, drop the src. */
+      try {
+        video.pause();
+      } catch {
+        /* not playing */
+      }
       video.removeAttribute("src");
       video.load();
       resolve(value);
@@ -179,9 +254,10 @@ export async function measureDuration(
       finish(null);
     };
     video.src = url;
-  }).finally(() => {
+  })).finally(() => {
     durationInflight.delete(key);
   });
+
 
   durationInflight.set(key, task);
   return await task;

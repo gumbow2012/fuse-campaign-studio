@@ -15,9 +15,9 @@ export interface PosterSource {
   cacheKey?: string;
   /** A server-provided poster always wins — no extraction needed. */
   poster?: string | null;
+  /** Lower runs earlier in the shared media queue. */
+  priority?: number;
 }
-
-const CONCURRENCY = 2;
 
 export interface ClipPosterOptions {
   /**
@@ -25,7 +25,6 @@ export interface ClipPosterOptions {
    * the active clip). Keeps a ten-clip timeline from opening ten videos at once.
    */
   allowedIds?: Iterable<string> | null;
-  concurrency?: number;
 }
 
 export function useClipPosters(
@@ -37,9 +36,11 @@ export function useClipPosters(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [options?.allowedIds ? Array.from(options.allowedIds).sort().join("|") : ""],
   );
-  const concurrency = Math.max(1, Math.min(3, options?.concurrency ?? CONCURRENCY));
   const signature = useMemo(
-    () => sources.map((source) => `${source.id}:${source.cacheKey ?? ""}:${source.url ?? ""}:${source.poster ?? ""}`).join("|"),
+    () =>
+      sources
+        .map((s) => `${s.id}:${s.cacheKey ?? ""}:${s.url ?? ""}:${s.poster ?? ""}:${s.priority ?? ""}`)
+        .join("|"),
     [sources],
   );
 
@@ -64,27 +65,27 @@ export function useClipPosters(
     );
     if (!queue.length) return;
 
-    let cursor = 0;
-    const worker = async () => {
-      while (!cancelled) {
-        const next = queue[cursor];
-        cursor += 1;
-        if (!next?.url) return;
-        const poster = await extractPoster(next.url, { cacheKey: next.cacheKey ?? next.id });
-        if (cancelled) return;
-        if (poster) setPosters((current) => ({ ...current, [next.id]: poster }));
-      }
-    };
-
-    void Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
+    /* Extraction rides the same bounded queue as the duration probes (max two
+       hidden videos alive, each released before the next), so thumbnails fill in
+       progressively instead of all at once. */
+    queue.forEach((source, index) => {
+      void extractPoster(source.url as string, {
+        cacheKey: source.cacheKey ?? source.id,
+        priority: source.priority ?? index,
+      }).then((poster) => {
+        if (cancelled || !poster) return;
+        setPosters((current) => ({ ...current, [source.id]: poster }));
+      });
+    });
 
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature, allowed, concurrency]);
+  }, [signature, allowed]);
 
   return posters;
 }
+
 
 export default useClipPosters;

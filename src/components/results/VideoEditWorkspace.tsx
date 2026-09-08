@@ -106,25 +106,38 @@ export function VideoEditWorkspace({ editor, fallbackSlots, className }: VideoEd
     () => [...visibleIds, ...(selectedId ? [selectedId] : []), ...(segments[0] ? [segments[0].id] : [])],
     [visibleIds, selectedId, segments],
   );
-  const posters = useClipPosters(posterSources, { allowedIds, concurrency: 2 });
+  /* Ordering inside the shared, bounded media queue: active clip, then whatever
+     is on screen, then the rest in output order. */
+  const prioritisedPosterSources = useMemo(
+    () =>
+      posterSources.map((source, index) => ({
+        ...source,
+        priority: source.id === selectedId ? 0 : visibleIds.includes(source.id) ? 1 + index : 40 + index,
+      })),
+    [posterSources, selectedId, visibleIds],
+  );
+  const posters = useClipPosters(prioritisedPosterSources, { allowedIds });
 
   /**
    * Lengths are measured for EVERY clip, never gated behind the viewport: a
    * metadata-only probe fetches headers, not the file, so a 10-clip run still
-   * knows all its real durations while only the active clip streams fully.
+   * knows all its real durations while only the active clip streams fully. The
+   * probes queue behind the posters at most two media elements at a time.
    */
   const durationSources = useMemo(
     () =>
-      segments.map((segment) => ({
+      segments.map((segment, index) => ({
         id: segment.id,
         url: segment.url,
         cacheKey: `edit-segment:${segment.id}`,
         knownMs: segment.source_duration_ms || null,
         skip: isImageSegment(segment.source_path),
+        priority: segment.id === selectedId ? 2 : 60 + index,
       })),
-    [segments],
+    [segments, selectedId],
   );
-  const probed = useClipDurations(durationSources, { concurrency: 3 });
+  const probed = useClipDurations(durationSources);
+
 
   /**
    * Metadata durations are the source of truth for labels, totals and trim
