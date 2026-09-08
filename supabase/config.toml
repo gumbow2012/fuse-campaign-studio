@@ -202,4 +202,8 @@ verify_jwt = false
 [functions.tmp-purge-cache]
 verify_jwt = false
 
+[functions.normalize-callback]
+verify_jwt = false
+
+
 
