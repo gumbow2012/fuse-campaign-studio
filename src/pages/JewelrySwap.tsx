@@ -3563,7 +3563,7 @@ export default function JewelrySwap() {
     } finally {
       setSwapping(false);
     }
-  }, [selectedFrames, pieces, swapFrame, ensureAnalysis, frameIdFor]);
+  }, [selectedFrames, pieces, swapFrame, ensureAnalysis, frameIdFor, sourceBlockedReason]);
 
 
 
