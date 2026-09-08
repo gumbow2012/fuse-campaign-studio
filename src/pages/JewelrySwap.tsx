@@ -3326,6 +3326,9 @@ export default function JewelrySwap() {
 
   const runOpticsAnalysis = useCallback(async () => {
     if (!opticsSourceKey) return;
+    // Never analyze a clip the browser couldn't decode, or one still converting.
+    if (normalization.preparing || normalization.failed || decodeBlocked) return;
+
     setOpticsStatus("analyzing");
     try {
       const result = await analyzeDiamondOptics({
