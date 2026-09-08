@@ -18,6 +18,11 @@ const KLING_IMAGE_MAX_BYTES = 9_500_000;
 const MAX_LONG_EDGE = 2048;
 const JPEG_QUALITY_STEPS = [0.9, 0.8, 0.7, 0.6];
 
+/** A frame already living in our own bucket is durable + signable by the edge function. */
+function isOnPlatform(url: string) {
+  return url.includes("/fuse-assets/");
+}
+
 export type ConditionedAnimateInput = {
   /** The url to send as the animate/init image. */
   url: string;
@@ -52,9 +57,10 @@ async function currentUserId() {
 }
 
 /**
- * Returns a url guaranteed to be under Kling's input cap. Any failure falls
- * back to the original url so the animate path never regresses — the
- * server-side fallback still guards the cap.
+ * Returns a url guaranteed to be under Kling's input cap AND durably fetchable
+ * by Kling's worker. Off-platform frame urls (e.g. short-lived fal.media links)
+ * are always re-hosted to fuse-assets so Kling doesn't 422 on download. Any
+ * failure falls back to the original url so the animate path never regresses.
  */
 export async function conditionAnimateInput(imageUrl: string): Promise<ConditionedAnimateInput> {
   const base: ConditionedAnimateInput = {
@@ -75,7 +81,33 @@ export async function conditionAnimateInput(imageUrl: string): Promise<Condition
     const originalDimensions = await measure(blob);
 
     if (originalBytes <= KLING_IMAGE_MAX_BYTES) {
-      return { ...base, originalBytes, originalDimensions, note: "already under cap" };
+      // Under the cap. If it already lives in our bucket, use it as-is.
+      if (isOnPlatform(imageUrl)) {
+        return { ...base, originalBytes, originalDimensions, note: "already under cap" };
+      }
+      // Off-platform (e.g. an expiring fal.media frame). Kling's worker frequently
+      // can't fetch those -> 422 file_download_error. Re-host to fuse-assets and
+      // hand Kling a durable signed url instead.
+      const rehostUserId = await currentUserId();
+      if (!rehostUserId) {
+        return { ...base, originalBytes, originalDimensions, note: "no session to re-host" };
+      }
+      const ext = (blob.type || "").includes("jpeg") ? "jpg" : "png";
+      const rehostFile = new File([blob], `animate-input.${ext}`, {
+        type: blob.type || "image/png",
+      });
+      const folder = `system/jewelry-swap/animate-input/${rehostUserId}`;
+      const { url: rehostedUrl } = await uploadToStorage(folder, rehostFile, `animate-input.${ext}`);
+      return {
+        url: rehostedUrl,
+        conditioned: true,
+        originalUrl: imageUrl,
+        originalBytes,
+        originalDimensions,
+        conditionedBytes: originalBytes,
+        conditionedDimensions: originalDimensions,
+        note: "re-hosted off-platform frame to fuse-assets",
+      };
     }
 
     const source = new File([blob], "approved-frame.png", {
