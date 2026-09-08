@@ -175,10 +175,14 @@ import {
   frameTimestamps,
   isVideoAsset,
   loadVideo,
+  loadVideoForExtraction,
   readMeta,
   readVideoFileMeta,
   type VideoMeta,
 } from "@/lib/videoFrames";
+import { storagePathFromUrl } from "@/lib/videoNormalization";
+import { useVideoNormalization } from "@/hooks/useVideoNormalization";
+
 
 import { compressImageFile } from "@/lib/imageCompress";
 import { conditionAnimateInput } from "@/services/animateInput";
@@ -932,6 +936,16 @@ export default function JewelrySwap() {
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  /**
+   * Storage object path of the source clip inside fuse-assets. iPhone HEVC
+   * clips can't be decoded in the browser (0×0, black frames), so every source
+   * clip goes through `normalize-video`; frame extraction, analysis and the
+   * swap always run against the playable file it hands back.
+   */
+  const [sourcePath, setSourcePath] = useState<string | null>(null);
+  const [decodeBlocked, setDecodeBlocked] = useState(false);
+  const normalization = useVideoNormalization(sourcePath);
+
 
   const [frames, setFrames] = useState<Frame[]>([]);
   const [extracting, setExtracting] = useState(false);
@@ -1239,40 +1253,40 @@ export default function JewelrySwap() {
 
   /* ---------------------------- 1. Source video ---------------------------- */
 
-  const handleVideoFile = useCallback(async (file: File) => {
-    const objectUrl = URL.createObjectURL(file);
-    setVideoPreview(objectUrl);
-    setFrames([]);
-    setSwaps({});
-    setAltSwaps({});
-    setFrameGenerations({});
-    setFrameRevision({});
-    setChosenModel({});
-    setFramePreferredRole({});
-    setFrameReason({});
-    setApprovedGenerationId({});
+  /** Which URL we already extracted frames from, so effects never loop. */
+  const extractedFrom = useRef<string | null>(null);
 
-    setSelectedFrames(new Set());
-    // The video library is intentionally preserved across new source clips.
-
+  /**
+   * Decode-guarded frame extraction. The video must fire 'loadeddata' AND
+   * report videoWidth > 0, and every frame is drawn only AFTER its 'seeked'
+   * event. A clip the browser can't decode returns false instead of producing
+   * black frames — darkness itself is never a rejection reason.
+   */
+  const extractFromUrl = useCallback(async (url: string): Promise<boolean> => {
+    let element: HTMLVideoElement;
     try {
-      const element = await loadVideo(objectUrl);
-      const nextMeta = readMeta(element);
-      setMeta(nextMeta);
+      element = await loadVideoForExtraction(url);
+    } catch {
+      setDecodeBlocked(true);
+      return false;
+    }
+    setDecodeBlocked(false);
+    extractedFrom.current = url;
 
+    const nextMeta = readMeta(element);
+    setMeta(nextMeta);
+    setExtracting(true);
+    setExtractProgress(0);
+    try {
       const folder = await createOutfitSwapFolder();
-
-      setUploadingVideo(true);
-      const uploadedVideo = await uploadToStorage(folder, file, file.name);
-      setVideoUrl(uploadedVideo.url);
-
-      // Extract ~1 frame/second plus the final frame, then upload each frame.
-      setExtracting(true);
-      setExtractProgress(0);
       const times = frameTimestamps(nextMeta.duration);
       const captured = await extractFrames(element, times, (done, total) =>
         setExtractProgress(Math.round((done / total) * 50)),
       );
+      if (!captured.length) {
+        setDecodeBlocked(true);
+        return false;
+      }
 
       const uploaded = await uploadWithConcurrency(
         captured,
@@ -1289,15 +1303,63 @@ export default function JewelrySwap() {
         .map((_, index) => index)
         .filter((index) => index % Math.max(1, Math.ceil(uploaded.length / 4)) === 0);
       setSelectedFrames(new Set(spread));
+      setSourceNotice(null);
       toast.success(`${uploaded.length} source frames extracted`);
-
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not process that video");
+      return true;
     } finally {
-      setUploadingVideo(false);
       setExtracting(false);
+      element.pause?.();
+      element.removeAttribute("src");
+      element.load?.();
     }
   }, []);
+
+  const handleVideoFile = useCallback(
+    async (file: File) => {
+      const objectUrl = URL.createObjectURL(file);
+      setVideoPreview(objectUrl);
+      setFrames([]);
+      setSwaps({});
+      setAltSwaps({});
+      setFrameGenerations({});
+      setFrameRevision({});
+      setChosenModel({});
+      setFramePreferredRole({});
+      setFrameReason({});
+      setApprovedGenerationId({});
+      setSourcePath(null);
+      setDecodeBlocked(false);
+      extractedFrom.current = null;
+
+      setSelectedFrames(new Set());
+      // The video library is intentionally preserved across new source clips.
+
+      try {
+        const folder = await createOutfitSwapFolder();
+
+        setUploadingVideo(true);
+        const uploadedVideo = await uploadToStorage(folder, file, file.name);
+        setVideoUrl(uploadedVideo.url);
+        // Kicks `normalize-video` (and its polling) for this object path.
+        setSourcePath(uploadedVideo.path);
+        setUploadingVideo(false);
+
+        const ok = await extractFromUrl(objectUrl);
+        if (!ok) {
+          setSourceNotice(
+            "This clip needs converting before FUSE can read it — preparing your video…",
+          );
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not process that video");
+      } finally {
+        setUploadingVideo(false);
+        setExtracting(false);
+      }
+    },
+    [extractFromUrl],
+  );
+
 
   /* ------------------- Library picker (already-made assets) ----------------- */
 
@@ -1374,6 +1436,10 @@ export default function JewelrySwap() {
 
       setVideoPreview(asset.outputUrl);
       setVideoUrl(asset.outputUrl);
+      setDecodeBlocked(false);
+      extractedFrom.current = null;
+      // Library clips live in fuse-assets too, so normalization applies here.
+      setSourcePath(storagePathFromUrl(asset.outputUrl));
 
       let objectUrl: string | null = null;
       try {
@@ -1392,35 +1458,13 @@ export default function JewelrySwap() {
       }
 
       try {
-        const element = await loadVideo(objectUrl);
-        const nextMeta = readMeta(element);
-        setMeta(nextMeta);
-
-        const folder = await createOutfitSwapFolder();
         setUploadingVideo(false);
-        setExtracting(true);
-        setExtractProgress(0);
-
-        const times = frameTimestamps(nextMeta.duration);
-        const captured = await extractFrames(element, times, (done, total) =>
-          setExtractProgress(Math.round((done / total) * 50)),
-        );
-
-        const uploaded = await uploadWithConcurrency(
-          captured,
-          3,
-          async (frame) => {
-            const stored = await uploadToStorage(folder, frame.file, frame.file.name);
-            return { time: frame.time, url: stored.url } as Frame;
-          },
-          (done, total) => setExtractProgress(50 + Math.round((done / total) * 50)),
-        );
-        setFrames(uploaded);
-        const spread = uploaded
-          .map((_, index) => index)
-          .filter((index) => index % Math.max(1, Math.ceil(uploaded.length / 4)) === 0);
-        setSelectedFrames(new Set(spread));
-        toast.success(`${uploaded.length} source frames extracted`);
+        const ok = await extractFromUrl(objectUrl);
+        if (!ok) {
+          setSourceNotice(
+            "This clip needs converting before FUSE can read it — preparing your video…",
+          );
+        }
       } catch {
         setSourceNotice(
           "Couldn't load that video for frame extraction — try uploading the file instead.",
@@ -1430,8 +1474,55 @@ export default function JewelrySwap() {
         setExtracting(false);
       }
     },
-    [resetSourceState],
+    [resetSourceState, extractFromUrl],
   );
+
+  /**
+   * Once `normalize-video` reports 'ready' its playback URL becomes THE source
+   * for the preview player, the hidden extraction video, the analysis and the
+   * swap. If the raw file couldn't be decoded locally, frames are extracted now
+   * (from the converted file) instead of never.
+   */
+  useEffect(() => {
+    if (!normalization.ready) return;
+    const playback = normalization.playbackUrl;
+    if (!playback) return;
+
+    if (normalization.needsNormalization) {
+      setVideoUrl(playback);
+      setVideoPreview(playback);
+    }
+    if (extracting) return;
+    const needsFrames = decodeBlocked || frames.length === 0;
+    if (!needsFrames) return;
+    if (extractedFrom.current === playback) return;
+    extractedFrom.current = playback;
+    void extractFromUrl(playback).then((ok) => {
+      if (!ok) {
+        setSourceNotice("We couldn't read this clip even after converting it.");
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    normalization.ready,
+    normalization.playbackUrl,
+    normalization.needsNormalization,
+    decodeBlocked,
+    frames.length,
+    extracting,
+    extractFromUrl,
+  ]);
+
+  /** A clip is only usable once real, decoded frames exist. */
+  const sourceReady = frames.length > 0 && !decodeBlocked && !extracting;
+  const sourceBlockedReason = normalization.preparing
+    ? "Your video is still being prepared."
+    : normalization.failed || decodeBlocked
+      ? "This clip couldn't be prepared for editing."
+      : !sourceReady
+        ? "Add a source clip and wait for its frames."
+        : null;
+
 
   /** A library image becomes a new piece card. */
   const addPieceFromLibrary = useCallback((url: string) => {
@@ -3235,6 +3326,9 @@ export default function JewelrySwap() {
 
   const runOpticsAnalysis = useCallback(async () => {
     if (!opticsSourceKey) return;
+    // Never analyze a clip the browser couldn't decode, or one still converting.
+    if (normalization.preparing || normalization.failed || decodeBlocked) return;
+
     setOpticsStatus("analyzing");
     try {
       const result = await analyzeDiamondOptics({
@@ -3251,7 +3345,16 @@ export default function JewelrySwap() {
     } catch {
       setOpticsStatus("error");
     }
-  }, [opticsSourceKey, videoUrl, frames, opticsStoneContext]);
+  }, [
+    opticsSourceKey,
+    videoUrl,
+    frames,
+    opticsStoneContext,
+    normalization.preparing,
+    normalization.failed,
+    decodeBlocked,
+  ]);
+
 
   useEffect(() => {
     if (!opticsSourceKey) {
@@ -3417,10 +3520,16 @@ export default function JewelrySwap() {
 
 
   const runSelectedSwaps = useCallback(async () => {
+    // Never let undecoded / empty frames start an analysis or a paid generation.
+    if (sourceBlockedReason) {
+      toast.error(sourceBlockedReason);
+      return;
+    }
     if (!pieces.length) {
       toast.error("Add at least one jewelry reference");
       return;
     }
+
     const indices = [...selectedFrames].sort((a, b) => a - b);
     if (!indices.length) {
       toast.error("Select the frames you want to swap");
@@ -3466,7 +3575,7 @@ export default function JewelrySwap() {
     } finally {
       setSwapping(false);
     }
-  }, [selectedFrames, pieces, swapFrame, ensureAnalysis, frameIdFor]);
+  }, [selectedFrames, pieces, swapFrame, ensureAnalysis, frameIdFor, sourceBlockedReason]);
 
 
 
@@ -4546,6 +4655,11 @@ export default function JewelrySwap() {
 
       setVideoUrl(state?.videoUrl ?? null);
       setVideoPreview(state?.videoPreview ?? state?.videoUrl ?? null);
+      // Resumes (or re-checks) a conversion that was in flight before a refresh.
+      setDecodeBlocked(false);
+      extractedFrom.current = null;
+      setSourcePath(storagePathFromUrl(state?.videoUrl ?? null));
+
       setMeta((state?.meta ?? null) as VideoMeta | null);
       setFrames((state?.frames ?? []) as Frame[]);
       setSelectedFrames(new Set((state?.selectedFrames ?? []) as number[]));
@@ -4745,6 +4859,9 @@ export default function JewelrySwap() {
 
     setVideoUrl(null);
     setVideoPreview(null);
+    setSourcePath(null);
+    setDecodeBlocked(false);
+
     setMeta(null);
     setFrames([]);
     setSelectedFrames(new Set());
@@ -4955,11 +5072,34 @@ export default function JewelrySwap() {
                   </Button>
                 </div>
               )}
+              {normalization.preparing ? (
+                <div className="mt-3 flex items-center gap-2 rounded-xl border border-cyan-200/25 bg-cyan-200/10 px-3 py-2 text-[11px] text-cyan-100">
+                  <Loader2 size={13} className="animate-spin" />
+                  Preparing your video…
+                </div>
+              ) : null}
+              {normalization.failed ? (
+                <div className="mt-3 space-y-2 rounded-xl border border-rose-300/25 bg-rose-300/10 px-3 py-2 text-[11px] text-rose-100">
+                  <p>
+                    We couldn't prepare this clip for editing.
+                    {normalization.error ? ` ${normalization.error}` : ""}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={normalization.retry}
+                    className="rounded-xl border-white/20 bg-transparent text-xs"
+                  >
+                    <RefreshCw size={13} /> Retry
+                  </Button>
+                </div>
+              ) : null}
               {sourceNotice ? (
                 <p className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-100">
                   {sourceNotice}
                 </p>
               ) : null}
+
               {extracting ? (
                 <div className="mt-3 space-y-1.5">
                   <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-200/70">
@@ -6395,7 +6535,7 @@ export default function JewelrySwap() {
                     <Button
                       size="sm"
                       onClick={runSelectedSwaps}
-                      disabled={swapping}
+                      disabled={swapping || Boolean(sourceBlockedReason)}
                       className="ml-auto rounded-xl bg-[hsl(var(--primary))] text-xs font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
                     >
                       {swapping ? <Loader2 size={13} className="animate-spin" /> : <Gem size={13} />}

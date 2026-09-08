@@ -49,6 +49,54 @@ export async function loadVideo(url: string) {
   return video;
 }
 
+/** Thrown when the browser cannot actually decode the clip (e.g. iPhone HEVC). */
+export class VideoDecodeError extends Error {
+  constructor(message = "This clip can't be decoded in the browser") {
+    super(message);
+    this.name = "VideoDecodeError";
+  }
+}
+
+/**
+ * Load a video far enough to SAFELY draw frames from it: 'loadeddata' must fire
+ * (readyState >= 2) and videoWidth must be > 0. An undecodable clip (HEVC on a
+ * browser without support) reports 0×0 and would yield solid-black frames, so
+ * it throws VideoDecodeError instead.
+ */
+export async function loadVideoForExtraction(url: string, timeoutMs = 30000) {
+  const video = document.createElement("video");
+  video.crossOrigin = "anonymous";
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = url;
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const done = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      video.removeEventListener("loadeddata", onLoadedData);
+      video.removeEventListener("error", onError);
+      error ? reject(error) : resolve();
+    };
+    const onLoadedData = () => done();
+    const onError = () => done(new VideoDecodeError());
+    const timer = setTimeout(
+      () => done(new VideoDecodeError("Timed out reading that clip")),
+      timeoutMs,
+    );
+    video.addEventListener("loadeddata", onLoadedData);
+    video.addEventListener("error", onError);
+    if (video.readyState >= 2) done();
+  });
+
+  if (!video.videoWidth || !video.videoHeight) throw new VideoDecodeError();
+  return video;
+}
+
+
 export function readMeta(video: HTMLVideoElement): VideoMeta {
   const duration = Number.isFinite(video.duration) ? Number(video.duration.toFixed(2)) : 0;
   return {
