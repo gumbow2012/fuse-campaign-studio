@@ -3508,10 +3508,16 @@ export default function JewelrySwap() {
 
 
   const runSelectedSwaps = useCallback(async () => {
+    // Never let undecoded / empty frames start an analysis or a paid generation.
+    if (sourceBlockedReason) {
+      toast.error(sourceBlockedReason);
+      return;
+    }
     if (!pieces.length) {
       toast.error("Add at least one jewelry reference");
       return;
     }
+
     const indices = [...selectedFrames].sort((a, b) => a - b);
     if (!indices.length) {
       toast.error("Select the frames you want to swap");
