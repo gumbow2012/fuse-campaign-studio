@@ -63,27 +63,33 @@ function Placeholder({ video }: { video?: boolean }) {
   );
 }
 
-/** Poster-only media: videos show a first frame + play badge, never autoplay. */
+/** Video covers autoplay muted on loop; image covers render as a plain image. */
 function DropMedia({ template }: { template: FeaturedDropTemplate }) {
   const [state, setState] = useState<"loading" | "ready" | "error">(
     template.preview_url ? "loading" : "error",
   );
 
+  const isVideo =
+    template.media_type === "video" ||
+    /\.(mp4|webm)(\?|#|$)/i.test(template.preview_url ?? "");
+
   if (!template.preview_url || state === "error") {
-    return <Placeholder video={template.media_type === "video"} />;
+    return <Placeholder video={isVideo} />;
   }
 
   return (
     <>
       {state === "loading" ? <div className="absolute inset-0 fuse-skeleton" /> : null}
-      {template.media_type === "video" ? (
+      {isVideo ? (
         <video
           src={template.preview_url}
           className={cn(
             "h-full w-full object-cover object-center transition-transform duration-700 group-hover:scale-[1.03]",
             state === "loading" && "opacity-0",
           )}
+          autoPlay
           muted
+          loop
           playsInline
           preload="metadata"
           onLoadedData={() => setState("ready")}
