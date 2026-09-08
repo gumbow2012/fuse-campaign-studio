@@ -1477,6 +1477,52 @@ export default function JewelrySwap() {
     [resetSourceState, extractFromUrl],
   );
 
+  /**
+   * Once `normalize-video` reports 'ready' its playback URL becomes THE source
+   * for the preview player, the hidden extraction video, the analysis and the
+   * swap. If the raw file couldn't be decoded locally, frames are extracted now
+   * (from the converted file) instead of never.
+   */
+  useEffect(() => {
+    if (!normalization.ready) return;
+    const playback = normalization.playbackUrl;
+    if (!playback) return;
+
+    if (normalization.needsNormalization) {
+      setVideoUrl(playback);
+      setVideoPreview(playback);
+    }
+    if (extracting) return;
+    const needsFrames = decodeBlocked || frames.length === 0;
+    if (!needsFrames) return;
+    if (extractedFrom.current === playback) return;
+    extractedFrom.current = playback;
+    void extractFromUrl(playback).then((ok) => {
+      if (!ok) {
+        setSourceNotice("We couldn't read this clip even after converting it.");
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    normalization.ready,
+    normalization.playbackUrl,
+    normalization.needsNormalization,
+    decodeBlocked,
+    frames.length,
+    extracting,
+    extractFromUrl,
+  ]);
+
+  /** A clip is only usable once real, decoded frames exist. */
+  const sourceReady = frames.length > 0 && !decodeBlocked && !extracting;
+  const sourceBlockedReason = normalization.preparing
+    ? "Your video is still being prepared."
+    : normalization.failed || decodeBlocked
+      ? "This clip couldn't be prepared for editing."
+      : !sourceReady
+        ? "Add a source clip and wait for its frames."
+        : null;
+
 
   /** A library image becomes a new piece card. */
   const addPieceFromLibrary = useCallback((url: string) => {
