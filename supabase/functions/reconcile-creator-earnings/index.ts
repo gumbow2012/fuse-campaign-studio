@@ -4,6 +4,7 @@
 // spent template belongs to a creator (created_by has creator_economics) and at least one
 // cash-backed credit was used — records a snapshotted creator_earnings row (pending, held).
 // Idempotent: a spend is processed once (keyed by ledger id); earnings unique per spend.
+// Optional customerId scopes reconciliation to a single customer.
 import {
   createAdminClient, requireUser, getUserRoles, json, errorMessage, corsHeaders,
 } from "../_shared/supabase-admin.ts";
@@ -12,7 +13,6 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const admin = createAdminClient();
-    // Auth: either the scheduled-job secret (x-admin-secret) OR an admin/dev JWT.
     let authed = false;
     const secret = req.headers.get("x-admin-secret");
     if (secret) {
@@ -26,18 +26,18 @@ Deno.serve(async (req) => {
     }
     if (!authed) return json({ error: "Admin access required" }, 403);
 
-    const { action = "preview", limit = 200 } = await req.json().catch(() => ({}));
+    const { action = "preview", limit = 200, customerId } = await req.json().catch(() => ({}));
     const dry = action !== "run";
 
     const { data: policy } = await admin.from("creator_payout_policy").select("hold_days").eq("id", true).maybeSingle();
     const holdMs = (policy?.hold_days ?? 7) * 24 * 60 * 60 * 1000;
 
-    // Unprocessed spends (oldest first). A spend is processed once its ledger id has consumptions.
-    const { data: spends } = await admin
+    let q = admin
       .from("credit_ledger")
       .select("id, user_id, amount, template_id, created_at, type")
-      .lt("amount", 0).in("type", ["run_template", "rerun_step"])
-      .order("created_at", { ascending: true }).limit(limit);
+      .lt("amount", 0).in("type", ["run_template", "rerun_step"]);
+    if (customerId) q = q.eq("user_id", customerId);
+    const { data: spends } = await q.order("created_at", { ascending: true }).limit(limit);
 
     let processed = 0, earningsCreated = 0, cashBackedTotalCents = 0, skippedProcessed = 0;
     const samples: any[] = [];
@@ -63,7 +63,6 @@ Deno.serve(async (req) => {
         need -= take;
       }
 
-      // creator behind the template (only creator-owned templates earn)
       let creatorId: string | null = null, shareBps = 0, econVersion = 1;
       if (spend.template_id) {
         const { data: tmpl } = await admin.from("fuse_templates").select("created_by").eq("id", spend.template_id).maybeSingle();
@@ -81,7 +80,6 @@ Deno.serve(async (req) => {
       });
 
       if (!dry) {
-        // record consumptions + decrement lots (FIFO)
         for (const d of draws) {
           await admin.from("credit_lot_consumptions").insert({
             user_id: spend.user_id, ledger_id: spend.id, campaign_run_id: spend.id, lot_id: d.lot.id,
@@ -100,7 +98,7 @@ Deno.serve(async (req) => {
             fuse_marketplace_revenue_cents: Math.round(cashCents) - earningCents,
             economics_version: econVersion, status: "pending", available_at: availableAt,
           });
-          if (!eErr) earningsCreated++; // unique(campaign_run_id) makes this idempotent
+          if (!eErr) earningsCreated++;
         }
       }
 
