@@ -936,6 +936,16 @@ export default function JewelrySwap() {
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  /**
+   * Storage object path of the source clip inside fuse-assets. iPhone HEVC
+   * clips can't be decoded in the browser (0×0, black frames), so every source
+   * clip goes through `normalize-video`; frame extraction, analysis and the
+   * swap always run against the playable file it hands back.
+   */
+  const [sourcePath, setSourcePath] = useState<string | null>(null);
+  const [decodeBlocked, setDecodeBlocked] = useState(false);
+  const normalization = useVideoNormalization(sourcePath);
+
 
   const [frames, setFrames] = useState<Frame[]>([]);
   const [extracting, setExtracting] = useState(false);
