@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { templateDetailPath } from "@/lib/templateSlug";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, ImageOff, Play, Timer, Video as VideoIcon } from "lucide-react";
+import { ArrowRight, ImageOff, Timer, Video as VideoIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics/track";
 import { campaignDisplayName } from "@/lib/campaignDisplayName";
@@ -63,27 +63,33 @@ function Placeholder({ video }: { video?: boolean }) {
   );
 }
 
-/** Poster-only media: videos show a first frame + play badge, never autoplay. */
+/** Video covers autoplay muted on loop; image covers render as a plain image. */
 function DropMedia({ template }: { template: FeaturedDropTemplate }) {
   const [state, setState] = useState<"loading" | "ready" | "error">(
     template.preview_url ? "loading" : "error",
   );
 
+  const isVideo =
+    template.media_type === "video" ||
+    /\.(mp4|webm)(\?|#|$)/i.test(template.preview_url ?? "");
+
   if (!template.preview_url || state === "error") {
-    return <Placeholder video={template.media_type === "video"} />;
+    return <Placeholder video={isVideo} />;
   }
 
   return (
     <>
       {state === "loading" ? <div className="absolute inset-0 fuse-skeleton" /> : null}
-      {template.media_type === "video" ? (
+      {isVideo ? (
         <video
           src={template.preview_url}
           className={cn(
             "h-full w-full object-cover object-center transition-transform duration-700 group-hover:scale-[1.03]",
             state === "loading" && "opacity-0",
           )}
+          autoPlay
           muted
+          loop
           playsInline
           preload="metadata"
           onLoadedData={() => setState("ready")}
@@ -105,13 +111,6 @@ function DropMedia({ template }: { template: FeaturedDropTemplate }) {
       )}
       {/* Diagonal sheen so previews never read as flat black */}
       <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,hsl(var(--electric-blue)/0.16),transparent_42%,transparent_62%,hsl(var(--navy-deep)/0.72))]" />
-      {template.media_type === "video" ? (
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[hsl(var(--navy-deep)/0.65)] ring-1 ring-[hsl(var(--electric-cyan)/0.35)] backdrop-blur-sm">
-            <Play className="h-4 w-4 translate-x-[1px] fill-foreground text-foreground" />
-          </span>
-        </span>
-      ) : null}
     </>
   );
 }
