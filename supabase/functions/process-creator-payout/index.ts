@@ -49,7 +49,18 @@ Deno.serve(async (req) => {
     }
     if (!authed) return json({ error: "Admin access required" }, 403);
 
-    const { action = "preview", creatorId } = await req.json().catch(() => ({}));
+    const { action = "preview", creatorId, fundCents } = await req.json().catch(() => ({}));
+
+    // TEST-ONLY: top up the platform's available test balance so transfers can be exercised.
+    if (action === "fund") {
+      if (LIVEMODE) return json({ error: "fund is test-mode only" }, 400);
+      const charge = await stripeForm("charges", {
+        amount: String(Number(fundCents) > 0 ? Number(fundCents) : 10000),
+        currency: "usd", source: "tok_bypassPending", description: "FUSE test balance top-up",
+      });
+      return json({ funded: true, charge_id: charge.id, amount_cents: charge.amount });
+    }
+
     if (!creatorId) return json({ error: "creatorId required" }, 400);
 
     const { data: policy } = await admin.from("creator_payout_policy").select("*").eq("id", true).maybeSingle();
