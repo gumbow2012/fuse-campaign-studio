@@ -5060,11 +5060,34 @@ export default function JewelrySwap() {
                   </Button>
                 </div>
               )}
+              {normalization.preparing ? (
+                <div className="mt-3 flex items-center gap-2 rounded-xl border border-cyan-200/25 bg-cyan-200/10 px-3 py-2 text-[11px] text-cyan-100">
+                  <Loader2 size={13} className="animate-spin" />
+                  Preparing your video…
+                </div>
+              ) : null}
+              {normalization.failed ? (
+                <div className="mt-3 space-y-2 rounded-xl border border-rose-300/25 bg-rose-300/10 px-3 py-2 text-[11px] text-rose-100">
+                  <p>
+                    We couldn't prepare this clip for editing.
+                    {normalization.error ? ` ${normalization.error}` : ""}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={normalization.retry}
+                    className="rounded-xl border-white/20 bg-transparent text-xs"
+                  >
+                    <RefreshCw size={13} /> Retry
+                  </Button>
+                </div>
+              ) : null}
               {sourceNotice ? (
                 <p className="mt-3 rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-100">
                   {sourceNotice}
                 </p>
               ) : null}
+
               {extracting ? (
                 <div className="mt-3 space-y-1.5">
                   <p className="text-[11px] uppercase tracking-[0.14em] text-cyan-200/70">
