@@ -4637,6 +4637,11 @@ export default function JewelrySwap() {
 
       setVideoUrl(state?.videoUrl ?? null);
       setVideoPreview(state?.videoPreview ?? state?.videoUrl ?? null);
+      // Resumes (or re-checks) a conversion that was in flight before a refresh.
+      setDecodeBlocked(false);
+      extractedFrom.current = null;
+      setSourcePath(storagePathFromUrl(state?.videoUrl ?? null));
+
       setMeta((state?.meta ?? null) as VideoMeta | null);
       setFrames((state?.frames ?? []) as Frame[]);
       setSelectedFrames(new Set((state?.selectedFrames ?? []) as number[]));
