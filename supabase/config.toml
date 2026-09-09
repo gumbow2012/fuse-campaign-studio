@@ -214,6 +214,10 @@ verify_jwt = false
 [functions.process-creator-payout]
 verify_jwt = false
 
+[functions.reverse-creator-earning]
+verify_jwt = false
+
+
 
 
 
