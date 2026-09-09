@@ -40,6 +40,8 @@ import {
   type CreatorPerformanceAggregate,
 } from "@/services/creatorPerformance";
 import CreatorRateBadge from "@/components/creator/CreatorRateBadge";
+import CreatorEarningsPanel from "@/components/creator/CreatorEarningsPanel";
+
 import {
   loadCreatorAnalytics,
 
@@ -831,11 +833,13 @@ export default function CreatorDashboard() {
             ) : null}
 
             {section === "earnings" ? (
-              <ComingLater
-                title="Earnings"
-                note="Earnings arrive with the FUSE Creator monetization launch. You'll be able to set what you earn per run and track it here."
-              />
+              user?.id ? (
+                <CreatorEarningsPanel userId={user.id} />
+              ) : (
+                <EmptyNote>Sign in to see your earnings.</EmptyNote>
+              )
             ) : null}
+
 
             {section === "resources" ? (
               <div className="grid gap-3 sm:grid-cols-3">
