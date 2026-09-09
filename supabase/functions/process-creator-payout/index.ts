@@ -1,9 +1,5 @@
 // process-creator-payout — platform-initiated creator payouts (TEST MODE only).
-// Claim-then-pay: atomically claim a creator's matured, unpaid earnings (set payout_id BEFORE
-// transferring, so concurrent runs can't double-pay), then move money via a Stripe TRANSFER
-// (platform balance -> creator's connected balance). Fresh idempotency key per attempt; a failed
-// transfer RELEASES the claim so it can be retried. Payout-ready verified LIVE from Stripe.
-// Auth: scheduled-job secret OR admin/dev JWT.
+// Claim-then-pay, idempotent, live payout-ready check. Auth: scheduled-job secret OR admin/dev JWT.
 import {
   createAdminClient, requireUser, getUserRoles, json, errorMessage, corsHeaders,
 } from "../_shared/supabase-admin.ts";
@@ -17,11 +13,15 @@ function stripeKey() {
   return k;
 }
 async function stripeForm(path: string, form: Record<string, string>, idem?: string) {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${stripeKey()}`, "Content-Type": "application/x-www-form-urlencoded",
-  };
+  const headers: Record<string, string> = { Authorization: `Bearer ${stripeKey()}`, "Content-Type": "application/x-www-form-urlencoded" };
   if (idem) headers["Idempotency-Key"] = idem;
   const res = await fetch(`https://api.stripe.com/v1/${path}`, { method: "POST", headers, body: new URLSearchParams(form).toString() });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message || `Stripe ${res.status}`);
+  return data;
+}
+async function stripeGetV1(path: string) {
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, { headers: { Authorization: `Bearer ${stripeKey()}` } });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error?.message || `Stripe ${res.status}`);
   return data;
@@ -52,7 +52,19 @@ Deno.serve(async (req) => {
 
     const { action = "preview", creatorId, fundCents } = await req.json().catch(() => ({}));
 
-    // TEST-ONLY: top up the platform's available test balance so transfers can be exercised.
+    // Read-only: the platform Stripe account's names (to check the legal/business name).
+    if (action === "account_info") {
+      const a = await stripeGetV1("account");
+      return json({
+        id: a?.id ?? null,
+        business_name: a?.business_profile?.name ?? null,
+        dashboard_display_name: a?.settings?.dashboard?.display_name ?? null,
+        statement_descriptor: a?.settings?.payments?.statement_descriptor ?? null,
+        country: a?.country ?? null,
+        email: a?.email ?? null,
+      });
+    }
+
     if (action === "fund") {
       if (LIVEMODE) return json({ error: "fund is test-mode only" }, 400);
       const charge = await stripeForm("charges", {
@@ -70,8 +82,7 @@ Deno.serve(async (req) => {
 
     const nowIso = new Date().toISOString();
     const { data: earnings } = await admin
-      .from("creator_earnings")
-      .select("id, creator_earning_cents, available_at, payout_id")
+      .from("creator_earnings").select("id, creator_earning_cents, available_at, payout_id")
       .eq("creator_id", creatorId).is("payout_id", null)
       .in("status", ["available", "pending"]).lte("available_at", nowIso);
     const eligible = (earnings ?? []).filter((e) => Number(e.creator_earning_cents) > 0);
@@ -84,15 +95,12 @@ Deno.serve(async (req) => {
     if (eligible.length === 0) return json({ error: "No eligible earnings" }, 400);
     if (amount < minCents) return json({ error: `Below minimum payout ($${(minCents / 100).toFixed(2)})`, amount_cents: amount }, 400);
 
-    // Live payout-ready check (never a stored flag).
-    const { data: acct } = await admin
-      .from("creator_connect_accounts").select("stripe_account_id").eq("user_id", creatorId).eq("livemode", LIVEMODE).maybeSingle();
+    const { data: acct } = await admin.from("creator_connect_accounts").select("stripe_account_id").eq("user_id", creatorId).eq("livemode", LIVEMODE).maybeSingle();
     if (!acct?.stripe_account_id) return json({ error: "Creator has no connected account" }, 400);
     const liveAcct = await stripeGetV2(`v2/core/accounts/${acct.stripe_account_id}?include=configuration.recipient`);
     const transfersActive = liveAcct?.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === "active";
     if (!transfersActive) return json({ error: "Creator payouts not enabled on Stripe" }, 400);
 
-    // Fresh payout row per attempt; its id is the transfer idempotency key.
     const payoutId = crypto.randomUUID();
     const { data: payout, error: insErr } = await admin
       .from("creator_payouts")
@@ -100,7 +108,6 @@ Deno.serve(async (req) => {
       .select().single();
     if (insErr || !payout) throw new Error(insErr?.message || "could not open payout");
 
-    // CLAIM the earnings atomically (only ones still unclaimed) BEFORE moving money.
     const { data: claimed } = await admin
       .from("creator_earnings").update({ payout_id: payoutId })
       .in("id", eligible.map((e) => e.id)).is("payout_id", null)
@@ -115,7 +122,6 @@ Deno.serve(async (req) => {
     try {
       transfer = await stripeForm("transfers", { amount: String(claimedAmount), currency, destination: acct.stripe_account_id, "metadata[fuse_payout_id]": payoutId, "metadata[fuse_creator_id]": creatorId }, payoutId);
     } catch (e) {
-      // RELEASE the claim so it can be retried, and mark the payout failed.
       await admin.from("creator_earnings").update({ payout_id: null }).eq("payout_id", payoutId);
       await admin.from("creator_payouts").update({ status: "failed", amount_cents: claimedAmount, failure_reason: String((e as any)?.message ?? e), updated_at: nowIso }).eq("id", payoutId);
       return json({ error: `Transfer failed: ${(e as any)?.message ?? e}`, payout_id: payoutId }, 502);
