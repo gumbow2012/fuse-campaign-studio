@@ -217,6 +217,9 @@ verify_jwt = false
 [functions.reverse-creator-earning]
 verify_jwt = false
 
+[functions.stripe-connect-webhook]
+verify_jwt = false
+
 
 
 
