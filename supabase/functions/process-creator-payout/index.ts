@@ -1,5 +1,6 @@
-// process-creator-payout — platform-initiated creator payouts (TEST MODE only).
+// process-creator-payout — platform-initiated creator payouts (TEST MODE for money).
 // Claim-then-pay, idempotent, live payout-ready check. Auth: scheduled-job secret OR admin/dev JWT.
+// account_info supports {live:true} to READ the live account for go-live verification (read-only).
 import {
   createAdminClient, requireUser, getUserRoles, json, errorMessage, corsHeaders,
 } from "../_shared/supabase-admin.ts";
@@ -7,7 +8,13 @@ import {
 const LIVEMODE = false;
 const STRIPE_VERSION = "2026-08-26.dahlia";
 
-function stripeKey() {
+function stripeKey(live = false) {
+  if (live) {
+    const k = Deno.env.get("STRIPE_SECRET_KEY_LIVE") || "";
+    if (!k) throw new Error("Stripe LIVE key not configured (STRIPE_SECRET_KEY_LIVE).");
+    if (!k.startsWith("sk_live")) throw new Error("STRIPE_SECRET_KEY_LIVE is not a live key (must start with sk_live).");
+    return k;
+  }
   const k = Deno.env.get("STRIPE_SECRET_KEY_TEST") || "";
   if (!k || !k.startsWith("sk_test")) throw new Error("Stripe test key not configured (STRIPE_SECRET_KEY_TEST).");
   return k;
@@ -20,8 +27,8 @@ async function stripeForm(path: string, form: Record<string, string>, idem?: str
   if (!res.ok) throw new Error(data?.error?.message || `Stripe ${res.status}`);
   return data;
 }
-async function stripeGetV1(path: string) {
-  const res = await fetch(`https://api.stripe.com/v1/${path}`, { headers: { Authorization: `Bearer ${stripeKey()}` } });
+async function stripeGetV1(path: string, live = false) {
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, { headers: { Authorization: `Bearer ${stripeKey(live)}` } });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error?.message || `Stripe ${res.status}`);
   return data;
@@ -50,18 +57,22 @@ Deno.serve(async (req) => {
     }
     if (!authed) return json({ error: "Admin access required" }, 403);
 
-    const { action = "preview", creatorId, fundCents } = await req.json().catch(() => ({}));
+    const { action = "preview", creatorId, fundCents, live } = await req.json().catch(() => ({}));
 
-    // Read-only: the platform Stripe account's names (to check the legal/business name).
+    // Read-only: platform Stripe account name + activation. {live:true} checks the LIVE account.
     if (action === "account_info") {
-      const a = await stripeGetV1("account");
+      const a = await stripeGetV1("account", live === true);
       return json({
+        mode: live === true ? "live" : "test",
         id: a?.id ?? null,
         business_name: a?.business_profile?.name ?? null,
         dashboard_display_name: a?.settings?.dashboard?.display_name ?? null,
         statement_descriptor: a?.settings?.payments?.statement_descriptor ?? null,
         country: a?.country ?? null,
-        email: a?.email ?? null,
+        charges_enabled: a?.charges_enabled ?? null,
+        payouts_enabled: a?.payouts_enabled ?? null,
+        details_submitted: a?.details_submitted ?? null,
+        transfers_capability: a?.capabilities?.transfers ?? null,
       });
     }
 
