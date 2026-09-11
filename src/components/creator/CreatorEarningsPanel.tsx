@@ -183,13 +183,10 @@ function PayoutSetupCard({
           </Button>
         ) : verifying ? null : (
           <Button
-            type="button"
-            onClick={() => go("onboard")}
-            disabled={busy !== null}
+            asChild
             className="rounded-full bg-cyan-300 font-semibold text-black hover:bg-cyan-200"
           >
-            {busy === "onboard" ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            Complete payout setup
+            <Link to="/app/creator/payouts">Complete payout setup</Link>
           </Button>
         )}
       </div>
