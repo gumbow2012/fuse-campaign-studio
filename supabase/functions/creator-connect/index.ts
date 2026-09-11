@@ -13,10 +13,16 @@ import {
   corsHeaders,
 } from "../_shared/supabase-admin.ts";
 
-const LIVEMODE = false;                       // test-mode build; flip only under explicit live authorization
+const LIVEMODE = true;                        // live mode enabled
 const STRIPE_VERSION = "2026-08-26.dahlia";   // V2 Core endpoints require an explicit version header
 
 function stripeKey() {
+  if (LIVEMODE) {
+    const k = Deno.env.get("STRIPE_SECRET_KEY_LIVE") || "";
+    if (!k) throw new Error("Stripe LIVE key not configured (STRIPE_SECRET_KEY_LIVE).");
+    if (!k.startsWith("sk_live")) throw new Error("STRIPE_SECRET_KEY_LIVE is not a live key (must start with sk_live).");
+    return k;
+  }
   const k = Deno.env.get("STRIPE_SECRET_KEY_TEST") || "";
   if (!k) throw new Error("Stripe test key not configured (STRIPE_SECRET_KEY_TEST).");
   if (!k.startsWith("sk_test")) throw new Error("STRIPE_SECRET_KEY_TEST is not a test key.");
