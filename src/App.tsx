@@ -58,6 +58,7 @@ import CinemaControlLab from "@/pages/app/cinema/CinemaControlLab";
 import MaddenMediaStudio from "@/pages/app/madden-media/MaddenMediaStudio";
 import CreatorProfile from "@/pages/app/creator/CreatorProfile";
 import CreatorDashboard from "@/pages/app/creator/CreatorDashboard";
+import CreatorPayouts from "@/pages/app/creator/CreatorPayouts";
 import EditCreatorProfile from "@/pages/app/creator/EditCreatorProfile";
 
 import OutfitSwap from "@/pages/OutfitSwap";
