@@ -68,6 +68,7 @@ type SectionId =
   | "rejected"
   | "analytics"
   | "earnings"
+  | "payouts"
   | "resources"
   | "challenges"
   | "rewards"
