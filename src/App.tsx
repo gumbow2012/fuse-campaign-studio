@@ -528,6 +528,14 @@ const App = () => (
               }
             />
             <Route
+              path="/app/creator/payouts"
+              element={
+                <CreatorRoute>
+                  <CreatorPayouts />
+                </CreatorRoute>
+              }
+            />
+            <Route
               path="/app/creator/welcome"
               element={
                 <CreatorRoute>
