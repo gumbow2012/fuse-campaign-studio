@@ -5,10 +5,10 @@ import {
   createAdminClient, requireUser, getUserRoles, json, errorMessage, corsHeaders,
 } from "../_shared/supabase-admin.ts";
 
-const LIVEMODE = false;
+const LIVEMODE = true;
 const STRIPE_VERSION = "2026-08-26.dahlia";
 
-function stripeKey(live = false) {
+function stripeKey(live = LIVEMODE) {
   if (live) {
     const k = Deno.env.get("STRIPE_SECRET_KEY_LIVE") || "";
     if (!k) throw new Error("Stripe LIVE key not configured (STRIPE_SECRET_KEY_LIVE).");
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     }
     if (!authed) return json({ error: "Admin access required" }, 403);
 
-    const { action = "preview", creatorId, fundCents, live } = await req.json().catch(() => ({}));
+    const { action = "preview", creatorId, live } = await req.json().catch(() => ({}));
 
     // Read-only: platform Stripe account name + activation. {live:true} checks the LIVE account.
     if (action === "account_info") {
@@ -74,15 +74,6 @@ Deno.serve(async (req) => {
         details_submitted: a?.details_submitted ?? null,
         transfers_capability: a?.capabilities?.transfers ?? null,
       });
-    }
-
-    if (action === "fund") {
-      if (LIVEMODE) return json({ error: "fund is test-mode only" }, 400);
-      const charge = await stripeForm("charges", {
-        amount: String(Number(fundCents) > 0 ? Number(fundCents) : 10000),
-        currency: "usd", source: "tok_bypassPending", description: "FUSE test balance top-up",
-      });
-      return json({ funded: true, charge_id: charge.id, amount_cents: charge.amount });
     }
 
     if (!creatorId) return json({ error: "creatorId required" }, 400);
