@@ -680,10 +680,10 @@ export default function CreatorDashboard() {
               Create Template
             </button>
             {SECTIONS.map((entry) =>
-              entry.id === "profile" ? (
+              entry.to || entry.id === "profile" ? (
                 <Link
                   key={entry.id}
-                  to={handle ? `/creator/${handle}` : "/creator/settings/edit"}
+                  to={entry.to ?? (handle ? `/creator/${handle}` : "/creator/settings/edit")}
                   className="rounded-xl border border-transparent px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                 >
                   {entry.label}
