@@ -143,9 +143,12 @@ export async function loadConnectStatus(): Promise<ConnectStatus> {
 }
 
 /** Returns a Stripe-hosted URL for onboarding or the payouts dashboard. */
-export async function requestConnectLink(action: "onboard" | "dashboard"): Promise<string> {
+export async function requestConnectLink(
+  action: "onboard" | "dashboard",
+  returnPath?: string,
+): Promise<string> {
   const { data, error } = await supabase.functions.invoke("creator-connect", {
-    body: { action },
+    body: returnPath ? { action, returnPath } : { action },
   });
   if (error) throw new Error(error.message);
   const payload = (data ?? {}) as Record<string, unknown>;

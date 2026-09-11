@@ -68,6 +68,7 @@ type SectionId =
   | "rejected"
   | "analytics"
   | "earnings"
+  | "payouts"
   | "resources"
   | "challenges"
   | "rewards"
@@ -86,6 +87,7 @@ const SECTIONS: Array<{ id: SectionId; label: string; to?: string }> = [
   { id: "rejected", label: "Needs Changes" },
   { id: "analytics", label: "Analytics" },
   { id: "earnings", label: "Earnings" },
+  { id: "payouts", label: "Payouts", to: "/app/creator/payouts" },
   { id: "profile", label: "Profile" },
   { id: "resources", label: "Resources" },
   { id: "challenges", label: "Challenges" },
@@ -680,10 +682,10 @@ export default function CreatorDashboard() {
               Create Template
             </button>
             {SECTIONS.map((entry) =>
-              entry.id === "profile" ? (
+              entry.to || entry.id === "profile" ? (
                 <Link
                   key={entry.id}
-                  to={handle ? `/creator/${handle}` : "/creator/settings/edit"}
+                  to={entry.to ?? (handle ? `/creator/${handle}` : "/creator/settings/edit")}
                   className="rounded-xl border border-transparent px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                 >
                   {entry.label}
