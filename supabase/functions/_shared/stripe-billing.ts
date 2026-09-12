@@ -1292,6 +1292,10 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
         stripe_price_id: stripePriceId,
         payload: event as unknown as Record<string, unknown>,
       });
+      if (!eventError) {
+        verifiedEventId = event.id;
+        eventRecorded = true;
+      }
       if (eventError) {
         if (eventError.code === "23505") {
           await logAuditEvent({
