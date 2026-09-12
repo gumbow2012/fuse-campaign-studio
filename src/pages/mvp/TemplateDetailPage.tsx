@@ -502,7 +502,11 @@ export default function TemplateDetailPage() {
 
       {/* MOBILE BAR — jumps to the real setup; the desktop column is sticky */}
       {template ? (
-        <div className="campaign-surface fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur-xl lg:hidden">
+        <div
+          className="campaign-surface fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 px-5 pt-3 backdrop-blur-xl lg:hidden"
+          style={{ paddingBottom: "max(env(safe-area-inset-bottom), 12px)" }}
+        >
+
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="truncate text-[15px] font-medium text-foreground">{template.name}</p>
