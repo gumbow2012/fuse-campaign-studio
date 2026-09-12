@@ -46,6 +46,9 @@ verify_jwt = false
 [functions.get-job-status-public]
 verify_jwt = false
 
+[functions.template-detail-page]
+verify_jwt = false
+
 [functions.check-subscription]
 verify_jwt = false
 
