@@ -1,8 +1,9 @@
 // stripe-connect-webhook — Stripe Connect webhook. Public; verifies the Stripe-Signature (HMAC).
 // - Connected-account payout.paid/failed  -> confirms the balance->BANK stage on creator_payouts.
 // - account.* / v2 account events          -> re-syncs the connect account status from Stripe (truth).
-// Setup (owner): register a Connect webhook endpoint at this function's URL in the Stripe TEST
-// dashboard and add its signing secret as the Supabase edge secret STRIPE_WEBHOOK_SECRET_TEST.
+// Setup (owner): register a Connect webhook endpoint at this function's URL in the Stripe
+// dashboard of the Connect account and add its signing secret as the Supabase edge secret
+// STRIPE_CONNECT_WEBHOOK_SECRET_LIVE (test mode falls back to STRIPE_WEBHOOK_SECRET_TEST).
 import { createAdminClient, json, corsHeaders } from "../_shared/supabase-admin.ts";
 
 const STRIPE_VERSION = "2026-08-26.dahlia";
