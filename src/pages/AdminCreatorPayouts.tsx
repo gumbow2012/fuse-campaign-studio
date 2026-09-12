@@ -225,6 +225,126 @@ const AdminCreatorPayouts = () => {
           <StatCard label="Creators earning" value={String(snapshot?.totals.creatorsWithMoney ?? 0)} />
         </div>
 
+        <div className={`${panel} border-sky-500/25`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-display text-lg font-black text-foreground">
+                <Send size={16} className="text-sky-300" /> Ready to pay
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {ready.length
+                  ? `${ready.length} creator${ready.length === 1 ? "" : "s"} past the hold period. Creators still verifying with Stripe are skipped automatically.`
+                  : "Nobody is past the hold period right now."}
+              </p>
+            </div>
+            <Button
+              onClick={() => void payAll()}
+              disabled={runningAll || !ready.length}
+              className="bg-sky-500 text-background hover:bg-sky-400"
+            >
+              {runningAll ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Send size={14} className="mr-2" />}
+              Pay everyone ready
+            </Button>
+          </div>
+
+          {ready.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-background/40 px-4 py-6 text-sm text-muted-foreground">
+              No payouts are ready to send.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {ready.map((c) => {
+                const badge = connectLabel(c);
+                const outcome = outcomes[c.creatorId];
+                return (
+                  <div
+                    key={c.creatorId}
+                    className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-background/40 px-4 py-3"
+                  >
+                    <div className="min-w-[160px] flex-1">
+                      <p className="text-sm font-semibold text-foreground">{c.name || c.email || "Unnamed creator"}</p>
+                      <p className="font-mono text-[11px] text-muted-foreground">{c.email ?? c.creatorId}</p>
+                      {outcome ? (
+                        <p className={`mt-1 flex items-center gap-1 text-xs ${outcome.ok ? "text-emerald-300" : "text-rose-300"}`}>
+                          {outcome.ok ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                          {outcome.message}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-sky-300/80">Ready</p>
+                      <p className="font-display text-lg font-black text-sky-200">{formatCents(c.availableCents)}</p>
+                    </div>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${badge.tone}`}>
+                      {badge.label}
+                    </span>
+                    <Button
+                      size="sm"
+                      onClick={() => void payOne(c)}
+                      disabled={paying === c.creatorId || runningAll}
+                      className="bg-sky-500 text-background hover:bg-sky-400"
+                    >
+                      {paying === c.creatorId ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
+                      Pay now
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className={`${panel} ${failed.length ? "border-rose-500/30" : ""}`}>
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-black text-foreground">
+            <AlertTriangle size={16} className={failed.length ? "text-rose-300" : "text-muted-foreground"} /> Failed payouts
+          </h2>
+          <p className="mb-4 text-xs text-muted-foreground">
+            {failed.length
+              ? "These did not reach the creator. The money was released back to their available balance, so you can try again."
+              : "No failed payouts."}
+          </p>
+          {failed.length ? (
+            <div className="space-y-2">
+              {failed.map((p) => {
+                const creator = snapshot?.creators.find((c) => c.creatorId === p.creator_id);
+                const outcome = outcomes[p.creator_id];
+                return (
+                  <div key={p.id} className="flex flex-wrap items-center gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/5 px-4 py-3">
+                    <div className="min-w-[180px] flex-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        {creator?.name || creator?.email || p.creator_id.slice(0, 8)}
+                      </p>
+                      <p className="text-xs text-rose-300">{p.failure_reason ?? "Payout failed."}</p>
+                      <p className="text-[11px] text-muted-foreground">{formatDateTime(p.created_at)}</p>
+                      {outcome ? (
+                        <p className={`mt-1 text-xs ${outcome.ok ? "text-emerald-300" : "text-rose-300"}`}>{outcome.message}</p>
+                      ) : null}
+                    </div>
+                    <p className="font-display text-base font-black text-foreground">{formatCents(p.amount_cents)}</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-white/15 bg-white/5"
+                      disabled={paying === p.creator_id || runningAll || !(creator?.availableCents ?? 0)}
+                      onClick={() =>
+                        void payOne({
+                          creatorId: p.creator_id,
+                          name: creator?.name ?? null,
+                          email: creator?.email ?? null,
+                          availableCents: creator?.availableCents ?? 0,
+                        })
+                      }
+                    >
+                      {paying === p.creator_id ? <Loader2 size={14} className="mr-2 animate-spin" /> : <RefreshCw size={14} className="mr-2" />}
+                      Try again
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+
         <div className={panel}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 font-display text-lg font-black text-foreground">
