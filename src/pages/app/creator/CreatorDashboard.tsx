@@ -69,6 +69,7 @@ type SectionId =
   | "analytics"
   | "earnings"
   | "payouts"
+  | "bank"
   | "resources"
   | "challenges"
   | "rewards"
@@ -88,6 +89,7 @@ const SECTIONS: Array<{ id: SectionId; label: string; to?: string }> = [
   { id: "analytics", label: "Analytics" },
   { id: "earnings", label: "Earnings" },
   { id: "payouts", label: "Payouts", to: "/app/creator/payouts" },
+  { id: "bank", label: "Bank Account", to: "/app/creator/bank" },
   { id: "profile", label: "Profile" },
   { id: "resources", label: "Resources" },
   { id: "challenges", label: "Challenges" },

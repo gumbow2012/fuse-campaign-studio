@@ -59,6 +59,7 @@ import MaddenMediaStudio from "@/pages/app/madden-media/MaddenMediaStudio";
 import CreatorProfile from "@/pages/app/creator/CreatorProfile";
 import CreatorDashboard from "@/pages/app/creator/CreatorDashboard";
 import CreatorPayouts from "@/pages/app/creator/CreatorPayouts";
+import CreatorBankAccount from "@/pages/app/creator/CreatorBankAccount";
 import EditCreatorProfile from "@/pages/app/creator/EditCreatorProfile";
 
 import OutfitSwap from "@/pages/OutfitSwap";
@@ -533,6 +534,14 @@ const App = () => (
               element={
                 <CreatorRoute>
                   <CreatorPayouts />
+                </CreatorRoute>
+              }
+            />
+            <Route
+              path="/app/creator/bank"
+              element={
+                <CreatorRoute>
+                  <CreatorBankAccount />
                 </CreatorRoute>
               }
             />
