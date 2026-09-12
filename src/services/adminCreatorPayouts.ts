@@ -243,12 +243,14 @@ export async function executePayout(creatorId: string): Promise<PayoutExecuteRes
 
 export type AutoRunResult = {
   dry_run?: boolean;
-  candidates?: number;
-  paid?: number;
-  skipped?: number;
-  failed?: number;
   min_payout_cents?: number;
-  results?: Array<{ creator_id: string; status: string; error?: string; amount_cents?: number }>;
+  considered?: number;
+  attempted?: number;
+  paid?: number;
+  paid_cents?: number;
+  /** Present on dry runs only. */
+  candidates?: Array<{ creator_id: string; amount_cents: number }>;
+  results?: Array<{ creator_id: string; ok?: boolean; amount_cents?: number; payout_id?: string; reason?: string }>;
 };
 
 /** Runs the same batch the daily job runs; dryRun only reports who is eligible. */
