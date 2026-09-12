@@ -79,6 +79,17 @@
     font-family: 'Orbitron Variable', 'Orbitron', 'IBM Plex Sans', system-ui, sans-serif;
   }
 
+  /* Campaign surface: calm system typography instead of the display face. */
+  .campaign-surface,
+  .campaign-surface h1,
+  .campaign-surface h2,
+  .campaign-surface h3,
+  .campaign-surface h4 {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'IBM Plex Sans', system-ui, sans-serif;
+    letter-spacing: -0.011em;
+  }
+
+
   ::selection {
     background: hsl(var(--electric-blue) / 0.35);
     color: hsl(var(--foreground));
