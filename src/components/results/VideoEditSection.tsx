@@ -35,7 +35,6 @@ export interface VideoEditSectionProps {
 
 export function VideoEditSection({
   slots,
-  jobId,
   editor,
   editProject,
   downloading,
@@ -132,11 +131,13 @@ export function VideoEditSection({
           </span>
         ) : null}
 
-        {jobId ? (
+        {/* Only offer the full editor when a real edit project exists, and point it at the
+            actual editor route (/editor/:projectId). The old link went to
+            /app/campaigns/:jobId/edit — a route that doesn't exist — so it dead-ended to the
+            404 catch-all, and it rendered even when there was no project to open. */}
+        {editProject ? (
           <StudioButton tone="tertiary" size="md" asChild className="ml-auto">
-            <Link to={`/app/campaigns/${encodeURIComponent(jobId)}/edit`}>
-              {editProject ? "Open advanced editor" : "Open full editor"}
-            </Link>
+            <Link to={`/editor/${encodeURIComponent(editProject.id)}`}>Open advanced editor</Link>
           </StudioButton>
         ) : null}
       </div>
