@@ -59,6 +59,15 @@ async function stripeV1Form(path: string, form: Record<string, string>) {
   return data;
 }
 
+async function stripeV1Get(path: string) {
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+    headers: { Authorization: `Bearer ${stripeKey()}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message || `Stripe ${res.status}`);
+  return data;
+}
+
 const transferCapStatus = (acct: any): string | undefined =>
   acct?.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status;
 
@@ -131,6 +140,37 @@ Deno.serve(async (req) => {
         details_submitted: patch.details_submitted,
         transfer_capability: transferCapStatus(acct) ?? "unrequested",
         requirements_status: acct?.requirements?.summary?.minimum_deadline?.status ?? null,
+      });
+    }
+
+    // Read-only: the bank account(s) on file for this creator's connected account.
+    if (action === "bank_status") {
+      if (!existing) {
+        return json({ connected: false, status: "not_started", payouts_enabled: false, bank_accounts: [] });
+      }
+      const { patch } = await sync(existing.stripe_account_id);
+      let banks: unknown[] = [];
+      try {
+        const list = await stripeV1Get(
+          `accounts/${existing.stripe_account_id}/external_accounts?object=bank_account&limit=10`,
+        );
+        banks = (list?.data ?? []).map((b: any) => ({
+          id: b?.id ?? null,
+          bank_name: b?.bank_name ?? null,
+          last4: b?.last4 ?? null,
+          currency: b?.currency ?? null,
+          country: b?.country ?? null,
+          status: b?.status ?? null,
+          default_for_currency: b?.default_for_currency === true,
+        }));
+      } catch (_e) {
+        banks = [];
+      }
+      return json({
+        connected: true,
+        status: patch.onboarding_status,
+        payouts_enabled: patch.payouts_enabled,
+        bank_accounts: banks,
       });
     }
 
