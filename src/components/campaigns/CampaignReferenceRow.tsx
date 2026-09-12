@@ -121,18 +121,19 @@ export default function CampaignReferenceRow({
           ) : null}
         </p>
         {error ? (
-          <p className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-5 text-destructive-foreground">
-            <AlertCircle className="h-3.5 w-3.5 text-red-400" aria-hidden />
-            <span className="text-red-400">{error}</span>
+          <p className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-5 text-[hsl(var(--status-negative))]">
+            <AlertCircle className="h-3.5 w-3.5" aria-hidden />
+            <span>{error}</span>
           </p>
         ) : filled ? (
-          <p className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-5 text-emerald-400">
+          <p className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-5 text-[hsl(var(--status-positive))]">
             <Check className="h-3.5 w-3.5" aria-hidden />
             Image added.
           </p>
         ) : (
           <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{field.helper}</p>
         )}
+
       </div>
 
       <input
