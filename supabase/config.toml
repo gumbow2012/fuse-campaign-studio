@@ -224,3 +224,6 @@ verify_jwt = false
 
 
 
+
+[functions.auto-creator-payouts]
+verify_jwt = false
