@@ -37,6 +37,8 @@ import AdminAudits from "@/pages/AdminAudits";
 import AdminAnalytics from "@/pages/AdminAnalytics";
 import AdminCreators from "@/pages/AdminCreators";
 import AdminCreatorProgram from "@/pages/AdminCreatorProgram";
+import AdminCreatorPayouts from "@/pages/AdminCreatorPayouts";
+
 import AdminFuseCast from "@/pages/AdminFuseCast";
 import AdminTemplateImport from "@/pages/AdminTemplateImport";
 import AdminTemplateFactory from "@/pages/AdminTemplateFactory";
@@ -411,6 +413,14 @@ const App = () => (
               }
             />
             <Route
+              path="/admin/creator-payouts"
+              element={
+                <AdminRoute>
+                  <AdminCreatorPayouts />
+                </AdminRoute>
+              }
+            />
+            <Route
               path="/admin/creator-program"
               element={
                 <AdminRoute>
@@ -418,6 +428,7 @@ const App = () => (
                 </AdminRoute>
               }
             />
+
             <Route
               path="/admin/fuse-cast"
               element={

@@ -860,11 +860,19 @@ const Admin = () => {
                   </div>
                 ) : <p className="text-sm text-muted-foreground">Loading...</p>}
               </div>
-              <Link to="/admin/analytics">
-                <Button variant="outline" className="border-border/50 text-foreground bg-secondary hover:bg-secondary/80">
-                  <BarChart3 size={14} className="mr-2" /> View Full Analytics Dashboard
-                </Button>
-              </Link>
+              <div className="flex flex-wrap gap-3">
+                <Link to="/admin/analytics">
+                  <Button variant="outline" className="border-border/50 text-foreground bg-secondary hover:bg-secondary/80">
+                    <BarChart3 size={14} className="mr-2" /> View Full Analytics Dashboard
+                  </Button>
+                </Link>
+                <Link to="/admin/creator-payouts">
+                  <Button variant="outline" className="border-border/50 text-foreground bg-secondary hover:bg-secondary/80">
+                    Creator Earnings &amp; Payouts
+                  </Button>
+                </Link>
+              </div>
+
             </div>
           </TabsContent>
 
