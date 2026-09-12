@@ -1,28 +1,26 @@
 /**
- * CAMPAIGN PRODUCT PAGE — /templates/:slug
+ * CAMPAIGN DETAIL / GENERATION PAGE — /templates/:slug
  *
- * Ecommerce-style PDP for a campaign template: one unified media gallery on the
- * left, a sticky product panel on the right (deliverables, uploads, cost) and a
- * short "how it works" strip, related campaigns and a collapsed detail accordion.
+ * Calm, product-first layout: media gallery on the left, editorial headline plus
+ * the real setup flow on the right (references → summary → generate), then an
+ * optional reference guide, how-it-works, related campaigns and details.
  *
- * The ENTIRE run flow is inline: the sticky panel hosts
- * InlineCampaignRunPanel (CTA → uploads → generate → progress → results), which
- * reuses the builder's components and run pipeline unchanged. This page never
- * routes into the builder.
-
+ * The inputs shown here come ONLY from this campaign's real configuration
+ * (catalog `input_schema`, falling back to the detail endpoint's
+ * `required_inputs`). Interface artwork is illustration only — it never counts
+ * as an uploaded reference, and missing/failed configuration never enables
+ * generation. Auth, routing, media, saving and the run pipeline are unchanged.
  */
 
 import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronDown } from "lucide-react";
-import InlineCampaignRunPanel, {
-  type RunInputField,
-} from "@/components/templates/InlineCampaignRunPanel";
+import InlineCampaignRunPanel from "@/components/templates/InlineCampaignRunPanel";
+import CampaignBodyGuide, { bodyGuideFields } from "@/components/campaigns/CampaignBodyGuide";
 
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import CampaignMediaGallery from "@/components/templates/CampaignMediaGallery";
@@ -32,46 +30,31 @@ import { useTemplateFavorites } from "@/hooks/useTemplateFavorites";
 import { fetchTemplateDetailPage, type TemplateGalleryItem } from "@/services/templateDetailPage";
 import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
 import { templateDetailPath, templateSlug } from "@/lib/templateSlug";
+import {
+  aspectRatioLine,
+  campaignCopy,
+  deliverablesLine,
+  normalizeCampaignFields,
+  type CampaignFieldsState,
+} from "@/lib/campaignFields";
 
 const STEPS = [
-  { step: "01", title: "Pick", copy: "Choose this campaign" },
-  { step: "02", title: "Upload", copy: "Add your products" },
-  { step: "03", title: "Run", copy: "FUSE builds your version" },
+  { title: "Add your references", copy: "Upload the products this campaign uses." },
+  { title: "Generate", copy: "FUSE builds your version of the campaign." },
+  { title: "Download", copy: "Take the images and clips straight to your feed." },
 ];
-
-function countLabel(count: number, singular: string) {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`;
-}
-
-/** Joins image/video counts while skipping any zero segment. */
-function deliverablesLabel(imageCount: number, videoCount: number, imageSingular: string) {
-  const parts: string[] = [];
-  if (imageCount > 0) parts.push(countLabel(imageCount, imageSingular));
-  if (videoCount > 0) parts.push(countLabel(videoCount, "video clip"));
-  return parts;
-}
-
-
-function PanelBlock({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="border-t border-white/[0.08] pt-4">
-      <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-slate-500">{label}</p>
-      <div className="mt-2 text-sm leading-6 text-slate-200">{children}</div>
-    </div>
-  );
-}
 
 export default function TemplateDetailPage() {
   const { slug = "" } = useParams();
   const { isAdmin } = useAuth();
   const { canFavorite, isFavorite, toggleFavorite } = useTemplateFavorites();
-  const [aboutOpen, setAboutOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [guideSelection, setGuideSelection] = useState<string | null>(null);
   /** Lifecycle of the in-page run — drives the mobile bar's label only. */
   const [runPhase, setRunPhase] = useState<"idle" | "inputs" | "running" | "complete" | "failed">(
     "idle",
   );
-  const runPanelRef = useRef<HTMLDivElement>(null);
-
+  const setupRef = useRef<HTMLDivElement>(null);
 
   const detailQuery = useQuery({
     queryKey: ["template-detail-page", slug],
@@ -109,8 +92,6 @@ export default function TemplateDetailPage() {
   }, [catalogQuery.data, slug, template]);
 
   const creditCost = catalogEntry ? Number(catalogEntry.estimated_credits_per_run) : null;
-  const costLabel =
-    creditCost != null ? `${creditCost} credits` : catalogQuery.isLoading ? "…" : "See builder";
   const favoriteId = String(catalogEntry?.id ?? template?.id ?? "");
 
   /** Merchandised media: hero first (video-first), then the returned order. */
@@ -138,55 +119,72 @@ export default function TemplateDetailPage() {
     ];
   }, [template]);
 
-  const uploadsLabel = template?.required_inputs.length
-    ? template.required_inputs.map((input) => input.label).join(" · ")
-    : "No product uploads required";
-
-  const deliverables = template
-    ? deliverablesLabel(template.image_count, template.video_count, "image").join(" · ")
-    : "";
-  const youllGet = template
-    ? deliverablesLabel(template.image_count, template.video_count, "campaign image").join(" + ")
-    : "";
-
+  const deliverables = template ? deliverablesLine(template.image_count, template.video_count) : "";
+  const aspectLabel = aspectRatioLine(template?.aspect_ratio);
+  const costLabel =
+    creditCost != null ? `${creditCost} credits` : catalogQuery.isLoading ? "…" : "Shown at generate";
 
   /**
-   * Run fields. The catalog `input_schema` carries the pipeline input keys, so
-   * it wins when usable; when it is missing/empty (production catalogs can omit
-   * it) the detail page's own `required_inputs` becomes the source of truth so
-   * an upload-driven campaign never falls through to a bare confirm step.
-   * Friendly labels from `required_inputs` are merged in by position.
+   * REAL configuration only. The catalog `input_schema` carries the pipeline's
+   * input keys, so it wins when usable; when it is missing/empty the detail
+   * endpoint's `required_inputs` is the source of truth. Loading and failure are
+   * distinct states — neither is ever treated as "no inputs needed".
    */
-  const inputFields = useMemo<RunInputField[]>(() => {
-    const required = template?.required_inputs ?? [];
+  const configState = useMemo<CampaignFieldsState>(() => {
+    if (detailQuery.isLoading || catalogQuery.isLoading) return { status: "loading" };
+    if (detailQuery.isError || catalogQuery.isError || !template) {
+      return {
+        status: "error",
+        message: "We couldn't reach this campaign's setup. Check your connection and try again.",
+      };
+    }
+
+    const required = template.required_inputs ?? [];
     const schema = Array.isArray(catalogEntry?.input_schema)
       ? catalogEntry!.input_schema!.filter((entry) => entry && !!String(entry.key ?? "").trim())
       : [];
 
     if (schema.length) {
-      return schema.map((entry, index) => {
-        const fallback = required[index];
-        return {
-          key: String(entry.key),
-          label: String(entry.label || fallback?.label || entry.key),
-          type: String(entry.type || fallback?.expected || "image"),
-          required: entry.required !== false,
-        };
-      });
+      return {
+        status: "ready",
+        fields: normalizeCampaignFields(
+          schema.map((entry, index) => ({
+            key: String(entry.key),
+            label: String(entry.label || required[index]?.label || ""),
+            type: String(entry.type || required[index]?.expected || "image"),
+            required: entry.required !== false,
+          })),
+        ),
+      };
     }
 
-    return required.map((input) => ({
-      key: input.name,
-      label: input.label || input.name,
-      type: String(input.expected || "image"),
-      required: true,
-    }));
-  }, [catalogEntry, template]);
+    return {
+      status: "ready",
+      fields: normalizeCampaignFields(
+        required.map((input) => ({
+          key: input.name,
+          label: input.label || "",
+          type: String(input.expected || "image"),
+          required: true,
+        })),
+      ),
+    };
+  }, [
+    catalogEntry,
+    catalogQuery.isError,
+    catalogQuery.isLoading,
+    detailQuery.isError,
+    detailQuery.isLoading,
+    template,
+  ]);
 
+  const fields = configState.status === "ready" ? configState.fields : [];
+  const copy = campaignCopy(fields, template?.description);
+  const guideFields = bodyGuideFields(fields);
+  /* The guide only earns its space when several body references are configured. */
+  const showGuide = configState.status === "ready" && guideFields.length >= 2;
 
-  const runVersionId = catalogEntry
-    ? String(catalogEntry.versionId ?? catalogEntry.id)
-    : null;
+  const runVersionId = catalogEntry ? String(catalogEntry.versionId ?? catalogEntry.id) : null;
   const runTemplateId = String(catalogEntry?.templateId ?? template?.id ?? "");
 
   /** Other campaigns with a real preview, deduped by name. */
@@ -205,20 +203,10 @@ export default function TemplateDetailPage() {
     return out;
   }, [catalogQuery.data, catalogEntry]);
 
-  /* The whole run flow lives in this panel — the page never routes away. */
-  const runPanel = runTemplateId ? (
-    <InlineCampaignRunPanel
-      templateId={runTemplateId}
-      versionId={runVersionId}
-      templateName={template?.name ?? "Campaign"}
-      slug={slug}
-      creditCost={creditCost}
-      freePreviewEnabled={catalogEntry?.free_preview_enabled === true}
-      inputFields={inputFields}
-      onPhaseChange={setRunPhase}
-    />
-  ) : null;
-
+  const retryConfig = () => {
+    void detailQuery.refetch();
+    void catalogQuery.refetch();
+  };
 
   return (
     <SiteShell>
@@ -226,146 +214,164 @@ export default function TemplateDetailPage() {
         title={template ? `${template.name} — FUSE Campaign` : "Campaign — FUSE"}
         description={
           template?.description?.slice(0, 155) ??
-          "See what this FUSE campaign creates, what you upload, and what it costs to run."
+          "See what this FUSE campaign creates, what you add, and what it costs to generate."
         }
         path={`/templates/${slug}`}
         image={catalogEntry?.preview_url ?? null}
       />
 
-      <div className="relative mx-auto w-full max-w-[1400px] px-4 py-6 pb-28 sm:px-6 lg:py-10 lg:pb-16">
-        <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(60%_100%_at_20%_0%,hsl(var(--electric-blue)/0.14),transparent_70%)]" />
-
-        <Link
-          to="/app/templates"
-          className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-slate-400 transition hover:text-cyan-100"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-          Back
-        </Link>
+      <div className="campaign-surface mx-auto w-full max-w-[1180px] px-5 py-6 pb-28 sm:px-8 lg:py-12 lg:pb-16">
+        {/* LOCAL HEADER */}
+        <header className="flex items-center justify-between gap-4">
+          <Link
+            to="/app/templates"
+            className="inline-flex min-h-[44px] items-center gap-2 text-[15px] text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            Campaigns
+          </Link>
+          {canFavorite && favoriteId ? (
+            <FavoriteTemplateButton
+              favorite={isFavorite(favoriteId)}
+              onToggle={() => toggleFavorite(favoriteId)}
+              label={isFavorite(favoriteId) ? "Saved" : "Save"}
+              className="px-4 py-2"
+            />
+          ) : null}
+        </header>
 
         {detailQuery.isLoading ? (
-          <div className="mt-5 grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-            <div className="mx-auto aspect-[9/16] w-full max-w-sm animate-pulse rounded-[18px] bg-white/[0.06] lg:mx-0" />
-            <div className="space-y-3">
-              <div className="h-9 w-2/3 animate-pulse rounded bg-white/[0.06]" />
-              <div className="h-16 w-full animate-pulse rounded bg-white/[0.05]" />
-              <div className="h-40 w-full animate-pulse rounded-2xl bg-white/[0.04]" />
+          <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="mx-auto aspect-[9/16] w-full max-w-[340px] animate-pulse rounded-[24px] bg-muted/50 motion-reduce:animate-none lg:mx-0" />
+            <div className="space-y-4">
+              <div className="h-10 w-2/3 animate-pulse rounded-full bg-muted/50 motion-reduce:animate-none" />
+              <div className="h-5 w-full animate-pulse rounded-full bg-muted/40 motion-reduce:animate-none" />
+              <div className="h-44 w-full animate-pulse rounded-[22px] bg-muted/30 motion-reduce:animate-none" />
             </div>
           </div>
         ) : !template ? (
-          <div className="mt-10 rounded-2xl border border-white/10 bg-black/30 p-8 text-center">
-            <h1 className="font-display text-2xl font-semibold uppercase tracking-[-0.01em] text-white">
-              Campaign not found
-            </h1>
-            <p className="mt-2 text-sm text-slate-400">
-              This campaign isn't available. Browse the full marketplace instead.
+          <div className="mt-12 rounded-[22px] border border-border/70 bg-muted/20 p-10 text-center">
+            <h1 className="text-[24px] font-semibold text-foreground">Campaign not found</h1>
+            <p className="mx-auto mt-2 max-w-sm text-[15px] leading-6 text-muted-foreground">
+              This campaign isn't available right now. Browse the full collection instead.
             </p>
-            <Button
-              asChild
-              className="mt-5 rounded-full bg-[hsl(var(--electric-cyan))] text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-[hsl(var(--electric-blue))]"
+            <Link
+              to="/app/templates"
+              className="mt-6 inline-flex min-h-[48px] items-center rounded-full bg-primary px-6 text-[15px] font-semibold text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Link to="/app/templates">Explore campaigns</Link>
-            </Button>
+              Explore campaigns
+            </Link>
           </div>
         ) : (
           <>
-            {/* PRODUCT AREA */}
-            <div className="mt-5 grid items-start gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:gap-12">
-              <CampaignMediaGallery
-                items={galleryItems}
-                name={template.name}
-                className="mx-auto w-full max-w-[320px] lg:mx-0 lg:max-w-[360px]"
-              />
-
-              <div className="lg:sticky lg:top-24">
-                <div className="rounded-[20px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.012))] p-6 backdrop-blur-sm">
-                  <p className="font-mono text-[9px] uppercase tracking-[0.26em] text-[hsl(var(--electric-cyan))]">
-                    Campaign template
-                  </p>
-                  <h1 className="mt-2 font-display text-3xl font-bold uppercase leading-[1.05] tracking-[-0.02em] text-white sm:text-4xl">
-                    {template.name}
-                  </h1>
-                  {template.description ? (
-                    <p className="mt-3 text-sm leading-6 text-slate-400">{template.description}</p>
-                  ) : null}
-
-                  {deliverables ? (
-                    <p className="mt-4 text-sm font-semibold text-white">{deliverables}</p>
-                  ) : null}
-                  <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-slate-400">
-                    {[template.aspect_ratio, costLabel].filter(Boolean).join(" · ")}
-                  </p>
-
-                  <div className="mt-5 space-y-4">
-                    <PanelBlock label="You'll add">{uploadsLabel}</PanelBlock>
-                    {youllGet ? <PanelBlock label="You'll get">{youllGet}</PanelBlock> : null}
+            {/* PRODUCT + SETUP */}
+            <div className="mt-8 grid items-start gap-10 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)] lg:gap-16">
+              <div className="space-y-6 lg:sticky lg:top-24">
+                <CampaignMediaGallery
+                  items={galleryItems}
+                  name={template.name}
+                  className="mx-auto w-full max-w-[340px] lg:mx-0 lg:max-w-none"
+                />
+                {showGuide ? (
+                  <div className="hidden lg:block">
+                    <h2 className="text-[17px] font-semibold text-foreground">Where each piece lands</h2>
+                    <p className="mt-1 text-[14px] leading-6 text-muted-foreground">
+                      A guide to the references this campaign uses.
+                    </p>
+                    <div className="mt-3">
+                      <CampaignBodyGuide
+                        fields={guideFields}
+                        selectedId={guideSelection}
+                        onSelect={setGuideSelection}
+                      />
+                    </div>
                   </div>
+                ) : null}
+              </div>
 
+              <div ref={setupRef} className="scroll-mt-24">
+                <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  {template.name}
+                </p>
+                <h1 className="mt-2 text-[34px] font-semibold leading-[1.08] text-foreground sm:text-[44px]">
+                  {copy.headline}
+                </h1>
+                <p className="mt-3 max-w-md text-[17px] leading-7 text-muted-foreground">
+                  {copy.description}
+                </p>
+                {deliverables || aspectLabel ? (
+                  <p className="mt-3 text-[15px] text-muted-foreground">
+                    {[deliverables, aspectLabel].filter(Boolean).join(" · ")}
+                  </p>
+                ) : null}
 
-                  <div ref={runPanelRef} className="mt-6 space-y-3 scroll-mt-24">
-                    {runPanel}
+                {runTemplateId || configState.status !== "ready" ? (
+                  <InlineCampaignRunPanel
+                    className="mt-8"
+                    templateId={runTemplateId}
+                    versionId={runVersionId}
+                    templateName={template.name}
+                    slug={slug}
+                    creditCost={creditCost}
+                    freePreviewEnabled={catalogEntry?.free_preview_enabled === true}
+                    configState={configState}
+                    deliverables={deliverables}
+                    aspectLabel={aspectLabel}
+                    onRetryConfig={retryConfig}
+                    onPhaseChange={setRunPhase}
+                  />
+                ) : null}
 
-                    {canFavorite && favoriteId ? (
-                      <div className="flex justify-center">
-                        <FavoriteTemplateButton
-                          favorite={isFavorite(favoriteId)}
-                          onToggle={() => toggleFavorite(favoriteId)}
-                          label={isFavorite(favoriteId) ? "Saved" : "Save"}
-                          className="px-4 py-2"
-                        />
-                      </div>
-                    ) : null}
+                {showGuide ? (
+                  <div className="mt-10 lg:hidden">
+                    <h2 className="text-[17px] font-semibold text-foreground">Where each piece lands</h2>
+                    <div className="mt-3">
+                      <CampaignBodyGuide
+                        fields={guideFields}
+                        selectedId={guideSelection}
+                        onSelect={setGuideSelection}
+                      />
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </div>
             </div>
 
             {/* HOW IT WORKS */}
-            <section className="mt-14">
-              <h2 className="font-display text-lg font-semibold uppercase tracking-[-0.01em] text-white">
-                How it works
-              </h2>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                {STEPS.map((entry) => (
-                  <div
-                    key={entry.step}
-                    className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5"
-                  >
-                    <p className="font-mono text-[10px] tracking-[0.24em] text-[hsl(var(--electric-cyan))]">
-                      {entry.step}
-                    </p>
-                    <p className="mt-2 font-display text-base font-semibold uppercase tracking-[-0.01em] text-white">
-                      {entry.title}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-400">{entry.copy}</p>
-                  </div>
+            <section className="mt-16 border-t border-border/60 pt-10">
+              <h2 className="text-[22px] font-semibold text-foreground">How it works</h2>
+              <ol className="mt-5 grid gap-5 sm:grid-cols-3">
+                {STEPS.map((entry, index) => (
+                  <li key={entry.title}>
+                    <p className="text-[13px] font-medium text-primary">Step {index + 1}</p>
+                    <p className="mt-1 text-[17px] font-semibold text-foreground">{entry.title}</p>
+                    <p className="mt-1 text-[15px] leading-6 text-muted-foreground">{entry.copy}</p>
+                  </li>
                 ))}
-              </div>
+              </ol>
             </section>
 
-            {/* MORE CAMPAIGNS LIKE THIS */}
+            {/* MORE CAMPAIGNS */}
             {related.length ? (
-              <section className="mt-12">
-                <h2 className="font-display text-lg font-semibold uppercase tracking-[-0.01em] text-white">
-                  More campaigns like this
-                </h2>
-                <div className="mt-4 grid gap-3 grid-cols-2 sm:grid-cols-4">
+              <section className="mt-14 border-t border-border/60 pt-10">
+                <h2 className="text-[22px] font-semibold text-foreground">More campaigns</h2>
+                <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
                   {related.map((entry) => (
                     <Link
                       key={String(entry.id)}
                       to={templateDetailPath(entry)}
-                      className="group overflow-hidden rounded-[14px] border border-white/10 bg-black transition hover:border-[hsl(var(--electric-blue)/0.5)]"
+                      className="group overflow-hidden rounded-[18px] border border-border/70 bg-muted/20 transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <div className="aspect-[9/16] w-full overflow-hidden bg-[linear-gradient(180deg,hsl(var(--navy-mid)/0.85),hsl(var(--navy-deep)))]">
+                      <div className="aspect-[9/16] w-full overflow-hidden bg-muted/40">
                         <img
                           src={entry.preview_url ?? undefined}
-                          alt=""
+                          alt={`${entry.name} preview`}
                           loading="lazy"
                           decoding="async"
-                          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.02] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                         />
                       </div>
-                      <p className="truncate px-3 py-2.5 font-display text-[12px] font-semibold uppercase tracking-[0.02em] text-white">
+                      <p className="truncate px-3 py-3 text-[14px] font-medium text-foreground">
                         {entry.name}
                       </p>
                     </Link>
@@ -374,40 +380,56 @@ export default function TemplateDetailPage() {
               </section>
             ) : null}
 
-            {/* ABOUT THIS CAMPAIGN — collapsed */}
-            <section className="mt-12">
+            {/* DETAILS */}
+            <section className="mt-14 border-t border-border/60 pt-6">
               <button
                 type="button"
-                onClick={() => setAboutOpen((open) => !open)}
-                aria-expanded={aboutOpen}
-                className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-5 py-4 text-left transition hover:border-white/20"
+                onClick={() => setDetailsOpen((open) => !open)}
+                aria-expanded={detailsOpen}
+                aria-controls="campaign-details"
+                className="flex min-h-[52px] w-full items-center justify-between gap-4 text-left text-[17px] font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-slate-300">
-                  About this campaign
-                </span>
+                Campaign details
                 <ChevronDown
-                  className={cn("h-4 w-4 text-slate-400 transition", aboutOpen && "rotate-180")}
+                  className={cn(
+                    "h-5 w-5 text-muted-foreground transition motion-reduce:transition-none",
+                    detailsOpen && "rotate-180",
+                  )}
                   aria-hidden
                 />
               </button>
-              {aboutOpen ? (
-                <div className="mt-3 space-y-3 rounded-2xl border border-white/[0.08] bg-black/25 p-5 text-sm leading-6 text-slate-300">
-                  {template.description ? <p>{template.description}</p> : null}
-                  <p>
-                    <span className="text-slate-500">You upload:</span> {uploadsLabel}
-                  </p>
-                  <p>
-                    <span className="text-slate-500">You get:</span> {deliverables}
-                  </p>
-                  {template.aspect_ratio ? (
-                    <p>
-                      <span className="text-slate-500">Format:</span> {template.aspect_ratio}
-                    </p>
+              {detailsOpen ? (
+                <dl id="campaign-details" className="space-y-3 pb-2 text-[15px] leading-6">
+                  {template.description ? (
+                    <p className="text-muted-foreground">{template.description}</p>
                   ) : null}
-                  <p>
-                    <span className="text-slate-500">Cost to run:</span> {costLabel}
-                  </p>
-                </div>
+                  <div className="flex justify-between gap-6">
+                    <dt className="text-muted-foreground">You add</dt>
+                    <dd className="text-right text-foreground">
+                      {configState.status !== "ready"
+                        ? "Loading…"
+                        : fields.length
+                          ? fields.map((field) => field.label).join(" · ")
+                          : "Nothing — this campaign runs on its own"}
+                    </dd>
+                  </div>
+                  {deliverables ? (
+                    <div className="flex justify-between gap-6">
+                      <dt className="text-muted-foreground">You get</dt>
+                      <dd className="text-right text-foreground">{deliverables}</dd>
+                    </div>
+                  ) : null}
+                  {aspectLabel ? (
+                    <div className="flex justify-between gap-6">
+                      <dt className="text-muted-foreground">Format</dt>
+                      <dd className="text-right text-foreground">{aspectLabel}</dd>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between gap-6">
+                    <dt className="text-muted-foreground">Cost to generate</dt>
+                    <dd className="text-right text-foreground">{costLabel}</dd>
+                  </div>
+                </dl>
               ) : null}
             </section>
 
@@ -420,32 +442,29 @@ export default function TemplateDetailPage() {
         )}
       </div>
 
-      {/* MOBILE STICKY CTA — the desktop panel is already sticky */}
+      {/* MOBILE BAR — jumps to the real setup; the desktop column is sticky */}
       {template ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[hsl(var(--navy-deep)/0.94)] px-4 py-3 backdrop-blur-xl lg:hidden">
-          <div className="flex items-center justify-between gap-3">
+        <div className="campaign-surface fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur-xl lg:hidden">
+          <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <p className="truncate font-display text-[13px] font-semibold uppercase tracking-[0.04em] text-white">
-                {template.name}
-              </p>
-              <p className="truncate font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500">
-                {[deliverables, costLabel].filter(Boolean).join(" · ")}
+              <p className="truncate text-[15px] font-medium text-foreground">{template.name}</p>
+              <p className="truncate text-[13px] text-muted-foreground">
+                {[deliverables, creditCost != null ? `${creditCost} credits` : null]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
             </div>
-            <Button
+            <button
               type="button"
-              onClick={() =>
-                runPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-              }
-              className="shrink-0 rounded-full bg-[hsl(var(--electric-cyan))] px-5 py-5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-950 hover:bg-[hsl(var(--electric-blue))]"
+              onClick={() => setupRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="shrink-0 rounded-full bg-primary px-5 py-3 text-[15px] font-semibold text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {runPhase === "complete"
                 ? "See results"
                 : runPhase === "running"
                   ? "Generating…"
-                  : "Run campaign"}
-            </Button>
-
+                  : "Get started"}
+            </button>
           </div>
         </div>
       ) : null}
