@@ -1204,6 +1204,8 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
 
     const requestId = crypto.randomUUID();
     const admin = createAdminClient();
+    let verifiedEventId: string | null = null;
+    let eventRecorded = false;
 
     try {
       const signature = req.headers.get("stripe-signature");
