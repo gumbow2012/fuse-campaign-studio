@@ -8,6 +8,11 @@
  * Media that fails to load is dropped from the gallery entirely and the viewer
  * falls through to the next usable item, so a broken asset never renders as a
  * blank black card.
+ *
+ * Loading treatment: media never pops in from black. A blurred ambient still of
+ * the clip fills the frame (so letterbox bars are colour, not black), a sharp
+ * poster sits on top, and the video/image cross-fades in with a soft settle the
+ * moment it can play. A shimmer covers the only moment nothing at all is ready.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +26,9 @@ function Skeleton({ className }: { className?: string }) {
   return <div className={cn("animate-pulse rounded-[18px] bg-white/[0.06]", className)} />;
 }
 
+/** Soft navy frame — the base behind media, never pure black. */
+const FRAME_BG = "bg-[linear-gradient(180deg,hsl(var(--navy-mid)/0.85),hsl(var(--navy-deep)))]";
+
 export default function CampaignMediaGallery({
   items,
   name,
@@ -33,6 +41,8 @@ export default function CampaignMediaGallery({
   className?: string;
 }) {
   const [broken, setBroken] = useState<Record<string, true>>({});
+  /** Per item: the visible media has decoded a frame, so it can fade in over its poster. */
+  const [mediaReady, setMediaReady] = useState<Record<string, true>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -49,7 +59,6 @@ export default function CampaignMediaGallery({
   );
   const posters = useClipPosters(posterSources);
 
-
   const activeIndex = Math.max(
     0,
     usable.findIndex((item) => item.id === activeId),
@@ -63,6 +72,10 @@ export default function CampaignMediaGallery({
 
   const markBroken = useCallback((id: string) => {
     setBroken((current) => (current[id] ? current : { ...current, [id]: true }));
+  }, []);
+
+  const markReady = useCallback((id: string) => {
+    setMediaReady((current) => (current[id] ? current : { ...current, [id]: true }));
   }, []);
 
   const step = (delta: number) => {
@@ -87,7 +100,12 @@ export default function CampaignMediaGallery({
   if (!active) {
     return (
       <div className={className}>
-        <div className="flex aspect-[9/16] w-full items-center justify-center rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,hsl(var(--navy-mid)/0.85),hsl(var(--navy-deep)))]">
+        <div
+          className={cn(
+            "flex aspect-[9/16] w-full items-center justify-center rounded-[18px] border border-white/10",
+            FRAME_BG,
+          )}
+        >
           <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-slate-500">
             Preview coming soon
           </p>
@@ -96,10 +114,17 @@ export default function CampaignMediaGallery({
     );
   }
 
+  const activePoster =
+    active.media_type === "video" ? (active.poster_url ?? posters[active.id] ?? null) : null;
+  const activeReady = !!mediaReady[active.id];
+
   return (
     <div className={cn("space-y-3", className)}>
       <div
-        className="relative aspect-[9/16] w-full overflow-hidden rounded-[18px] border border-[hsl(var(--electric-blue)/0.28)] bg-black shadow-[0_50px_120px_-70px_hsl(var(--electric-blue)/0.7)]"
+        className={cn(
+          "relative aspect-[9/16] w-full overflow-hidden rounded-[18px] border border-[hsl(var(--electric-blue)/0.28)] shadow-[0_50px_120px_-70px_hsl(var(--electric-blue)/0.7)]",
+          FRAME_BG,
+        )}
         onTouchStart={(event) => {
           const touch = event.touches[0];
           touchStart.current = { x: touch.clientX, y: touch.clientY };
@@ -116,22 +141,60 @@ export default function CampaignMediaGallery({
         }}
       >
         {active.media_type === "video" ? (
-          <video
-            key={active.id}
-            src={active.url}
-            poster={active.poster_url ?? posters[active.id] ?? undefined}
-            autoPlay
-            muted
-            loop
-            controls
-            playsInline
-            crossOrigin="anonymous"
-            preload="metadata"
-            aria-label={`${name} campaign preview`}
-            onError={() => markBroken(active.id)}
-            className="h-full w-full bg-black object-contain"
-          />
+          <>
+            {/* 1. Ambient underlay — the clip's own still, blown up and blurred, so the
+                letterbox area reads as colour-matched glow instead of black. */}
+            {activePoster ? (
+              <img
+                src={activePoster}
+                alt=""
+                aria-hidden
+                decoding="async"
+                className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-70 blur-2xl"
+              />
+            ) : null}
 
+            {/* 2. Shimmer only for the moment nothing is ready — not even a poster. */}
+            {!activePoster && !activeReady ? (
+              <div className="absolute inset-0 animate-pulse bg-white/[0.06]" aria-hidden />
+            ) : null}
+
+            {/* 3. Sharp poster, visible until the video can play, then dissolves under it. */}
+            {activePoster ? (
+              <img
+                src={activePoster}
+                alt=""
+                aria-hidden
+                decoding="async"
+                className={cn(
+                  "pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-500 ease-out",
+                  activeReady ? "opacity-0" : "opacity-100",
+                )}
+              />
+            ) : null}
+
+            {/* 4. The video breathes in over the poster the moment it can play. */}
+            <video
+              key={active.id}
+              src={active.url}
+              poster={activePoster ?? undefined}
+              autoPlay
+              muted
+              loop
+              controls
+              playsInline
+              crossOrigin="anonymous"
+              preload="auto"
+              aria-label={`${name} campaign preview`}
+              onLoadedData={() => markReady(active.id)}
+              onCanPlay={() => markReady(active.id)}
+              onError={() => markBroken(active.id)}
+              className={cn(
+                "relative h-full w-full object-contain transition-[opacity,transform] duration-500 ease-out",
+                activeReady ? "scale-100 opacity-100" : "scale-[1.02] opacity-0",
+              )}
+            />
+          </>
         ) : (
           <button
             type="button"
@@ -139,12 +202,20 @@ export default function CampaignMediaGallery({
             aria-label={`View ${name} preview larger`}
             className="group relative h-full w-full"
           >
+            {!activeReady ? (
+              <div className="absolute inset-0 animate-pulse bg-white/[0.06]" aria-hidden />
+            ) : null}
             <img
               key={active.id}
               src={active.url}
               alt={`${name} campaign preview`}
+              decoding="async"
+              onLoad={() => markReady(active.id)}
               onError={() => markBroken(active.id)}
-              className="h-full w-full object-cover"
+              className={cn(
+                "h-full w-full object-cover transition-opacity duration-500 ease-out",
+                activeReady ? "opacity-100" : "opacity-0",
+              )}
             />
             <span className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 p-2 text-white/85 backdrop-blur transition group-hover:border-cyan-300/60 group-hover:text-white">
               <Expand className="h-4 w-4" />
@@ -199,7 +270,6 @@ export default function CampaignMediaGallery({
                   className="h-full w-full object-cover"
                 />
               )}
-
             </button>
           ))}
         </div>
