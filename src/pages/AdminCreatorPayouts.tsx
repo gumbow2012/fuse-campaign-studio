@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, ChevronDown, ChevronRight, Loader2, RefreshCw, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, ChevronRight, Loader2, RefreshCw, Send, Wallet, XCircle } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import {
+  executePayout,
   formatCents,
   formatDateTime,
   loadAdminPayoutsSnapshot,
+  runAllReadyPayouts,
   type AdminPayoutRow,
   type AdminPayoutsSnapshot,
   type CreatorMoneyRow,
@@ -123,6 +126,66 @@ const AdminCreatorPayouts = () => {
     );
   }, [snapshot, query]);
 
+  const ready = useMemo(
+    () => (snapshot?.creators ?? []).filter((c) => c.availableCents > 0),
+    [snapshot],
+  );
+  const failed = useMemo(
+    () => (snapshot?.payouts ?? []).filter((p) => p.status === "failed" || !!p.failure_reason),
+    [snapshot],
+  );
+
+  const [paying, setPaying] = useState<string | null>(null);
+  const [runningAll, setRunningAll] = useState(false);
+  const [outcomes, setOutcomes] = useState<Record<string, { ok: boolean; message: string }>>({});
+
+  const payOne = useCallback(
+    async (row: Pick<CreatorMoneyRow, "creatorId" | "name" | "email" | "availableCents">) => {
+      const who = row.name || row.email || row.creatorId.slice(0, 8);
+      const amount = row.availableCents > 0 ? formatCents(row.availableCents) : "the available balance";
+      if (!window.confirm(`Send ${amount} to ${who} now? This moves real money.`)) return;
+      setPaying(row.creatorId);
+      try {
+        const result = await executePayout(row.creatorId);
+        const msg = `Sent ${formatCents(result.amount_cents)} (${result.earning_count ?? 0} earnings)`;
+        setOutcomes((prev) => ({ ...prev, [row.creatorId]: { ok: true, message: msg } }));
+        toast.success(`Paid ${who}`, { description: msg });
+        await load();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Payout failed.";
+        setOutcomes((prev) => ({ ...prev, [row.creatorId]: { ok: false, message: msg } }));
+        toast.error(`Could not pay ${who}`, { description: msg });
+      } finally {
+        setPaying(null);
+      }
+    },
+    [load],
+  );
+
+  const payAll = useCallback(async () => {
+    const total = formatCents(snapshot?.totals.availableCents);
+    if (!window.confirm(`Pay every creator who is ready (up to ${total})? This moves real money.`)) return;
+    setRunningAll(true);
+    try {
+      const result = await runAllReadyPayouts(false);
+      const next: Record<string, { ok: boolean; message: string }> = {};
+      for (const r of result.results ?? []) {
+        next[r.creator_id] = r.ok
+          ? { ok: true, message: `Sent ${formatCents(r.amount_cents)}` }
+          : { ok: false, message: r.reason ?? "Payout failed." };
+      }
+      setOutcomes((prev) => ({ ...prev, ...next }));
+      toast.success(`${result.paid ?? 0} of ${result.attempted ?? 0} paid`, {
+        description: `${formatCents(result.paid_cents)} sent. Minimum per creator ${formatCents(result.min_payout_cents)}.`,
+      });
+      await load();
+    } catch (e) {
+      toast.error("Payout run failed", { description: e instanceof Error ? e.message : "Try again." });
+    } finally {
+      setRunningAll(false);
+    }
+  }, [load, snapshot]);
+
   return (
     <SiteShell>
       <PageMeta
@@ -160,6 +223,126 @@ const AdminCreatorPayouts = () => {
           <StatCard label="Ready to pay" value={formatCents(snapshot?.totals.availableCents)} hint={`${snapshot?.totals.payoutsReady ?? 0} creators`} />
           <StatCard label="Paid out" value={formatCents(snapshot?.totals.paidCents)} hint="Transfers completed" />
           <StatCard label="Creators earning" value={String(snapshot?.totals.creatorsWithMoney ?? 0)} />
+        </div>
+
+        <div className={`${panel} border-sky-500/25`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-display text-lg font-black text-foreground">
+                <Send size={16} className="text-sky-300" /> Ready to pay
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {ready.length
+                  ? `${ready.length} creator${ready.length === 1 ? "" : "s"} past the hold period. Creators still verifying with Stripe are skipped automatically.`
+                  : "Nobody is past the hold period right now."}
+              </p>
+            </div>
+            <Button
+              onClick={() => void payAll()}
+              disabled={runningAll || !ready.length}
+              className="bg-sky-500 text-background hover:bg-sky-400"
+            >
+              {runningAll ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Send size={14} className="mr-2" />}
+              Pay everyone ready
+            </Button>
+          </div>
+
+          {ready.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-background/40 px-4 py-6 text-sm text-muted-foreground">
+              No payouts are ready to send.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {ready.map((c) => {
+                const badge = connectLabel(c);
+                const outcome = outcomes[c.creatorId];
+                return (
+                  <div
+                    key={c.creatorId}
+                    className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-background/40 px-4 py-3"
+                  >
+                    <div className="min-w-[160px] flex-1">
+                      <p className="text-sm font-semibold text-foreground">{c.name || c.email || "Unnamed creator"}</p>
+                      <p className="font-mono text-[11px] text-muted-foreground">{c.email ?? c.creatorId}</p>
+                      {outcome ? (
+                        <p className={`mt-1 flex items-center gap-1 text-xs ${outcome.ok ? "text-emerald-300" : "text-rose-300"}`}>
+                          {outcome.ok ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                          {outcome.message}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-sky-300/80">Ready</p>
+                      <p className="font-display text-lg font-black text-sky-200">{formatCents(c.availableCents)}</p>
+                    </div>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${badge.tone}`}>
+                      {badge.label}
+                    </span>
+                    <Button
+                      size="sm"
+                      onClick={() => void payOne(c)}
+                      disabled={paying === c.creatorId || runningAll}
+                      className="bg-sky-500 text-background hover:bg-sky-400"
+                    >
+                      {paying === c.creatorId ? <Loader2 size={14} className="mr-2 animate-spin" /> : null}
+                      Pay now
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className={`${panel} ${failed.length ? "border-rose-500/30" : ""}`}>
+          <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-black text-foreground">
+            <AlertTriangle size={16} className={failed.length ? "text-rose-300" : "text-muted-foreground"} /> Failed payouts
+          </h2>
+          <p className="mb-4 text-xs text-muted-foreground">
+            {failed.length
+              ? "These did not reach the creator. The money was released back to their available balance, so you can try again."
+              : "No failed payouts."}
+          </p>
+          {failed.length ? (
+            <div className="space-y-2">
+              {failed.map((p) => {
+                const creator = snapshot?.creators.find((c) => c.creatorId === p.creator_id);
+                const outcome = outcomes[p.creator_id];
+                return (
+                  <div key={p.id} className="flex flex-wrap items-center gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/5 px-4 py-3">
+                    <div className="min-w-[180px] flex-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        {creator?.name || creator?.email || p.creator_id.slice(0, 8)}
+                      </p>
+                      <p className="text-xs text-rose-300">{p.failure_reason ?? "Payout failed."}</p>
+                      <p className="text-[11px] text-muted-foreground">{formatDateTime(p.created_at)}</p>
+                      {outcome ? (
+                        <p className={`mt-1 text-xs ${outcome.ok ? "text-emerald-300" : "text-rose-300"}`}>{outcome.message}</p>
+                      ) : null}
+                    </div>
+                    <p className="font-display text-base font-black text-foreground">{formatCents(p.amount_cents)}</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-white/15 bg-white/5"
+                      disabled={paying === p.creator_id || runningAll || !(creator?.availableCents ?? 0)}
+                      onClick={() =>
+                        void payOne({
+                          creatorId: p.creator_id,
+                          name: creator?.name ?? null,
+                          email: creator?.email ?? null,
+                          availableCents: creator?.availableCents ?? 0,
+                        })
+                      }
+                    >
+                      {paying === p.creator_id ? <Loader2 size={14} className="mr-2 animate-spin" /> : <RefreshCw size={14} className="mr-2" />}
+                      Try again
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
 
         <div className={panel}>

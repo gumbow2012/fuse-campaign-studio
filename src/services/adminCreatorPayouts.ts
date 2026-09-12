@@ -197,3 +197,68 @@ export async function loadAdminPayoutsSnapshot(): Promise<AdminPayoutsSnapshot> 
 
   return { creators, payouts, totals };
 }
+
+export type PayoutPreview = {
+  creator_id: string;
+  eligible_count: number;
+  amount_cents: number;
+  min_payout_cents: number;
+  meets_minimum: boolean;
+};
+
+export type PayoutExecuteResult = {
+  payout_id?: string;
+  status?: string;
+  stripe_transfer_id?: string;
+  amount_cents?: number;
+  earning_count?: number;
+};
+
+function invokeError(error: unknown, data: unknown): string | null {
+  const message = (data as { error?: string } | null)?.error;
+  if (message) return message;
+  if (error) return error instanceof Error ? error.message : String(error);
+  return null;
+}
+
+/** Read-only check of what a manual payout would send. */
+export async function previewPayout(creatorId: string): Promise<PayoutPreview> {
+  const { data, error } = await supabase.functions.invoke("process-creator-payout", {
+    body: { action: "preview", creatorId },
+  });
+  const failure = invokeError(error, data);
+  if (failure) throw new Error(failure);
+  return data as PayoutPreview;
+}
+
+/** Sends the money for one creator. */
+export async function executePayout(creatorId: string): Promise<PayoutExecuteResult> {
+  const { data, error } = await supabase.functions.invoke("process-creator-payout", {
+    body: { action: "execute", creatorId },
+  });
+  const failure = invokeError(error, data);
+  if (failure) throw new Error(failure);
+  return data as PayoutExecuteResult;
+}
+
+export type AutoRunResult = {
+  dry_run?: boolean;
+  min_payout_cents?: number;
+  considered?: number;
+  attempted?: number;
+  paid?: number;
+  paid_cents?: number;
+  /** Present on dry runs only. */
+  candidates?: Array<{ creator_id: string; amount_cents: number }>;
+  results?: Array<{ creator_id: string; ok?: boolean; amount_cents?: number; payout_id?: string; reason?: string }>;
+};
+
+/** Runs the same batch the daily job runs; dryRun only reports who is eligible. */
+export async function runAllReadyPayouts(dryRun = false): Promise<AutoRunResult> {
+  const { data, error } = await supabase.functions.invoke("auto-creator-payouts", {
+    body: { dry_run: dryRun },
+  });
+  const failure = invokeError(error, data);
+  if (failure) throw new Error(failure);
+  return data as AutoRunResult;
+}
