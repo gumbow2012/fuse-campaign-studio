@@ -1110,11 +1110,27 @@ export function createCustomerPortalHandler(mode: StripeBillingMode) {
       }
 
       const origin = req.headers.get("origin") || "https://example.com";
-      const portalSession = await stripe.billingPortal.sessions.create({
+      const portalParams = {
         customer: customerId,
         configuration: getStripePortalConfigurationId(mode) ?? undefined,
         return_url: new URL("/billing", origin).toString(),
-      });
+      };
+      let portalStripe = stripe;
+      let portalSession;
+      try {
+        portalSession = await portalStripe.billingPortal.sessions.create(portalParams);
+      } catch (err) {
+        const legacyKey = mode === "live" ? Deno.env.get("STRIPE_SECRET_KEY_LIVE_LEGACY")?.trim() : "";
+        const code = (err as { code?: string })?.code;
+        if (!legacyKey || code !== "resource_missing") throw err;
+        // Customer lives on the legacy billing account — retry there (without the
+        // current account's portal configuration id, which does not exist there).
+        portalStripe = createStripeClient(legacyKey);
+        portalSession = await portalStripe.billingPortal.sessions.create({
+          customer: portalParams.customer,
+          return_url: portalParams.return_url,
+        });
+      }
 
       await logAuditEvent({
         eventType: "stripe.portal.created",
