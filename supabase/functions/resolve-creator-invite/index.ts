@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     const { data, error } = await admin
       .from("creator_invites")
       .select(
-        "status, action_link, created_at, last_sent_at, first_name, instagram_handle, display_name, personal_note",
+        "status, action_link, accepted_user_id, created_at, last_sent_at, first_name, instagram_handle, display_name, personal_note",
       )
       .eq("branded_token", token)
       .maybeSingle();
@@ -70,15 +70,28 @@ Deno.serve(async (req) => {
 
     const status = String(invite.status ?? "");
     if (status === "revoked") return json({ status: "revoked", invite: context });
-    if (status === "accepted") return json({ status: "accepted", invite: context });
 
-    const actionLink = typeof invite.action_link === "string" ? invite.action_link : "";
+    if (status === "accepted") {
+      // A placeholder account (*.pending@ / @fuse-us.com) may pre-hold an invite so the
+      // creator's templates exist before they join. That invite is still claimable by the
+      // real person; only an invite held by a real, non-placeholder account is taken.
+      let holderEmail = "";
+      if (invite.accepted_user_id) {
+        const { data: holder } = await admin
+          .from("profiles").select("email").eq("user_id", invite.accepted_user_id).maybeSingle();
+        holderEmail = String(holder?.email ?? "");
+      }
+      const heldByPlaceholder =
+        !invite.accepted_user_id || holderEmail === "" || /\.pending@|@fuse-us\.com$/i.test(holderEmail);
+      if (!heldByPlaceholder) return json({ status: "accepted", invite: context });
+      return json({ status: "claimable", invite: context });
+    }
+
+    // Never-claimed invite: claimable while fresh (claim-creator-invite enforces the same window).
     const stamp = Date.parse(invite.last_sent_at ?? invite.created_at ?? "") || 0;
     const stale = !stamp || Date.now() - stamp > MAX_AGE_MS;
-    if (!actionLink || stale) return json({ status: "expired", invite: context });
-
-    // `redirect` kept for backward compatibility with earlier clients.
-    return json({ status: "valid", invite: context, actionLink, redirect: actionLink });
+    if (stale) return json({ status: "expired", invite: context });
+    return json({ status: "claimable", invite: context });
   } catch {
     return json({ status: "expired", invite: null, error: "Could not resolve invite", code: "error" }, 500);
   }

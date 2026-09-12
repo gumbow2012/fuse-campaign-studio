@@ -1110,11 +1110,27 @@ export function createCustomerPortalHandler(mode: StripeBillingMode) {
       }
 
       const origin = req.headers.get("origin") || "https://example.com";
-      const portalSession = await stripe.billingPortal.sessions.create({
+      const portalParams = {
         customer: customerId,
         configuration: getStripePortalConfigurationId(mode) ?? undefined,
         return_url: new URL("/billing", origin).toString(),
-      });
+      };
+      let portalStripe = stripe;
+      let portalSession;
+      try {
+        portalSession = await portalStripe.billingPortal.sessions.create(portalParams);
+      } catch (err) {
+        const legacyKey = mode === "live" ? Deno.env.get("STRIPE_SECRET_KEY_LIVE_LEGACY")?.trim() : "";
+        const code = (err as { code?: string })?.code;
+        if (!legacyKey || code !== "resource_missing") throw err;
+        // Customer lives on the legacy billing account — retry there (without the
+        // current account's portal configuration id, which does not exist there).
+        portalStripe = createStripeClient(legacyKey);
+        portalSession = await portalStripe.billingPortal.sessions.create({
+          customer: portalParams.customer,
+          return_url: portalParams.return_url,
+        });
+      }
 
       await logAuditEvent({
         eventType: "stripe.portal.created",
@@ -1165,12 +1181,33 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
       if (!signature) throw new Error("Missing stripe-signature header");
 
       const rawBody = await req.text();
-      const stripe = createStripeClient(getStripeSecretKey(mode));
-      const event = await stripe.webhooks.constructEventAsync(
-        rawBody,
-        signature,
-        getStripeWebhookSecret(mode),
-      );
+      // Two Stripe accounts send live events here: the legacy billing account (existing
+      // subscribers; STRIPE_WEBHOOK_SECRET_LIVE + STRIPE_SECRET_KEY_LIVE_LEGACY) and the current
+      // account (new customers; STRIPE_WEBHOOK_SECRET_LIVE_NEW + STRIPE_SECRET_KEY_LIVE). Verify
+      // with each secret in turn and use the API key of whichever account signed the event.
+      const candidates: Array<{ secret: string; apiKey: string }> = [
+        { secret: getStripeWebhookSecret(mode), apiKey: getStripeSecretKey(mode) },
+      ];
+      if (mode === "live") {
+        const legacyKey = Deno.env.get("STRIPE_SECRET_KEY_LIVE_LEGACY")?.trim();
+        if (legacyKey) candidates[0] = { secret: candidates[0].secret, apiKey: legacyKey };
+        const newSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET_LIVE_NEW")?.trim();
+        if (newSecret) candidates.push({ secret: newSecret, apiKey: getStripeSecretKey(mode) });
+      }
+      let stripe = createStripeClient(candidates[0].apiKey);
+      let event: Awaited<ReturnType<typeof stripe.webhooks.constructEventAsync>> | null = null;
+      let lastVerifyError: unknown = null;
+      for (const candidate of candidates) {
+        try {
+          const client = createStripeClient(candidate.apiKey);
+          event = await client.webhooks.constructEventAsync(rawBody, signature, candidate.secret);
+          stripe = client;
+          break;
+        } catch (err) {
+          lastVerifyError = err;
+        }
+      }
+      if (!event) throw lastVerifyError ?? new Error("Webhook signature verification failed");
 
       await logAuditEvent({
         eventType: "stripe.webhook.received",

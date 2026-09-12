@@ -38,6 +38,8 @@ function useDropWindow(endsAt: string | null) {
       return `Available through ${new Date(endTime).toLocaleDateString(undefined, {
         month: "short",
         day: "numeric",
+        // Far-out windows must show the year, or "Sep 11" reads as this year.
+        ...(days > 300 ? { year: "numeric" as const } : {}),
       })}`;
     }
     const hours = Math.floor((remaining % 86_400_000) / 3_600_000);
