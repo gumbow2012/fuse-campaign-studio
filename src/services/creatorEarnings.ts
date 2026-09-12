@@ -157,3 +157,42 @@ export async function requestConnectLink(
   if (!url) throw new Error("No payout link was returned");
   return url;
 }
+
+export type BankAccountRow = {
+  id: string | null;
+  bank_name: string | null;
+  last4: string | null;
+  currency: string | null;
+  country: string | null;
+  status: string | null;
+  default_for_currency: boolean;
+};
+
+export type BankStatus = ConnectStatus & { bank_accounts: BankAccountRow[] };
+
+/** Read-only: which bank account(s) payouts will land in. */
+export async function loadBankStatus(): Promise<BankStatus> {
+  const { data, error } = await supabase.functions.invoke("creator-connect", {
+    body: { action: "bank_status" },
+  });
+  if (error) throw new Error(error.message);
+  const payload = (data ?? {}) as Record<string, unknown>;
+  if (payload.error) throw new Error(String(payload.error));
+  const list = Array.isArray(payload.bank_accounts)
+    ? (payload.bank_accounts as Array<Record<string, unknown>>)
+    : [];
+  return {
+    connected: payload.connected === true,
+    status: String(payload.status ?? "not_started"),
+    payouts_enabled: payload.payouts_enabled === true,
+    bank_accounts: list.map((row) => ({
+      id: str(row.id),
+      bank_name: str(row.bank_name),
+      last4: str(row.last4),
+      currency: str(row.currency),
+      country: str(row.country),
+      status: str(row.status),
+      default_for_currency: row.default_for_currency === true,
+    })),
+  };
+}
