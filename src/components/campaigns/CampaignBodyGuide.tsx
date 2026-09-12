@@ -6,8 +6,8 @@
 
 import { useState } from "react";
 
-import bodyArt from "@/assets/campaign-refs/body-guide.png.asset.json";
-import type { CampaignField } from "@/lib/campaignFields";
+import { BODY_GUIDE_ART, type CampaignField } from "@/lib/campaignFields";
+
 import { cn } from "@/lib/utils";
 
 /** Only these categories have a meaningful place on the body. */
@@ -69,7 +69,7 @@ export default function CampaignBodyGuide({ fields, selectedId, onSelect }: Prop
     <div className="overflow-hidden rounded-[20px] border border-border/70 bg-muted/25">
       <div className="relative mx-auto aspect-[3/4] w-full max-w-[420px]">
         <img
-          src={bodyArt.url}
+          src={BODY_GUIDE_ART}
           alt="Body reference guide showing where each reference is used"
           className="h-full w-full object-contain"
           onError={() => setArtOk(false)}

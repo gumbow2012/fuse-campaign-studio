@@ -55,7 +55,66 @@
     --glass-bg: 220 22% 12%;
     --glass-border: 220 20% 22%;
   }
+
+  /* Light surface set. Nothing uses it today (default stays dark), but the app
+     renders correctly with data-theme="light" on <html>. */
+  [data-theme="light"] {
+    --background: 0 0% 100%;
+    --foreground: 222 30% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 30% 12%;
+
+    --primary: 196 88% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 16% 96%;
+    --secondary-foreground: 222 30% 12%;
+
+    --muted: 220 16% 95%;
+    --muted-foreground: 220 10% 40%;
+
+    --accent: 196 88% 38%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 14% 88%;
+    --input: 220 14% 88%;
+    --ring: 196 88% 38%;
+
+    --sidebar-background: 220 16% 98%;
+    --sidebar-foreground: 222 30% 18%;
+    --sidebar-primary: 196 88% 38%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 16% 94%;
+    --sidebar-accent-foreground: 222 30% 18%;
+    --sidebar-border: 220 14% 88%;
+    --sidebar-ring: 196 88% 38%;
+
+    --electric-blue: 196 88% 38%;
+    --electric-cyan: 192 80% 42%;
+    --warm-gold: 36 70% 45%;
+    --navy-deep: 220 16% 97%;
+    --navy-mid: 220 16% 93%;
+    --glass-bg: 0 0% 100%;
+    --glass-border: 220 14% 88%;
+
+    /* Status text that stays AA-legible on light surfaces. */
+    --status-positive: 152 62% 30%;
+    --status-negative: 0 66% 42%;
+  }
+
+  :root {
+    --status-positive: 152 66% 62%;
+    --status-negative: 0 84% 70%;
+  }
 }
+
 
 @layer base {
   * {
@@ -299,5 +358,27 @@
   .promo-chrome-sweep {
     animation: none;
     opacity: 0;
+  }
+}
+
+@layer utilities {
+  /* Campaign page: calm chrome — no decorative grid behind the content. */
+  body.campaign-flat {
+    background-image: none;
+  }
+
+  /* Media frame that follows the active item's own aspect ratio, height-capped. */
+  .campaign-frame {
+    --frame-ratio: 0.5625;
+    --frame-max-h: 56vh;
+    aspect-ratio: var(--frame-ratio);
+    width: 100%;
+    max-width: calc(var(--frame-max-h) * var(--frame-ratio));
+    margin-inline: auto;
+  }
+  @media (min-width: 1024px) {
+    .campaign-frame {
+      --frame-max-h: min(72vh, 720px);
+    }
   }
 }

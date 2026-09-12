@@ -2,17 +2,22 @@
  * CAMPAIGN PRODUCT GALLERY — one unified viewer for a template product page.
  *
  * Video-first: the caller passes items already merchandised (hero first, then
- * the gallery order returned by the backend). One dominant 9:16 viewer plus a
+ * the gallery order returned by the backend). One dominant viewer plus a
  * compact thumbnail strip; no internal taxonomy labels.
+ *
+ * The frame follows the ACTIVE item's own intrinsic aspect ratio (from video
+ * metadata / natural image size), defaulting to 9:16 until it is known, so a
+ * 4:3 clip never sits in a tall frame full of empty space. Height is capped
+ * (56vh mobile, min(72vh,720px) desktop) via the `.campaign-frame` utility.
  *
  * Media that fails to load is dropped from the gallery entirely and the viewer
  * falls through to the next usable item, so a broken asset never renders as a
- * blank black card.
+ * blank card.
  *
  * Loading treatment: media never pops in from black. A blurred ambient still of
- * the clip fills the frame (so letterbox bars are colour, not black), a sharp
- * poster sits on top, and the video/image cross-fades in with a soft settle the
- * moment it can play. A shimmer covers the only moment nothing at all is ready.
+ * the clip fills the frame, a sharp poster sits on top, and the video/image
+ * cross-fades in the moment it can play. A shimmer covers the only moment
+ * nothing at all is ready.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -23,11 +28,12 @@ import useClipPosters from "@/hooks/useClipPosters";
 import type { TemplateGalleryItem } from "@/services/templateDetailPage";
 
 function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-[18px] bg-white/[0.06]", className)} />;
+  return <div className={cn("animate-pulse rounded-[18px] bg-muted/40", className)} />;
 }
 
-/** Soft navy frame — the base behind media, never pure black. */
-const FRAME_BG = "bg-[linear-gradient(180deg,hsl(var(--navy-mid)/0.85),hsl(var(--navy-deep)))]";
+/** Soft frame base behind media — never pure black. */
+const FRAME_BG = "bg-[linear-gradient(180deg,hsl(var(--muted)/0.75),hsl(var(--card)))]";
+const DEFAULT_RATIO = 9 / 16;
 
 export default function CampaignMediaGallery({
   items,
@@ -43,6 +49,8 @@ export default function CampaignMediaGallery({
   const [broken, setBroken] = useState<Record<string, true>>({});
   /** Per item: the visible media has decoded a frame, so it can fade in over its poster. */
   const [mediaReady, setMediaReady] = useState<Record<string, true>>({});
+  /** Intrinsic width/height ratio per item, learned from the media itself. */
+  const [ratios, setRatios] = useState<Record<string, number>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -78,6 +86,15 @@ export default function CampaignMediaGallery({
     setMediaReady((current) => (current[id] ? current : { ...current, [id]: true }));
   }, []);
 
+  const markRatio = useCallback((id: string, width: number, height: number) => {
+    if (!width || !height) return;
+    const ratio = width / height;
+    if (!Number.isFinite(ratio) || ratio <= 0) return;
+    setRatios((current) =>
+      Math.abs((current[id] ?? 0) - ratio) < 0.001 ? current : { ...current, [id]: ratio },
+    );
+  }, []);
+
   const step = (delta: number) => {
     if (usable.length < 2) return;
     const next = (activeIndex + delta + usable.length) % usable.length;
@@ -90,7 +107,7 @@ export default function CampaignMediaGallery({
         <Skeleton className="aspect-[9/16] w-full" />
         <div className="flex gap-2">
           {[0, 1, 2, 3, 4].map((key) => (
-            <Skeleton key={key} className="h-20 w-12 rounded-[10px]" />
+            <Skeleton key={key} className="h-[59px] w-11 rounded-[10px]" />
           ))}
         </div>
       </div>
@@ -102,13 +119,12 @@ export default function CampaignMediaGallery({
       <div className={className}>
         <div
           className={cn(
-            "flex aspect-[9/16] w-full items-center justify-center rounded-[18px] border border-white/10",
+            "campaign-frame flex items-center justify-center rounded-[18px] border border-border/70",
             FRAME_BG,
           )}
+          style={{ ["--frame-ratio" as string]: String(DEFAULT_RATIO) }}
         >
-          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-slate-500">
-            Preview coming soon
-          </p>
+          <p className="text-[13px] text-muted-foreground">Preview coming soon</p>
         </div>
       </div>
     );
@@ -117,14 +133,16 @@ export default function CampaignMediaGallery({
   const activePoster =
     active.media_type === "video" ? (active.poster_url ?? posters[active.id] ?? null) : null;
   const activeReady = !!mediaReady[active.id];
+  const activeRatio = ratios[active.id] ?? DEFAULT_RATIO;
 
   return (
     <div className={cn("space-y-3", className)}>
       <div
         className={cn(
-          "relative aspect-[9/16] w-full overflow-hidden rounded-[18px] border border-[hsl(var(--electric-blue)/0.28)] shadow-[0_50px_120px_-70px_hsl(var(--electric-blue)/0.7)]",
+          "campaign-frame relative overflow-hidden rounded-[18px] border border-border/70 transition-[aspect-ratio,max-width] duration-300 ease-out motion-reduce:transition-none",
           FRAME_BG,
         )}
+        style={{ ["--frame-ratio" as string]: String(activeRatio) }}
         onTouchStart={(event) => {
           const touch = event.touches[0];
           touchStart.current = { x: touch.clientX, y: touch.clientY };
@@ -142,8 +160,7 @@ export default function CampaignMediaGallery({
       >
         {active.media_type === "video" ? (
           <>
-            {/* 1. Ambient underlay — the clip's own still, blown up and blurred, so the
-                letterbox area reads as colour-matched glow instead of black. */}
+            {/* 1. Ambient underlay — the clip's own still, blown up and blurred. */}
             {activePoster ? (
               <img
                 src={activePoster}
@@ -156,7 +173,7 @@ export default function CampaignMediaGallery({
 
             {/* 2. Shimmer only for the moment nothing is ready — not even a poster. */}
             {!activePoster && !activeReady ? (
-              <div className="absolute inset-0 animate-pulse bg-white/[0.06]" aria-hidden />
+              <div className="absolute inset-0 animate-pulse bg-muted/40 motion-reduce:animate-none" aria-hidden />
             ) : null}
 
             {/* 3. Sharp poster, visible until the video can play, then dissolves under it. */}
@@ -167,7 +184,7 @@ export default function CampaignMediaGallery({
                 aria-hidden
                 decoding="async"
                 className={cn(
-                  "pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-500 ease-out",
+                  "pointer-events-none absolute inset-0 h-full w-full object-contain transition-opacity duration-500 ease-out motion-reduce:transition-none",
                   activeReady ? "opacity-0" : "opacity-100",
                 )}
               />
@@ -186,12 +203,16 @@ export default function CampaignMediaGallery({
               crossOrigin="anonymous"
               preload="auto"
               aria-label={`${name} campaign preview`}
+              onLoadedMetadata={(event) => {
+                const el = event.currentTarget;
+                markRatio(active.id, el.videoWidth, el.videoHeight);
+              }}
               onLoadedData={() => markReady(active.id)}
               onCanPlay={() => markReady(active.id)}
               onError={() => markBroken(active.id)}
               className={cn(
-                "relative h-full w-full object-contain transition-[opacity,transform] duration-500 ease-out",
-                activeReady ? "scale-100 opacity-100" : "scale-[1.02] opacity-0",
+                "relative h-full w-full object-contain transition-opacity duration-500 ease-out motion-reduce:transition-none",
+                activeReady ? "opacity-100" : "opacity-0",
               )}
             />
           </>
@@ -200,24 +221,28 @@ export default function CampaignMediaGallery({
             type="button"
             onClick={() => setLightbox(true)}
             aria-label={`View ${name} preview larger`}
-            className="group relative h-full w-full"
+            className="group relative h-full w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {!activeReady ? (
-              <div className="absolute inset-0 animate-pulse bg-white/[0.06]" aria-hidden />
+              <div className="absolute inset-0 animate-pulse bg-muted/40 motion-reduce:animate-none" aria-hidden />
             ) : null}
             <img
               key={active.id}
               src={active.url}
               alt={`${name} campaign preview`}
               decoding="async"
-              onLoad={() => markReady(active.id)}
+              onLoad={(event) => {
+                const el = event.currentTarget;
+                markRatio(active.id, el.naturalWidth, el.naturalHeight);
+                markReady(active.id);
+              }}
               onError={() => markBroken(active.id)}
               className={cn(
-                "h-full w-full object-cover transition-opacity duration-500 ease-out",
+                "h-full w-full object-contain transition-opacity duration-500 ease-out motion-reduce:transition-none",
                 activeReady ? "opacity-100" : "opacity-0",
               )}
             />
-            <span className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/55 p-2 text-white/85 backdrop-blur transition group-hover:border-cyan-300/60 group-hover:text-white">
+            <span className="absolute right-3 top-3 rounded-full border border-border/70 bg-background/70 p-2 text-foreground backdrop-blur transition group-hover:border-primary/60">
               <Expand className="h-4 w-4" />
             </span>
           </button>
@@ -234,10 +259,10 @@ export default function CampaignMediaGallery({
               aria-current={index === activeIndex ? true : undefined}
               aria-label={`Preview ${index + 1}`}
               className={cn(
-                "relative aspect-[9/16] w-14 shrink-0 overflow-hidden rounded-[10px] border bg-black transition lg:w-auto",
+                "relative aspect-[3/4] min-h-[44px] w-11 shrink-0 overflow-hidden rounded-[10px] border bg-muted/40 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-auto",
                 index === activeIndex
-                  ? "border-[hsl(var(--electric-cyan)/0.8)] ring-1 ring-[hsl(var(--electric-cyan)/0.3)]"
-                  : "border-white/10 hover:border-[hsl(var(--electric-blue)/0.5)]",
+                  ? "border-primary ring-1 ring-primary/40"
+                  : "border-border/70 hover:border-primary/50",
               )}
             >
               {item.media_type === "video" ? (
@@ -252,11 +277,11 @@ export default function CampaignMediaGallery({
                     />
                   ) : (
                     /* Poster still extracting — a quiet gradient, never a film icon. */
-                    <span className="absolute inset-0 bg-[linear-gradient(180deg,hsl(var(--navy-mid)/0.9),hsl(var(--navy-deep)))]" />
+                    <span className="absolute inset-0 bg-[linear-gradient(180deg,hsl(var(--muted)/0.8),hsl(var(--card)))]" />
                   )}
                   <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/60 ring-1 ring-white/20">
-                      <Play className="h-3 w-3 translate-x-[1px] fill-white text-white" />
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-background/70 ring-1 ring-border">
+                      <Play className="h-3 w-3 translate-x-[1px] fill-current text-foreground" />
                     </span>
                   </span>
                 </>

@@ -3,7 +3,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
-const RATIOS = new Set(["9:16", "16:9", "1:1", "4:5", "3:4", "2:3"]);
+const RATIOS = new Set(["9:16", "16:9", "1:1", "4:5", "3:4", "2:3", "4:3", "3:2", "5:4", "21:9"]);
 const INTERNAL = /swap\s*frame|approved|reference\s*frame|\bframe\s*\d|\bframe\b/i;
 const PLACEHOLDER = /^(new\s*input|input|untitled|node|slot|reference)\s*\d*$/i;
 function friendly(name: string): string {
@@ -35,16 +35,35 @@ Deno.serve(async (req) => {
 
   let required_inputs: any[] = [], image_count = 0, video_count = 0, aspect_ratio = "9:16";
   if (vid) {
-    const { data: nodes } = await admin.from("nodes").select("node_type,name,prompt_config").eq("version_id", vid);
+    const { data: nodes } = await admin.from("nodes").select("id,node_type,name,sort_order,prompt_config").eq("version_id", vid);
+    // Aspect ratio is whatever the exposed video nodes actually declare (most frequent wins).
+    const ratioCounts: Record<string, number> = {};
     for (const n of nodes ?? []) {
       const c = (n as any).prompt_config ?? {};
-      if (n.node_type === "user_input" && (c.required === true || c.required === "true") && !INTERNAL.test(String(n.name)))
-        required_inputs.push({ name: n.name, label: friendly(n.name), expected: c.expected ?? "image" });
+      // Every upload slot the customer fills, whether or not it is flagged required.
+      if (n.node_type === "user_input" && String(c.editor_mode ?? "") === "upload" && !INTERNAL.test(String(n.name))) {
+        required_inputs.push({
+          key: String(c.editor_slot_key ?? n.name),
+          name: n.name,
+          label: friendly(String(c.editor_label ?? n.name)),
+          expected: c.expected ?? "image",
+          required: c.required !== false,
+          sort_order: Number((n as any).sort_order ?? 0) || 0,
+        });
+      }
       const exposed = c.output_exposed === true || c.output_exposed === "true";
       if (exposed && n.node_type === "image_gen") image_count++;
-      if (exposed && n.node_type === "video_gen") { video_count++; if (c.aspect_ratio && RATIOS.has(String(c.aspect_ratio))) aspect_ratio = String(c.aspect_ratio); }
+      if (exposed && n.node_type === "video_gen") {
+        video_count++;
+        const r = String(c.aspect_ratio ?? "").trim();
+        if (r && RATIOS.has(r)) ratioCounts[r] = (ratioCounts[r] ?? 0) + 1;
+      }
     }
-    required_inputs.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const ranked = Object.entries(ratioCounts).sort((a, b) => b[1] - a[1]);
+    if (ranked.length) aspect_ratio = ranked[0][0];
+
+    required_inputs.sort((a, b) => (a.sort_order - b.sort_order) || String(a.name).localeCompare(String(b.name)));
+    for (const r of required_inputs) delete r.sort_order;
     // number duplicate labels ("Product", "Product" -> "Product 1", "Product 2")
     const counts: Record<string, number> = {};
     for (const r of required_inputs) counts[r.label] = (counts[r.label] ?? 0) + 1;
@@ -70,6 +89,7 @@ Deno.serve(async (req) => {
   return json({ template: {
     id: t.id, slug: t.slug, name: t.name, description: t.description,
     aspect_ratio, image_count, video_count, total_outputs: image_count + video_count,
-    required_inputs, allow_customer_edit: t.allow_customer_edit, hero, featured, gallery,
+    required_inputs, input_count: required_inputs.length,
+    allow_customer_edit: t.allow_customer_edit, hero, featured, gallery,
   } });
 });

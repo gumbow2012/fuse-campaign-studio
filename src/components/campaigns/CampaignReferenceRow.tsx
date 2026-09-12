@@ -34,6 +34,9 @@ export default function CampaignReferenceRow({
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  /** A missing artwork file must never render as a broken image. */
+  const [artOk, setArtOk] = useState(true);
+
 
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => () => {
@@ -96,11 +99,18 @@ export default function CampaignReferenceRow({
             alt={`${field.label} reference`}
             className="h-full w-full object-cover"
           />
-        ) : artwork ? (
-          <img src={artwork} alt="" aria-hidden className="h-11 w-11 object-contain p-0.5" />
+        ) : artwork && artOk ? (
+          <img
+            src={artwork}
+            alt=""
+            aria-hidden
+            onError={() => setArtOk(false)}
+            className="h-11 w-11 object-contain p-0.5"
+          />
         ) : (
           <ImagePlus className="h-5 w-5 text-muted-foreground" aria-hidden />
         )}
+
       </div>
 
       <div className="min-w-0 flex-1">
@@ -111,18 +121,19 @@ export default function CampaignReferenceRow({
           ) : null}
         </p>
         {error ? (
-          <p className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-5 text-destructive-foreground">
-            <AlertCircle className="h-3.5 w-3.5 text-red-400" aria-hidden />
-            <span className="text-red-400">{error}</span>
+          <p className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-5 text-[hsl(var(--status-negative))]">
+            <AlertCircle className="h-3.5 w-3.5" aria-hidden />
+            <span>{error}</span>
           </p>
         ) : filled ? (
-          <p className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-5 text-emerald-400">
+          <p className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-5 text-[hsl(var(--status-positive))]">
             <Check className="h-3.5 w-3.5" aria-hidden />
             Image added.
           </p>
         ) : (
           <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{field.helper}</p>
         )}
+
       </div>
 
       <input

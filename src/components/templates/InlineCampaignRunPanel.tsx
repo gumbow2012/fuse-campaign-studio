@@ -399,7 +399,7 @@ export default function InlineCampaignRunPanel({
         ? "Starting"
         : freeRunAvailable
           ? "Generate free video"
-          : "Generate";
+          : "Generate campaign";
 
   const generateDisabled = submitting || (!!user && !shortOnCredits && (!configReady || !requiredReady));
 
@@ -555,7 +555,7 @@ export default function InlineCampaignRunPanel({
         {error ? (
           <p
             role="alert"
-            className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/[0.08] px-4 py-3 text-[14px] leading-6 text-red-300"
+            className="mt-4 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-[14px] leading-6 text-[hsl(var(--status-negative))]"
           >
             {error}
           </p>

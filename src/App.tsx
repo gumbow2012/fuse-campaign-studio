@@ -2,6 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
+
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/contexts/BrandContext";
@@ -121,8 +123,10 @@ function UtmCapture() {
 }
 
 const App = () => (
+  <ThemeProvider attribute="data-theme" defaultTheme="dark" enableSystem={false}>
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+
 
       <BrandProvider>
       <StreakProvider>
@@ -584,6 +588,8 @@ const App = () => (
       </BrandProvider>
     </AuthProvider>
   </QueryClientProvider>
+  </ThemeProvider>
 );
+
 
 export default App;
