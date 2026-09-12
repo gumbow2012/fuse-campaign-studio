@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, Loader2 } from "lucide-react";
 import PageMeta from "@/components/mvp/PageMeta";
 import CreatorFlywheel from "@/components/creator/CreatorFlywheel";
@@ -17,7 +17,9 @@ type InviteContext = {
 
 type Resolved =
   | { status: "loading" }
-  | { status: "valid"; invite: InviteContext; actionLink: string }
+  | { status: "claimable"; invite: InviteContext; signedInEmail: string | null }
+  | { status: "claiming" }
+  | { status: "claim_error"; message: string; invite: InviteContext; signedInEmail: string | null }
   | { status: "expired" | "revoked" }
   | { status: "accepted"; signedIn: boolean };
 
@@ -34,11 +36,12 @@ const BrandLockup = () => (
 /**
  * Branded creator invite welcome page (/creator/invite/:token).
  * Resolves the branded token server-side, renders VIP context before auth, and
- * hands off to the secure Supabase verify link on claim. No raw URLs rendered.
+ * claims through the authenticated claim-creator-invite endpoint. No raw URLs rendered.
  */
 const CreatorInviteRedirectPage = () => {
   const { token } = useParams<{ token: string }>();
   const [state, setState] = useState<Resolved>({ status: "loading" });
+  const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
@@ -60,13 +63,18 @@ const CreatorInviteRedirectPage = () => {
         const data = (await response.json().catch(() => ({}))) as {
           status?: string;
           invite?: InviteContext | null;
-          actionLink?: string;
         };
         if (cancelled) return;
 
-        if (data.status === "valid" && data.actionLink) {
-          setState({ status: "valid", invite: data.invite ?? {}, actionLink: data.actionLink });
-          track("creator_invite_landing_view", { invite_status: "valid" });
+        if (data.status === "claimable") {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (cancelled) return;
+          setState({
+            status: "claimable",
+            invite: data.invite ?? {},
+            signedInEmail: sessionData.session?.user?.email ?? null,
+          });
+          track("creator_invite_landing_view", { invite_status: "claimable" });
           return;
         }
         if (data.status === "accepted") {
@@ -90,7 +98,7 @@ const CreatorInviteRedirectPage = () => {
     };
   }, [token]);
 
-  const claim = (invite: InviteContext, actionLink: string) => {
+  const claim = useCallback(async (invite: InviteContext) => {
     try {
       window.localStorage.setItem(
         CREATOR_INVITE_PREFILL_KEY,
@@ -100,12 +108,29 @@ const CreatorInviteRedirectPage = () => {
           displayName: invite.displayName ?? null,
         }),
       );
-    } catch {
-      /* non-blocking */
+    } catch { /* non-blocking */ }
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+      track("creator_invite_claim_started", { authed: false });
+      const returnTo = `/creator/invite/${token ?? ""}`;
+      navigate(`/auth?mode=signup&invite=creator&returnTo=${encodeURIComponent(returnTo)}`);
+      return;
     }
-    track("creator_invite_claim_started");
-    window.location.assign(actionLink);
-  };
+    track("creator_invite_claim_started", { authed: true });
+    setState({ status: "claiming" });
+    const { data, error } = await supabase.functions.invoke("claim-creator-invite", { body: { token } });
+    const payload = (data ?? {}) as { status?: string; error?: string };
+    if (error || payload.status !== "claimed") {
+      setState({
+        status: "claim_error",
+        message: payload.error ?? error?.message ?? "Could not claim this invite.",
+        invite,
+        signedInEmail: sessionData.session.user?.email ?? null,
+      });
+      return;
+    }
+    navigate("/app/creator/welcome", { replace: true });
+  }, [navigate, token]);
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] px-5 py-12 sm:px-6">
@@ -127,7 +152,17 @@ const CreatorInviteRedirectPage = () => {
           </div>
         )}
 
-        {state.status === "valid" && (
+        {state.status === "claiming" && (
+          <div className="mt-10 text-center">
+            <h1 className="flex items-center justify-center gap-2 font-display text-base font-bold uppercase tracking-[0.12em] text-white">
+              <Loader2 className="h-4 w-4 animate-spin text-cyan-300" />
+              Setting up your creator access…
+            </h1>
+            <p className="mt-2 text-sm text-white/60">This only takes a moment.</p>
+          </div>
+        )}
+
+        {state.status === "claimable" && (
           <div className="mt-10">
             <p className="font-display text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-300">
               VIP Creator Access
@@ -168,15 +203,37 @@ const CreatorInviteRedirectPage = () => {
 
             <button
               type="button"
-              onClick={() => claim(state.invite, state.actionLink)}
+              onClick={() => void claim(state.invite)}
               className="mt-8 flex w-full items-center justify-center gap-2 rounded-full bg-cyan-300 px-6 py-4 font-display text-sm font-bold uppercase tracking-[0.1em] text-[#0a0a0a] transition hover:bg-cyan-200"
             >
               Claim creator access
               <ArrowRight className="h-4 w-4" />
             </button>
             <p className="mt-3 text-center text-xs text-white/40">
-              Your invitation is private and linked to your email.
+              {state.signedInEmail
+                ? `Claiming as ${state.signedInEmail}`
+                : "You'll create your FUSE login first, then land back here to claim."}
             </p>
+          </div>
+        )}
+
+        {state.status === "claim_error" && (
+          <div className="mt-12 text-center">
+            <h1 className="font-display text-xl font-bold uppercase tracking-[0.06em] text-white">
+              We couldn't finish setting up your access
+            </h1>
+            <p className="mt-3 text-sm text-white/60">{state.message}</p>
+            <button
+              type="button"
+              onClick={() => void claim(state.invite)}
+              className="mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-cyan-300 px-6 py-3.5 font-display text-sm font-bold uppercase tracking-[0.1em] text-[#0a0a0a] transition hover:bg-cyan-200"
+            >
+              Try again
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            {state.signedInEmail && (
+              <p className="mt-3 text-xs text-white/40">Signed in as {state.signedInEmail}</p>
+            )}
           </div>
         )}
 
