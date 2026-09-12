@@ -479,6 +479,203 @@ export type Database = {
         }
         Relationships: []
       }
+      creator_connect_accounts: {
+        Row: {
+          account_type: string
+          charges_enabled: boolean
+          country: string | null
+          created_at: string
+          default_currency: string | null
+          details_submitted: boolean
+          disabled_reason: string | null
+          id: string
+          last_synced_at: string | null
+          livemode: boolean
+          onboarding_status: string
+          payouts_enabled: boolean
+          requirements: Json
+          stripe_account_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_type?: string
+          charges_enabled?: boolean
+          country?: string | null
+          created_at?: string
+          default_currency?: string | null
+          details_submitted?: boolean
+          disabled_reason?: string | null
+          id?: string
+          last_synced_at?: string | null
+          livemode?: boolean
+          onboarding_status?: string
+          payouts_enabled?: boolean
+          requirements?: Json
+          stripe_account_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_type?: string
+          charges_enabled?: boolean
+          country?: string | null
+          created_at?: string
+          default_currency?: string | null
+          details_submitted?: boolean
+          disabled_reason?: string | null
+          id?: string
+          last_synced_at?: string | null
+          livemode?: boolean
+          onboarding_status?: string
+          payouts_enabled?: boolean
+          requirements?: Json
+          stripe_account_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      creator_earnings: {
+        Row: {
+          available_at: string
+          base_run_credits: number
+          campaign_run_id: string | null
+          created_at: string
+          creator_earning_cents: number
+          creator_id: string
+          creator_royalty_target_cents: number
+          creator_share_bps: number
+          customer_id: string | null
+          economics_version: string | null
+          fuse_marketplace_revenue_cents: number
+          fuse_share_bps: number
+          id: string
+          marketplace_surcharge_credits: number
+          paid_at: string | null
+          payout_id: string | null
+          reversed_at: string | null
+          status: string
+          template_id: string | null
+          total_customer_credits: number
+          updated_at: string
+        }
+        Insert: {
+          available_at?: string
+          base_run_credits?: number
+          campaign_run_id?: string | null
+          created_at?: string
+          creator_earning_cents?: number
+          creator_id: string
+          creator_royalty_target_cents?: number
+          creator_share_bps?: number
+          customer_id?: string | null
+          economics_version?: string | null
+          fuse_marketplace_revenue_cents?: number
+          fuse_share_bps?: number
+          id?: string
+          marketplace_surcharge_credits?: number
+          paid_at?: string | null
+          payout_id?: string | null
+          reversed_at?: string | null
+          status?: string
+          template_id?: string | null
+          total_customer_credits?: number
+          updated_at?: string
+        }
+        Update: {
+          available_at?: string
+          base_run_credits?: number
+          campaign_run_id?: string | null
+          created_at?: string
+          creator_earning_cents?: number
+          creator_id?: string
+          creator_royalty_target_cents?: number
+          creator_share_bps?: number
+          customer_id?: string | null
+          economics_version?: string | null
+          fuse_marketplace_revenue_cents?: number
+          fuse_share_bps?: number
+          id?: string
+          marketplace_surcharge_credits?: number
+          paid_at?: string | null
+          payout_id?: string | null
+          reversed_at?: string | null
+          status?: string
+          template_id?: string | null
+          total_customer_credits?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creator_earnings_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "creator_payouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creator_payouts: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          creator_id: string
+          currency: string
+          earning_count: number
+          failure_reason: string | null
+          id: string
+          idempotency_key: string | null
+          livemode: boolean
+          paid_at: string | null
+          period_end: string | null
+          period_start: string | null
+          status: string
+          stripe_payout_id: string | null
+          stripe_transfer_id: string | null
+          transfer_created_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          created_at?: string
+          creator_id: string
+          currency?: string
+          earning_count?: number
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string | null
+          livemode?: boolean
+          paid_at?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          status?: string
+          stripe_payout_id?: string | null
+          stripe_transfer_id?: string | null
+          transfer_created_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          creator_id?: string
+          currency?: string
+          earning_count?: number
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string | null
+          livemode?: boolean
+          paid_at?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          status?: string
+          stripe_payout_id?: string | null
+          stripe_transfer_id?: string | null
+          transfer_created_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       creator_profiles: {
         Row: {
           accent: string
