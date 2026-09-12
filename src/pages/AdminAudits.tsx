@@ -886,6 +886,9 @@ const AdminAudits = () => {
   useEffect(() => {
     if (!selectedJobId) return;
     if (searchParams.get("jobId") === selectedJobId) return;
+    // Mark this id as self-pushed so the deep-link effect above doesn't treat it as a new
+    // arrival and reset the filters.
+    handledJobIdRef.current = selectedJobId;
     const next = new URLSearchParams(searchParams);
     next.set("jobId", selectedJobId);
     setSearchParams(next, { replace: true });
