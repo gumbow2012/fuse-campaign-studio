@@ -34,6 +34,9 @@ export default function CampaignReferenceRow({
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  /** A missing artwork file must never render as a broken image. */
+  const [artOk, setArtOk] = useState(true);
+
 
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => () => {
@@ -96,11 +99,18 @@ export default function CampaignReferenceRow({
             alt={`${field.label} reference`}
             className="h-full w-full object-cover"
           />
-        ) : artwork ? (
-          <img src={artwork} alt="" aria-hidden className="h-11 w-11 object-contain p-0.5" />
+        ) : artwork && artOk ? (
+          <img
+            src={artwork}
+            alt=""
+            aria-hidden
+            onError={() => setArtOk(false)}
+            className="h-11 w-11 object-contain p-0.5"
+          />
         ) : (
           <ImagePlus className="h-5 w-5 text-muted-foreground" aria-hidden />
         )}
+
       </div>
 
       <div className="min-w-0 flex-1">

@@ -12,8 +12,9 @@
  * generation. Auth, routing, media, saving and the run pipeline are unchanged.
  */
 
-import { useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import InlineCampaignRunPanel from "@/components/templates/InlineCampaignRunPanel";
@@ -35,8 +36,10 @@ import {
   campaignCopy,
   deliverablesLine,
   normalizeCampaignFields,
+  templateDisplayName,
   type CampaignFieldsState,
 } from "@/lib/campaignFields";
+
 
 const STEPS = [
   { title: "Add your references", copy: "Upload the products this campaign uses." },
@@ -46,15 +49,26 @@ const STEPS = [
 
 export default function TemplateDetailPage() {
   const { slug = "" } = useParams();
-  const { isAdmin } = useAuth();
+  const navigate = useNavigate();
+  const { isAdmin, user } = useAuth();
   const { canFavorite, isFavorite, toggleFavorite } = useTemplateFavorites();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [guideSelection, setGuideSelection] = useState<string | null>(null);
+  /** Media column view: the campaign preview, or the reference guide when one exists. */
+  const [mediaView, setMediaView] = useState<"preview" | "guide">("preview");
   /** Lifecycle of the in-page run — drives the mobile bar's label only. */
   const [runPhase, setRunPhase] = useState<"idle" | "inputs" | "running" | "complete" | "failed">(
     "idle",
   );
   const setupRef = useRef<HTMLDivElement>(null);
+
+  /* Calm chrome: this page drops the decorative background grid. */
+  useEffect(() => {
+    document.body.classList.add("campaign-flat");
+    return () => document.body.classList.remove("campaign-flat");
+  }, []);
+
+
 
   const detailQuery = useQuery({
     queryKey: ["template-detail-page", slug],
@@ -162,10 +176,10 @@ export default function TemplateDetailPage() {
       status: "ready",
       fields: normalizeCampaignFields(
         required.map((input) => ({
-          key: input.name,
+          key: input.key ?? input.name,
           label: input.label || "",
           type: String(input.expected || "image"),
-          required: true,
+          required: input.required !== false,
         })),
       ),
     };
@@ -181,8 +195,17 @@ export default function TemplateDetailPage() {
   const fields = configState.status === "ready" ? configState.fields : [];
   const copy = campaignCopy(fields, template?.description);
   const guideFields = bodyGuideFields(fields);
-  /* The guide only earns its space when several body references are configured. */
-  const showGuide = configState.status === "ready" && guideFields.length >= 2;
+  /* The guide only earns its space with several body pieces, or with a face. */
+  const showGuide =
+    configState.status === "ready" &&
+    (guideFields.length >= 3 || fields.some((field) => field.category === "face"));
+  const displayName = templateDisplayName(template?.name);
+
+  /* Never leave the guide showing when a switched campaign has none. */
+  useEffect(() => {
+    if (!showGuide) setMediaView("preview");
+  }, [showGuide]);
+
 
   const runVersionId = catalogEntry ? String(catalogEntry.versionId ?? catalogEntry.id) : null;
   const runTemplateId = String(catalogEntry?.templateId ?? template?.id ?? "");
@@ -220,7 +243,10 @@ export default function TemplateDetailPage() {
         image={catalogEntry?.preview_url ?? null}
       />
 
-      <div className="campaign-surface mx-auto w-full max-w-[1180px] px-5 py-6 pb-28 sm:px-8 lg:py-12 lg:pb-16">
+      <div
+        className="campaign-surface mx-auto w-full max-w-[1180px] px-5 py-6 sm:px-8 lg:py-12 lg:pb-16"
+        style={{ paddingBottom: "calc(7rem + env(safe-area-inset-bottom))" }}
+      >
         {/* LOCAL HEADER */}
         <header className="flex items-center justify-between gap-4">
           <Link
@@ -230,13 +256,21 @@ export default function TemplateDetailPage() {
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Campaigns
           </Link>
-          {canFavorite && favoriteId ? (
+          {favoriteId ? (
             <FavoriteTemplateButton
-              favorite={isFavorite(favoriteId)}
-              onToggle={() => toggleFavorite(favoriteId)}
-              label={isFavorite(favoriteId) ? "Saved" : "Save"}
+              favorite={canFavorite ? isFavorite(favoriteId) : false}
+              onToggle={() => {
+                /* Signed out: saving needs an account — send them to sign in and back. */
+                if (!user) {
+                  navigate(`/auth?returnTo=${encodeURIComponent(`/templates/${slug}`)}`);
+                  return;
+                }
+                toggleFavorite(favoriteId);
+              }}
+              label={canFavorite && isFavorite(favoriteId) ? "Saved" : "Save template"}
               className="px-4 py-2"
             />
+
           ) : null}
         </header>
 
@@ -266,32 +300,68 @@ export default function TemplateDetailPage() {
           <>
             {/* PRODUCT + SETUP */}
             <div className="mt-8 grid items-start gap-10 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)] lg:gap-16">
-              <div className="space-y-6 lg:sticky lg:top-24">
-                <CampaignMediaGallery
-                  items={galleryItems}
-                  name={template.name}
-                  className="mx-auto w-full max-w-[340px] lg:mx-0 lg:max-w-none"
-                />
+              <div className="space-y-4 lg:sticky lg:top-24">
+                {/* Preview / Reference guide — a radio group, only when a guide exists. */}
                 {showGuide ? (
-                  <div className="hidden lg:block">
-                    <h2 className="text-[17px] font-semibold text-foreground">Where each piece lands</h2>
-                    <p className="mt-1 text-[14px] leading-6 text-muted-foreground">
-                      A guide to the references this campaign uses.
-                    </p>
-                    <div className="mt-3">
-                      <CampaignBodyGuide
-                        fields={guideFields}
-                        selectedId={guideSelection}
-                        onSelect={setGuideSelection}
-                      />
-                    </div>
+                  <div
+                    role="radiogroup"
+                    aria-label="Media view"
+                    onKeyDown={(event) => {
+                      if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+                      event.preventDefault();
+                      setMediaView((current) => (current === "preview" ? "guide" : "preview"));
+                    }}
+                    className="mx-auto flex w-full max-w-[340px] gap-1 rounded-full border border-border/70 bg-muted/25 p-1 lg:mx-0 lg:max-w-[300px]"
+                  >
+                    {(
+                      [
+                        { key: "preview", label: "Preview" },
+                        { key: "guide", label: "Reference guide" },
+                      ] as const
+                    ).map((option) => {
+                      const selected = mediaView === option.key;
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          tabIndex={selected ? 0 : -1}
+                          onClick={() => setMediaView(option.key)}
+                          className={cn(
+                            "min-h-[40px] flex-1 rounded-full px-3 text-[14px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            selected
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : null}
+
+                {showGuide && mediaView === "guide" ? (
+                  <div className="mx-auto w-full max-w-[340px] lg:mx-0 lg:max-w-none">
+                    <CampaignBodyGuide
+                      fields={guideFields}
+                      selectedId={guideSelection}
+                      onSelect={setGuideSelection}
+                    />
+                  </div>
+                ) : (
+                  <CampaignMediaGallery
+                    items={galleryItems}
+                    name={template.name}
+                    className="mx-auto w-full max-w-[340px] lg:mx-0 lg:max-w-none"
+                  />
+                )}
               </div>
 
               <div ref={setupRef} className="scroll-mt-24">
-                <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  {template.name}
+                <p className="text-[14px] text-muted-foreground">
+                  {displayName} · Campaign template
                 </p>
                 <h1 className="mt-2 text-[34px] font-semibold leading-[1.08] text-foreground sm:text-[44px]">
                   {copy.headline}
@@ -321,21 +391,9 @@ export default function TemplateDetailPage() {
                     onPhaseChange={setRunPhase}
                   />
                 ) : null}
-
-                {showGuide ? (
-                  <div className="mt-10 lg:hidden">
-                    <h2 className="text-[17px] font-semibold text-foreground">Where each piece lands</h2>
-                    <div className="mt-3">
-                      <CampaignBodyGuide
-                        fields={guideFields}
-                        selectedId={guideSelection}
-                        onSelect={setGuideSelection}
-                      />
-                    </div>
-                  </div>
-                ) : null}
               </div>
             </div>
+
 
             {/* HOW IT WORKS */}
             <section className="mt-16 border-t border-border/60 pt-10">

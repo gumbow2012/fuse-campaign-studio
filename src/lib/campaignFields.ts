@@ -9,12 +9,8 @@
  * generation payload — `id` is always the untouched backend key.
  */
 
-import faceArt from "@/assets/campaign-refs/face.png.asset.json";
-import topArt from "@/assets/campaign-refs/top.png.asset.json";
-import pantsArt from "@/assets/campaign-refs/pants.png.asset.json";
-import carArt from "@/assets/campaign-refs/car.png.asset.json";
-import chainArt from "@/assets/campaign-refs/chain.png.asset.json";
-import accessoryArt from "@/assets/campaign-refs/accessory.png.asset.json";
+
+
 
 export type CampaignRefCategory =
   | "face"
@@ -107,15 +103,22 @@ const CATEGORY_HELPER: Record<CampaignRefCategory, string> = {
   generic: "A clear, well-lit photo.",
 };
 
-/** Interface artwork per category. Never a campaign reference itself. */
+/**
+ * Interface artwork per category. Plain files under `public/` so they resolve on
+ * every host. Never a campaign reference itself.
+ */
 const CATEGORY_ART: Partial<Record<CampaignRefCategory, string>> = {
-  face: faceArt.url,
-  top: topArt.url,
-  bottom: pantsArt.url,
-  car: carArt.url,
-  chain: chainArt.url,
-  accessory: accessoryArt.url,
+  face: "/campaign-refs/face.png",
+  top: "/campaign-refs/top.png",
+  bottom: "/campaign-refs/pants.png",
+  car: "/campaign-refs/car.png",
+  chain: "/campaign-refs/chain.png",
+  accessory: "/campaign-refs/accessory.png",
 };
+
+/** Body diagram used by the optional reference guide. */
+export const BODY_GUIDE_ART = "/campaign-refs/body-guide.png";
+
 
 export function categoryArtwork(category: CampaignRefCategory): string | null {
   return CATEGORY_ART[category] ?? null;
@@ -224,8 +227,14 @@ export function campaignCopy(fields: CampaignField[], templateDescription?: stri
     description = "Add optional references to personalize this campaign.";
   }
 
-  const editorial = String(templateDescription ?? "").trim();
-  if (editorial && editorial.length <= 140) description = editorial;
+  /**
+   * The stored description is only editorial copy when it reads like a real
+   * sentence. Internal names ("Kola Flair Original Template") are ignored.
+   */
+  const editorial = String(templateDescription ?? "").replace(/\s+/g, " ").trim();
+  const sentenceLike = /[.!?]$/.test(editorial) || editorial.split(" ").filter(Boolean).length >= 6;
+  if (editorial && sentenceLike && editorial.length <= 140) description = editorial;
+
 
   return { headline, description };
 }
@@ -245,14 +254,40 @@ export function deliverablesLine(imageCount: number, videoCount: number) {
   return parts.join(" · ");
 }
 
+const ASPECT_LABELS: Record<string, string> = {
+  "9:16": "9:16 portrait",
+  "3:4": "3:4 portrait",
+  "4:5": "4:5 portrait",
+  "2:3": "2:3 portrait",
+  "16:9": "16:9 landscape",
+  "4:3": "4:3 landscape",
+  "3:2": "3:2 landscape",
+  "5:4": "5:4 landscape",
+  "21:9": "21:9 wide",
+  "1:1": "1:1 square",
+};
+
 export function aspectRatioLine(aspect: string | null | undefined) {
   const value = String(aspect ?? "").trim();
   if (!value) return "";
-  if (value === "9:16") return "9:16 portrait";
-  if (value === "16:9") return "16:9 landscape";
-  if (value === "1:1") return "1:1 square";
-  return value;
+  return ASPECT_LABELS[value] ?? value;
 }
+
+/**
+ * Campaign names are stored shouted ("GROUP MEET"). Title-case those for the
+ * calm page label; names that already carry their own casing are left alone.
+ */
+export function templateDisplayName(name: string | null | undefined) {
+  const value = String(name ?? "").replace(/\s+/g, " ").trim();
+  if (!value) return "";
+  if (value !== value.toUpperCase()) return value;
+  return value
+    .toLowerCase()
+    .split(" ")
+    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+    .join(" ");
+}
+
 
 /** "Add 2 required images to continue." / "Ready to generate." */
 export function readinessLine(missing: number) {

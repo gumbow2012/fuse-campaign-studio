@@ -33,7 +33,17 @@ export interface TemplateDetailPageData {
   image_count: number;
   video_count: number;
   total_outputs: number;
-  required_inputs: Array<{ name: string; label: string; expected: TemplateMediaType | string }>;
+  required_inputs: Array<{
+    /** Pipeline slot key when the node declares one, else the node name. */
+    key: string;
+    name: string;
+    label: string;
+    expected: TemplateMediaType | string;
+    required: boolean;
+  }>;
+  /** Number of upload slots the template declares (0 = explicitly no uploads). */
+  input_count: number;
+
   est_generation_seconds: number | null;
   allow_customer_edit: boolean;
   hero: { media_type: TemplateMediaType; url: string; poster_url: string | null } | null;
@@ -77,6 +87,26 @@ function normalizeDetail(raw: unknown): TemplateDetailPageData | null {
   const heroRaw = (row.hero ?? row.featured) as Record<string, unknown> | null | undefined;
   const heroUrl = heroRaw ? str(heroRaw.url) : "";
 
+  const requiredInputs = (Array.isArray(row.required_inputs) ? (row.required_inputs as unknown[]) : [])
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const input = entry as Record<string, unknown>;
+      const inputName = str(input.name);
+      const key = str(input.key) || inputName;
+      if (!key) return null;
+      return {
+        key,
+        name: inputName || key,
+        label: str(input.label) || inputName || key,
+        expected: str(input.expected) || "image",
+        required: input.required !== false,
+      };
+    })
+    .filter(
+      (entry): entry is TemplateDetailPageData["required_inputs"][number] => !!entry,
+    );
+
+
   return {
     id,
     slug: str(row.slug),
@@ -86,21 +116,10 @@ function normalizeDetail(raw: unknown): TemplateDetailPageData | null {
     image_count: Number(row.image_count ?? 0) || 0,
     video_count: Number(row.video_count ?? 0) || 0,
     total_outputs: Number(row.total_outputs ?? 0) || 0,
-    required_inputs: Array.isArray(row.required_inputs)
-      ? (row.required_inputs as unknown[])
-          .map((entry) => {
-            if (!entry || typeof entry !== "object") return null;
-            const input = entry as Record<string, unknown>;
-            const inputName = str(input.name);
-            if (!inputName) return null;
-            return {
-              name: inputName,
-              label: str(input.label) || inputName,
-              expected: str(input.expected) || "image",
-            };
-          })
-          .filter((entry): entry is { name: string; label: string; expected: string } => !!entry)
-      : [],
+    required_inputs: requiredInputs,
+    input_count:
+      row.input_count == null ? requiredInputs.length : Number(row.input_count) || 0,
+
     est_generation_seconds:
       row.est_generation_seconds == null ? null : Number(row.est_generation_seconds) || 0,
     allow_customer_edit: row.allow_customer_edit === true,
