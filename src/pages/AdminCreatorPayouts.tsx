@@ -126,6 +126,66 @@ const AdminCreatorPayouts = () => {
     );
   }, [snapshot, query]);
 
+  const ready = useMemo(
+    () => (snapshot?.creators ?? []).filter((c) => c.availableCents > 0),
+    [snapshot],
+  );
+  const failed = useMemo(
+    () => (snapshot?.payouts ?? []).filter((p) => p.status === "failed" || !!p.failure_reason),
+    [snapshot],
+  );
+
+  const [paying, setPaying] = useState<string | null>(null);
+  const [runningAll, setRunningAll] = useState(false);
+  const [outcomes, setOutcomes] = useState<Record<string, { ok: boolean; message: string }>>({});
+
+  const payOne = useCallback(
+    async (row: Pick<CreatorMoneyRow, "creatorId" | "name" | "email" | "availableCents">) => {
+      const who = row.name || row.email || row.creatorId.slice(0, 8);
+      const amount = row.availableCents > 0 ? formatCents(row.availableCents) : "the available balance";
+      if (!window.confirm(`Send ${amount} to ${who} now? This moves real money.`)) return;
+      setPaying(row.creatorId);
+      try {
+        const result = await executePayout(row.creatorId);
+        const msg = `Sent ${formatCents(result.amount_cents)} (${result.earning_count ?? 0} earnings)`;
+        setOutcomes((prev) => ({ ...prev, [row.creatorId]: { ok: true, message: msg } }));
+        toast.success(`Paid ${who}`, { description: msg });
+        await load();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Payout failed.";
+        setOutcomes((prev) => ({ ...prev, [row.creatorId]: { ok: false, message: msg } }));
+        toast.error(`Could not pay ${who}`, { description: msg });
+      } finally {
+        setPaying(null);
+      }
+    },
+    [load],
+  );
+
+  const payAll = useCallback(async () => {
+    const total = formatCents(snapshot?.totals.availableCents);
+    if (!window.confirm(`Pay every creator who is ready (up to ${total})? This moves real money.`)) return;
+    setRunningAll(true);
+    try {
+      const result = await runAllReadyPayouts(false);
+      const next: Record<string, { ok: boolean; message: string }> = {};
+      for (const r of result.results ?? []) {
+        next[r.creator_id] = r.ok
+          ? { ok: true, message: `Sent ${formatCents(r.amount_cents)}` }
+          : { ok: false, message: r.reason ?? "Payout failed." };
+      }
+      setOutcomes((prev) => ({ ...prev, ...next }));
+      toast.success(`${result.paid ?? 0} of ${result.attempted ?? 0} paid`, {
+        description: `${formatCents(result.paid_cents)} sent. Minimum per creator ${formatCents(result.min_payout_cents)}.`,
+      });
+      await load();
+    } catch (e) {
+      toast.error("Payout run failed", { description: e instanceof Error ? e.message : "Try again." });
+    } finally {
+      setRunningAll(false);
+    }
+  }, [load, snapshot]);
+
   return (
     <SiteShell>
       <PageMeta
