@@ -4,6 +4,8 @@
  * never a substitute for a campaign's real preview media.
  */
 
+import { useState } from "react";
+
 import bodyArt from "@/assets/campaign-refs/body-guide.png.asset.json";
 import type { CampaignField } from "@/lib/campaignFields";
 import { cn } from "@/lib/utils";
@@ -31,6 +33,37 @@ export function bodyGuideFields(fields: CampaignField[]) {
 export default function CampaignBodyGuide({ fields, selectedId, onSelect }: Props) {
   const usable = bodyGuideFields(fields);
   const selected = usable.find((field) => field.id === selectedId) ?? usable[0] ?? null;
+  const [artOk, setArtOk] = useState(true);
+
+  if (!artOk) {
+    return (
+      <div className="overflow-hidden rounded-[20px] border border-border/70 bg-muted/25">
+        <div className="flex flex-wrap gap-2 p-5">
+          {usable.map((field) => (
+            <button
+              key={field.id}
+              type="button"
+              onClick={() => onSelect(field.id)}
+              aria-pressed={selected?.id === field.id}
+              className={cn(
+                "rounded-full border px-3 py-2 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                selected?.id === field.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background/85 text-foreground hover:border-primary/60",
+              )}
+            >
+              {field.label}
+            </button>
+          ))}
+        </div>
+        {selected ? (
+          <p className="border-t border-border/60 px-5 py-4 text-[14px] leading-6 text-muted-foreground">
+            <span className="font-medium text-foreground">{selected.label}:</span> {selected.helper}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-hidden rounded-[20px] border border-border/70 bg-muted/25">
@@ -39,6 +72,7 @@ export default function CampaignBodyGuide({ fields, selectedId, onSelect }: Prop
           src={bodyArt.url}
           alt="Body reference guide showing where each reference is used"
           className="h-full w-full object-contain"
+          onError={() => setArtOk(false)}
         />
         {usable.map((field) => {
           const spot = HOTSPOTS[field.category]!;
