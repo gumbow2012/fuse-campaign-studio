@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronDown } from "lucide-react";
@@ -26,8 +26,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import CampaignMediaGallery from "@/components/templates/CampaignMediaGallery";
 import AdminTemplateMediaManager from "@/components/templates/AdminTemplateMediaManager";
-import FavoriteTemplateButton from "@/components/templates/FavoriteTemplateButton";
-import { useTemplateFavorites } from "@/hooks/useTemplateFavorites";
 import { fetchTemplateDetailPage, type TemplateGalleryItem } from "@/services/templateDetailPage";
 import { fetchTemplates, type ApiTemplate } from "@/services/fuseApi";
 import { templateDetailPath, templateSlug } from "@/lib/templateSlug";
@@ -49,9 +47,7 @@ const STEPS = [
 
 export default function TemplateDetailPage() {
   const { slug = "" } = useParams();
-  const navigate = useNavigate();
-  const { isAdmin, user } = useAuth();
-  const { canFavorite, isFavorite, toggleFavorite } = useTemplateFavorites();
+  const { isAdmin } = useAuth();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [guideSelection, setGuideSelection] = useState<string | null>(null);
   /** Media column view: the campaign preview, or the reference guide when one exists. */
@@ -106,7 +102,6 @@ export default function TemplateDetailPage() {
   }, [catalogQuery.data, slug, template]);
 
   const creditCost = catalogEntry ? Number(catalogEntry.estimated_credits_per_run) : null;
-  const favoriteId = String(catalogEntry?.id ?? template?.id ?? "");
 
   /** Merchandised media: hero first (video-first), then the returned order. */
   const galleryItems = useMemo<TemplateGalleryItem[]>(() => {
@@ -256,22 +251,6 @@ export default function TemplateDetailPage() {
             <ArrowLeft className="h-4 w-4" aria-hidden />
             Campaigns
           </Link>
-          {favoriteId ? (
-            <FavoriteTemplateButton
-              favorite={canFavorite ? isFavorite(favoriteId) : false}
-              onToggle={() => {
-                /* Signed out: saving needs an account — send them to sign in and back. */
-                if (!user) {
-                  navigate(`/auth?returnTo=${encodeURIComponent(`/templates/${slug}`)}`);
-                  return;
-                }
-                toggleFavorite(favoriteId);
-              }}
-              label={canFavorite && isFavorite(favoriteId) ? "Saved" : "Save template"}
-              className="px-4 py-2"
-            />
-
-          ) : null}
         </header>
 
         {detailQuery.isLoading ? (
