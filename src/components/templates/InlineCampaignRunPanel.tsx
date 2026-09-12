@@ -1,22 +1,22 @@
 /**
  * INLINE CAMPAIGN RUN PANEL — the whole run flow inside the product page.
  *
- * Presentation-only relocation of the builder's run flow: it reuses the exact
- * same pieces (TemplateInputCard for asset slots, `upload-run-input` through
+ * Presentation was redesigned (calm Apple-style reference list + generation
+ * summary), but the pipeline is untouched: `upload-run-input` through
  * `uploadRunInputFile`, `start-template-run` / `start-free-video-run`,
- * `get-job-status` polling, CampaignBuildGraph + CampaignResults) so nothing
- * about execution, credits, entitlement or auth changes here.
+ * `get-job-status` polling and CampaignResultsStage all behave exactly as
+ * before, keyed by each field's real backend input key.
+ *
+ * The panel NEVER invents inputs: it renders whatever `configState` reports and
+ * refuses to generate while configuration is loading or failed.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Download, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import TemplateInputCard from "@/components/templates/TemplateInputCard";
-import { type PublicGraph } from "@/components/templates/CampaignBuildGraph";
+import { useNavigate } from "react-router-dom";
+import { AlertCircle, ArrowRight, Loader2, RefreshCw } from "lucide-react";
+import CampaignReferenceList from "@/components/campaigns/CampaignReferenceList";
 import CampaignResultsStage from "@/components/results/CampaignResultsStage";
-import CampaignResults, { type CampaignResultOutput } from "@/components/templates/CampaignResults";
+import { type CampaignResultOutput } from "@/components/templates/CampaignResults";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
@@ -24,7 +24,9 @@ import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { libraryKindForAssetType, saveLibraryAsset } from "@/services/libraryAssets";
 import { fetchMyFreeVideoEntitlement, startFreeVideoRun } from "@/services/freeVideoRun";
-import { readPublicFailure, type PublicGenerationFailure } from "@/lib/generationFailure";
+import { type PublicGenerationFailure } from "@/lib/generationFailure";
+import { type PublicGraph } from "@/components/templates/CampaignBuildGraph";
+import { readinessLine, type CampaignField, type CampaignFieldsState } from "@/lib/campaignFields";
 import { track } from "@/lib/analytics/track";
 import { trackFreeVideo } from "@/lib/analytics/freeVideoEvents";
 import { cn } from "@/lib/utils";
@@ -96,24 +98,6 @@ async function startTemplateRun(versionId: string, inputs: Record<string, string
   return data as { jobId?: string; error?: string };
 }
 
-async function downloadOutput(url: string, filename: string) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(String(response.status));
-    const blob = await response.blob();
-    const href = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = href;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(href);
-  } catch {
-    window.open(url, "_blank", "noopener");
-  }
-}
-
 interface Props {
   /** fuse_templates UUID — used by the free-video run. */
   templateId: string;
@@ -124,7 +108,13 @@ interface Props {
   creditCost: number | null;
   /** Catalog flag: this campaign offers the free first video. */
   freePreviewEnabled: boolean;
-  inputFields: RunInputField[];
+  /** Real configured inputs, with loading/failed distinguished from "none". */
+  configState: CampaignFieldsState;
+  /** "8 images · 9 video clips" — from the template's real output counts. */
+  deliverables?: string;
+  aspectLabel?: string;
+  /** Retry hook for failed configuration. */
+  onRetryConfig?: () => void;
   className?: string;
   /** Lets the page react to the run lifecycle (e.g. swap the gallery). */
   onPhaseChange?: (phase: "idle" | "inputs" | "running" | "complete" | "failed") => void;
@@ -137,7 +127,10 @@ export default function InlineCampaignRunPanel({
   slug,
   creditCost,
   freePreviewEnabled,
-  inputFields,
+  configState,
+  deliverables,
+  aspectLabel,
+  onRetryConfig,
   className,
   onPhaseChange,
 }: Props) {
@@ -145,7 +138,6 @@ export default function InlineCampaignRunPanel({
   const { user, profile, isAdmin, isCreator, refreshProfile } = useAuth();
   const privileged = isAdmin || isCreator;
 
-  const [stage, setStage] = useState<"cta" | "inputs">("cta");
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [libraryAssets, setLibraryAssets] = useState<Record<string, { url: string; name?: string | null } | null>>({});
   const [textInputs, setTextInputs] = useState<Record<string, string>>({});
@@ -157,17 +149,17 @@ export default function InlineCampaignRunPanel({
   /** Surfaced in the panel so a failed start is never an invisible no-op. */
   const [error, setError] = useState<string | null>(null);
 
-  const assetFields = inputFields.filter((field) => field.type === "image" || field.type === "video");
-  const textFields = inputFields.filter((field) => field.type !== "image" && field.type !== "video");
-  const hasInputs = inputFields.length > 0;
+  const configReady = configState.status === "ready";
+  const fields: CampaignField[] = configReady ? configState.fields : [];
+  const referenceFields = useMemo(() => fields.filter((field) => field.kind !== "text"), [fields]);
+  const textFields = useMemo(() => fields.filter((field) => field.kind === "text"), [fields]);
 
   /**
-   * Fresh visit = fresh CTA. Progress/error state only ever comes from a run
+   * Fresh visit = fresh state. Progress/error state only ever comes from a run
    * started in this session, so mounting (or switching templates) clears any
    * leftover run state instead of surfacing a prior interrupted job.
    */
   useEffect(() => {
-    setStage("cta");
     setFiles({});
     setLibraryAssets({});
     setTextInputs({});
@@ -177,7 +169,6 @@ export default function InlineCampaignRunPanel({
     setError(null);
     setPaywallOpen(false);
   }, [slug, templateId, versionId]);
-
 
   /* Signed-in free-video eligibility — read-only, server stays authoritative. */
   useEffect(() => {
@@ -198,13 +189,19 @@ export default function InlineCampaignRunPanel({
   const balance = Number(profile?.credits_balance ?? 0);
   const shortOnCredits = !!user && !privileged && creditCost != null && balance < creditCost && !freeRunAvailable;
 
-  const isFilled = (field: RunInputField) =>
-    field.type === "image" || field.type === "video"
-      ? !!files[field.key] || !!libraryAssets[field.key]?.url
-      : !!textInputs[field.key]?.trim();
+  const isFilled = useCallback(
+    (field: CampaignField) =>
+      field.kind === "text"
+        ? !!textInputs[field.id]?.trim()
+        : !!files[field.id] || !!libraryAssets[field.id]?.url,
+    [files, libraryAssets, textInputs],
+  );
 
-  const requiredReady = inputFields.filter((field) => field.required).every(isFilled);
-  const readyCount = inputFields.filter(isFilled).length;
+  const requiredFields = fields.filter((field) => field.required);
+  const missingRequired = requiredFields.filter((field) => !isFilled(field)).length;
+  const requiredReady = missingRequired === 0;
+  const requiredReferenceCount = referenceFields.filter((field) => field.required).length;
+  const addedRequiredCount = referenceFields.filter((field) => field.required && isFilled(field)).length;
 
   const phase: "idle" | "inputs" | "running" | "complete" | "failed" = result
     ? result.status === "complete"
@@ -212,9 +209,7 @@ export default function InlineCampaignRunPanel({
       : result.status === "failed"
         ? "failed"
         : "running"
-    : stage === "inputs"
-      ? "inputs"
-      : "idle";
+    : "inputs";
 
   const phaseRef = useRef(phase);
   useEffect(() => {
@@ -262,40 +257,40 @@ export default function InlineCampaignRunPanel({
   const collectInputs = useCallback(async () => {
     const uploaded = Object.fromEntries(
       await Promise.all(
-        assetFields
-          .filter((field) => files[field.key] || libraryAssets[field.key]?.url)
+        referenceFields
+          .filter((field) => files[field.id] || libraryAssets[field.id]?.url)
           .map(async (field) => {
-            const file = files[field.key];
-            if (!file) return [field.key, libraryAssets[field.key]!.url];
+            const file = files[field.id];
+            if (!file) return [field.id, libraryAssets[field.id]!.url];
             const url = await uploadRunInputFile(file);
             void saveLibraryAsset({
               kind: libraryKindForAssetType(undefined),
               url,
               name: file.name,
-              metadata: { source: "template_input", input_key: field.key },
+              metadata: { source: "template_input", input_key: field.id },
             });
-            return [field.key, url];
+            return [field.id, url];
           }),
       ),
     ) as Record<string, string>;
 
     const texts = Object.fromEntries(
       textFields
-        .map((field) => [field.key, textInputs[field.key]?.trim() ?? ""])
+        .map((field) => [field.id, textInputs[field.id]?.trim() ?? ""])
         .filter(([, value]) => value.length > 0),
     ) as Record<string, string>;
 
     return { ...texts, ...uploaded };
-  }, [assetFields, files, libraryAssets, textFields, textInputs]);
+  }, [files, libraryAssets, referenceFields, textFields, textInputs]);
 
   const runNow = useCallback(async () => {
-    if (hasInputs && !requiredReady) {
-      setError("Fill every required slot before generating.");
-      toast({
-        title: "Add your assets",
-        description: "Fill every required slot before generating.",
-        variant: "destructive",
-      });
+    if (submitting) return;
+    if (!configReady) {
+      setError("We're still loading this campaign's setup. Try again in a moment.");
+      return;
+    }
+    if (!requiredReady) {
+      setError(readinessLine(missingRequired));
       return;
     }
 
@@ -320,8 +315,8 @@ export default function InlineCampaignRunPanel({
       } catch (uploadError) {
         throw new Error(
           uploadError instanceof Error
-            ? `Asset upload failed — no credits were used. ${uploadError.message}`
-            : "Asset upload failed — no credits were used.",
+            ? `Upload failed — no credits were used. ${uploadError.message}`
+            : "Upload failed — no credits were used.",
         );
       }
 
@@ -357,21 +352,23 @@ export default function InlineCampaignRunPanel({
     }
   }, [
     collectInputs,
+    configReady,
     creditCost,
     freeRunAvailable,
-    hasInputs,
+    missingRequired,
     privileged,
     profile,
     refreshProfile,
     requiredReady,
     slug,
+    submitting,
     templateId,
     templateName,
     versionId,
   ]);
 
-  /** The single contextual CTA. Auth + entitlement behaviour is unchanged. */
-  const handleCta = () => {
+  /** Auth + entitlement behaviour is unchanged; only the copy is calmer. */
+  const handleGenerate = () => {
     if (!user) {
       navigate(
         `/auth?mode=signup&returnTo=${encodeURIComponent(`/templates/${slug}`)}&template=${encodeURIComponent(templateId)}`,
@@ -383,31 +380,38 @@ export default function InlineCampaignRunPanel({
       setPaywallOpen(true);
       return;
     }
-    /* Always advance the panel: upload slots when the campaign needs assets,
-       otherwise the confirm/generate step. Never a silent no-op. */
-    setError(null);
-    setStage("inputs");
+    void runNow();
   };
 
-  const ctaLabel = !user && freePreviewEnabled
-    ? "Try your first video free"
-    : freeRunAvailable
-      ? "Generate your free video"
-      : shortOnCredits
-        ? "Unlock access"
-        : "Run campaign";
-
-  const ctaSub = !user && freePreviewEnabled
-    ? "Create an account and generate one video with your product."
-    : freeRunAvailable
-      ? "Your first video is on us — no credits used."
-      : null;
-
   const costLine = freeRunAvailable
-    ? "Free first video"
+    ? "Free first video — no credits used"
     : creditCost != null
       ? `${creditCost} credits`
       : null;
+
+  const buttonLabel = !user
+    ? freePreviewEnabled
+      ? "Sign up to generate"
+      : "Sign in to generate"
+    : shortOnCredits
+      ? "Add credits"
+      : submitting
+        ? "Starting"
+        : freeRunAvailable
+          ? "Generate free video"
+          : "Generate";
+
+  const generateDisabled = submitting || (!!user && !shortOnCredits && (!configReady || !requiredReady));
+
+  const statusLine = !configReady
+    ? configState.status === "loading"
+      ? "Loading this campaign's setup…"
+      : "We couldn't load this campaign's setup."
+    : !user
+      ? "Create your account to generate this campaign."
+      : shortOnCredits
+        ? "You need more credits to run this campaign."
+        : readinessLine(missingRequired);
 
   /* ---------- rendering ---------- */
 
@@ -415,7 +419,6 @@ export default function InlineCampaignRunPanel({
     const restart = () => {
       setResult(null);
       setJobId(null);
-      setStage(hasInputs ? "inputs" : "cta");
     };
     return (
       <div className={cn("space-y-5", className)}>
@@ -425,147 +428,162 @@ export default function InlineCampaignRunPanel({
           onTerminal={() => void refreshProfile()}
           onRunAgain={restart}
         />
-        <Button
+        <button
           type="button"
-          variant="outline"
-          className="rounded-full border-white/20 text-[11px] uppercase tracking-[0.16em]"
           onClick={restart}
+          className="min-h-[44px] rounded-full border border-border px-5 text-[14px] font-medium text-foreground transition hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          Run again
-        </Button>
+          Start another
+        </button>
       </div>
     );
   }
 
-
   return (
-    <div className={cn("space-y-4", className)}>
-      {stage === "inputs" ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-slate-500">
-              {hasInputs ? "Add your product" : "Ready to generate"}
-            </p>
-            {hasInputs ? (
-              <p
-                className={cn(
-                  "font-mono text-[9px] uppercase tracking-[0.2em]",
-                  requiredReady ? "text-emerald-200" : "text-slate-500",
-                )}
-              >
-                {readyCount}/{inputFields.length} ready
-              </p>
-            ) : null}
-          </div>
-
-          {hasInputs ? null : (
-            <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm leading-6 text-slate-300">
-              This campaign needs no uploads — generate it now.
-            </p>
-          )}
-
-
-          {assetFields.map((field) => (
-            <TemplateInputCard
-              key={field.key}
-              label={field.label}
-              required={field.required}
-              compact
-              file={files[field.key] ?? null}
-              libraryAsset={libraryAssets[field.key] ?? null}
-              onFileChange={(file) => {
-                setFiles((current) => ({ ...current, [field.key]: file }));
-                if (file) setLibraryAssets((current) => ({ ...current, [field.key]: null }));
-              }}
-              onLibrarySelect={(asset) => {
-                setLibraryAssets((current) => ({ ...current, [field.key]: asset }));
-                setFiles((current) => ({ ...current, [field.key]: null }));
-              }}
-              onClear={() => {
-                setFiles((current) => ({ ...current, [field.key]: null }));
-                setLibraryAssets((current) => ({ ...current, [field.key]: null }));
-              }}
-            />
+    <div className={cn("space-y-8", className)}>
+      {configState.status === "loading" ? (
+        <section aria-busy className="space-y-4">
+          <div className="h-6 w-40 animate-pulse rounded-full bg-muted/60 motion-reduce:animate-none" />
+          {[0, 1].map((row) => (
+            <div key={row} className="flex items-center gap-4">
+              <div className="h-14 w-14 animate-pulse rounded-2xl bg-muted/60 motion-reduce:animate-none" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-28 animate-pulse rounded-full bg-muted/60 motion-reduce:animate-none" />
+                <div className="h-3 w-48 animate-pulse rounded-full bg-muted/40 motion-reduce:animate-none" />
+              </div>
+            </div>
           ))}
+        </section>
+      ) : configState.status === "error" ? (
+        <section className="rounded-[20px] border border-border/70 bg-muted/25 p-6">
+          <h2 className="flex items-center gap-2 text-[17px] font-semibold text-foreground">
+            <AlertCircle className="h-4 w-4 text-red-400" aria-hidden />
+            We couldn't load this campaign's setup
+          </h2>
+          <p className="mt-2 text-[14px] leading-6 text-muted-foreground">{configState.message}</p>
+          {onRetryConfig ? (
+            <button
+              type="button"
+              onClick={onRetryConfig}
+              className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border px-5 text-[14px] font-medium text-foreground transition hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden />
+              Try again
+            </button>
+          ) : null}
+        </section>
+      ) : referenceFields.length ? (
+        <CampaignReferenceList
+          fields={referenceFields}
+          files={files}
+          assets={libraryAssets}
+          addedCount={addedRequiredCount}
+          requiredCount={requiredReferenceCount}
+          onFileChange={(key, file) => {
+            setError(null);
+            setFiles((current) => ({ ...current, [key]: file }));
+            if (file) setLibraryAssets((current) => ({ ...current, [key]: null }));
+          }}
+          onClear={(key) => {
+            setFiles((current) => ({ ...current, [key]: null }));
+            setLibraryAssets((current) => ({ ...current, [key]: null }));
+          }}
+        />
+      ) : (
+        <section className="rounded-[20px] border border-border/70 bg-muted/25 p-6">
+          <h2 className="text-[17px] font-semibold text-foreground">No uploads needed</h2>
+          <p className="mt-1 text-[14px] leading-6 text-muted-foreground">
+            This campaign runs on its own — just generate it.
+          </p>
+        </section>
+      )}
 
+      {textFields.length ? (
+        <section className="space-y-4">
           {textFields.map((field) => (
-            <div key={field.key} className="space-y-1.5">
-              <label
-                htmlFor={`run-text-${field.key}`}
-                className="font-mono text-[9px] uppercase tracking-[0.22em] text-slate-400"
-              >
+            <div key={field.id} className="space-y-1.5">
+              <label htmlFor={`run-text-${field.id}`} className="text-[15px] font-medium text-foreground">
                 {field.label}
+                {field.required ? null : (
+                  <span className="ml-2 text-[13px] font-normal text-muted-foreground">Optional</span>
+                )}
               </label>
-              <Input
-                id={`run-text-${field.key}`}
-                value={textInputs[field.key] ?? ""}
-                onChange={(event) =>
-                  setTextInputs((current) => ({ ...current, [field.key]: event.target.value }))
-                }
-                className="border-white/12 bg-black/40 text-sm text-white"
+              <input
+                id={`run-text-${field.id}`}
+                value={textInputs[field.id] ?? ""}
+                onChange={(event) => {
+                  setError(null);
+                  setTextInputs((current) => ({ ...current, [field.id]: event.target.value }));
+                }}
+                className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-[15px] text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                placeholder={field.helper}
               />
             </div>
           ))}
+        </section>
+      ) : null}
 
-          {error ? (
-            <p className="rounded-xl border border-rose-400/25 bg-rose-500/[0.07] px-4 py-3 text-sm leading-6 text-rose-100">
-              {error}
-            </p>
+      {/* GENERATION SUMMARY */}
+      <section
+        aria-labelledby="campaign-summary-heading"
+        className="rounded-[22px] border border-border/70 bg-muted/20 p-6"
+      >
+        <h2 id="campaign-summary-heading" className="text-[19px] font-semibold text-foreground">
+          Your campaign
+        </h2>
+        <dl className="mt-4 space-y-2 text-[15px]">
+          {deliverables ? (
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">You get</dt>
+              <dd className="text-right font-medium text-foreground">{deliverables}</dd>
+            </div>
           ) : null}
-
-          <Button
-            type="button"
-            onClick={() => void runNow()}
-            disabled={!requiredReady || submitting}
-            className="w-full rounded-full bg-[hsl(var(--electric-cyan))] py-6 text-[12px] font-semibold uppercase tracking-[0.18em] text-slate-950 shadow-[0_0_40px_-12px_hsl(var(--electric-cyan)/0.85)] hover:bg-[hsl(var(--electric-blue))] disabled:opacity-45"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                Starting
-              </>
-            ) : (
-              <>
-                Generate
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </>
-            )}
-          </Button>
+          {aspectLabel ? (
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">Format</dt>
+              <dd className="text-right font-medium text-foreground">{aspectLabel}</dd>
+            </div>
+          ) : null}
           {costLine ? (
-            <p className="text-center font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500">
-              {costLine}
-            </p>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">Cost</dt>
+              <dd className="text-right font-medium text-foreground">{costLine}</dd>
+            </div>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setStage("cta")}
-            className="w-full text-center font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500 transition hover:text-slate-300"
+        </dl>
+
+        {error ? (
+          <p
+            role="alert"
+            className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/[0.08] px-4 py-3 text-[14px] leading-6 text-red-300"
           >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <>
-          <Button
-            type="button"
-            onClick={handleCta}
-            disabled={submitting}
-            className="w-full rounded-full bg-[hsl(var(--electric-cyan))] py-6 text-[12px] font-semibold uppercase tracking-[0.18em] text-slate-950 shadow-[0_0_40px_-12px_hsl(var(--electric-cyan)/0.85)] hover:bg-[hsl(var(--electric-blue))]"
-          >
-            {submitting ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <>
-                {ctaLabel}
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </>
-            )}
-          </Button>
-          {ctaSub ? (
-            <p className="text-center text-[11px] leading-5 text-slate-400">{ctaSub}</p>
+            {error}
+          </p>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={generateDisabled}
+          className={cn(
+            "mt-5 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full px-6 text-[16px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            generateDisabled
+              ? "cursor-not-allowed bg-muted text-muted-foreground"
+              : "bg-primary text-primary-foreground hover:opacity-90",
+          )}
+        >
+          {submitting ? (
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
           ) : null}
-        </>
-      )}
+          {buttonLabel}
+          {!submitting && !generateDisabled ? (
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          ) : null}
+        </button>
+        <p className="mt-3 text-center text-[13px] leading-5 text-muted-foreground" aria-live="polite">
+          {statusLine}
+        </p>
+      </section>
 
       <GeneratePaywallModal
         open={paywallOpen}
@@ -574,8 +592,6 @@ export default function InlineCampaignRunPanel({
         creditsRequired={creditCost ?? 0}
         creditBalance={balance}
       />
-      {/* Download affordance icon kept in the bundle for the results state. */}
-      <Download className="hidden" aria-hidden />
     </div>
   );
 }
