@@ -1,6 +1,6 @@
-// process-creator-payout — platform-initiated creator payouts (TEST MODE for money).
+// process-creator-payout — platform-initiated creator payouts (LIVE).
 // Claim-then-pay, idempotent, live payout-ready check. Auth: scheduled-job secret OR admin/dev JWT.
-// account_info supports {live:true} to READ the live account for go-live verification (read-only).
+// account_info supports {live:true} to READ the live Connect account for go-live verification (read-only).
 import {
   createAdminClient, requireUser, getUserRoles, json, errorMessage, corsHeaders,
 } from "../_shared/supabase-admin.ts";
@@ -8,15 +8,17 @@ import {
 const LIVEMODE = true;
 const STRIPE_VERSION = "2026-08-26.dahlia";
 
+// Creator transfers come from the DEDICATED Connect platform account (STRIPE_CONNECT_SECRET_KEY_*),
+// which is a different Stripe account from customer billing (STRIPE_SECRET_KEY_LIVE). Never share.
 function stripeKey(live = LIVEMODE) {
   if (live) {
-    const k = Deno.env.get("STRIPE_SECRET_KEY_LIVE") || "";
-    if (!k) throw new Error("Stripe LIVE key not configured (STRIPE_SECRET_KEY_LIVE).");
-    if (!k.startsWith("sk_live")) throw new Error("STRIPE_SECRET_KEY_LIVE is not a live key (must start with sk_live).");
+    const k = Deno.env.get("STRIPE_CONNECT_SECRET_KEY_LIVE") || "";
+    if (!k) throw new Error("Connect LIVE key not configured (STRIPE_CONNECT_SECRET_KEY_LIVE).");
+    if (!k.startsWith("sk_live")) throw new Error("STRIPE_CONNECT_SECRET_KEY_LIVE is not a live key (must start with sk_live).");
     return k;
   }
-  const k = Deno.env.get("STRIPE_SECRET_KEY_TEST") || "";
-  if (!k || !k.startsWith("sk_test")) throw new Error("Stripe test key not configured (STRIPE_SECRET_KEY_TEST).");
+  const k = Deno.env.get("STRIPE_CONNECT_SECRET_KEY_TEST") || "";
+  if (!k || !k.startsWith("sk_test")) throw new Error("Connect test key not configured (STRIPE_CONNECT_SECRET_KEY_TEST).");
   return k;
 }
 async function stripeForm(path: string, form: Record<string, string>, idem?: string) {
