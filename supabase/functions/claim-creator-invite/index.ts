@@ -67,6 +67,20 @@ Deno.serve(async (req) => {
       if (!myProfile) {
         await admin.from("creator_profiles").update({ user_id: user.id }).eq("user_id", placeholderId);
       }
+      // Homepage "featured drop" follows the creator to their real account — the featured-drops
+      // endpoint resolves the creator + template cards by featured_creators.user_id, so without
+      // this the section would keep pointing at the now-empty placeholder and render no cards.
+      await admin.from("featured_creators").update({ user_id: user.id }).eq("user_id", placeholderId);
+      // That same endpoint reads the display name + avatar from `profiles`; carry the curated
+      // placeholder identity onto the claimer wherever theirs is blank so the card keeps its look.
+      const { data: ph } = await admin.from("profiles").select("name, avatar_url").eq("user_id", placeholderId).maybeSingle();
+      if (ph) {
+        const { data: mine } = await admin.from("profiles").select("name, avatar_url").eq("user_id", user.id).maybeSingle();
+        const patch: Record<string, unknown> = {};
+        if (ph.name && !mine?.name) patch.name = ph.name;
+        if (ph.avatar_url && !mine?.avatar_url) patch.avatar_url = ph.avatar_url;
+        if (Object.keys(patch).length) await admin.from("profiles").update(patch).eq("user_id", user.id);
+      }
     }
 
     // 4) Ensure the claimer has a creator_profile.
