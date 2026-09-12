@@ -752,7 +752,9 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
 
       const session = await stripe.checkout.sessions.create({
         customer: customerId ?? undefined,
-        customer_email: guestMode || customerId ? undefined : checkoutIdentity.email ?? undefined,
+        customer_email: customerId
+          ? undefined
+          : (guestMode ? (checkoutEmail ?? undefined) : (checkoutIdentity.email ?? undefined)),
         ...(guestMode ? {} : { client_reference_id: checkoutIdentity.id ?? undefined }),
         line_items: [{ price: plan.priceId, quantity: 1 }],
         mode: "subscription",
@@ -769,6 +771,7 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
           template_id: templateId ?? "",
           template_name: templateName ?? "",
           fuse_checkout_intent_id: guestIntent?.id ?? "",
+          checkout_email: checkoutEmail ?? "",
           fbc: (typeof body.fbc === "string" ? body.fbc : "") || "",
           fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
           meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
@@ -1201,6 +1204,8 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
 
     const requestId = crypto.randomUUID();
     const admin = createAdminClient();
+    let verifiedEventId: string | null = null;
+    let eventRecorded = false;
 
     try {
       const signature = req.headers.get("stripe-signature");
@@ -1287,6 +1292,10 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
         stripe_price_id: stripePriceId,
         payload: event as unknown as Record<string, unknown>,
       });
+      if (!eventError) {
+        verifiedEventId = event.id;
+        eventRecorded = true;
+      }
       if (eventError) {
         if (eventError.code === "23505") {
           await logAuditEvent({
@@ -1783,6 +1792,19 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
       }, admin);
       return json({ received: true, ignored: event.type }, 200);
     } catch (error) {
+      // Processing failed after we recorded the event: remove our de-dup row so Stripe's
+      // automatic retry is processed instead of being rejected as a duplicate.
+      if (eventRecorded && verifiedEventId) {
+        try {
+          await admin
+            .from("billing_events")
+            .delete()
+            .eq("stripe_event_id", verifiedEventId)
+            .eq("billing_mode", mode);
+        } catch (cleanupError) {
+          console.error("billing_events cleanup failed:", errorMessage(cleanupError));
+        }
+      }
       await logAuditEvent({
         eventType: "stripe.webhook.failed",
         message: errorMessage(error),
