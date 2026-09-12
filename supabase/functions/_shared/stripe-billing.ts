@@ -1792,6 +1792,19 @@ export function createStripeWebhookHandler(mode: StripeBillingMode) {
       }, admin);
       return json({ received: true, ignored: event.type }, 200);
     } catch (error) {
+      // Processing failed after we recorded the event: remove our de-dup row so Stripe's
+      // automatic retry is processed instead of being rejected as a duplicate.
+      if (eventRecorded && verifiedEventId) {
+        try {
+          await admin
+            .from("billing_events")
+            .delete()
+            .eq("stripe_event_id", verifiedEventId)
+            .eq("billing_mode", mode);
+        } catch (cleanupError) {
+          console.error("billing_events cleanup failed:", errorMessage(cleanupError));
+        }
+      }
       await logAuditEvent({
         eventType: "stripe.webhook.failed",
         message: errorMessage(error),
