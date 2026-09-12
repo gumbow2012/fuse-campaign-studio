@@ -255,9 +255,16 @@ export default function CreatorPayouts() {
 
           <div className={panelClass}>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Want to see what you've earned so far?{" "}
+              Payouts land in the bank account on file.{" "}
+              <Link
+                to="/app/creator/bank"
+                className="text-cyan-200 underline-offset-4 hover:underline"
+              >
+                Check your bank account
+              </Link>{" "}
+              or{" "}
               <Link to="/app/creator" className="text-cyan-200 underline-offset-4 hover:underline">
-                Open your Earnings screen
+                open your Earnings screen
               </Link>
               .
             </p>

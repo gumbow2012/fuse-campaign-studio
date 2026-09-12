@@ -69,6 +69,7 @@ type SectionId =
   | "analytics"
   | "earnings"
   | "payouts"
+  | "bank"
   | "resources"
   | "challenges"
   | "rewards"
