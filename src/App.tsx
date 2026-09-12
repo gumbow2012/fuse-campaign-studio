@@ -136,6 +136,7 @@ const App = () => (
         <BrowserRouter>
           <UtmCapture />
           <PageTracking />
+          <ScrollToTop />
 
           <PageViewTracker />
           <CreditTopUpSuccessWatcher />
