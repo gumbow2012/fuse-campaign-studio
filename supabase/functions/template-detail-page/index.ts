@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
   let required_inputs: any[] = [], image_count = 0, video_count = 0, aspect_ratio = "9:16";
   if (vid) {
-    const { data: nodes } = await admin.from("nodes").select("id,node_type,name,sort_order,prompt_config").eq("version_id", vid);
+    const { data: nodes } = await admin.from("nodes").select("id,node_type,name,prompt_config").eq("version_id", vid);
     // Aspect ratio is whatever the exposed video nodes actually declare (most frequent wins).
     const ratioCounts: Record<string, number> = {};
     for (const n of nodes ?? []) {
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
           label: friendly(String(c.editor_label ?? n.name)),
           expected: c.expected ?? "image",
           required: c.required !== false,
-          sort_order: Number((n as any).sort_order ?? 0) || 0,
+          sort_order: Number(c.sort_order ?? 0) || 0,
         });
       }
       const exposed = c.output_exposed === true || c.output_exposed === "true";
