@@ -752,7 +752,9 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
 
       const session = await stripe.checkout.sessions.create({
         customer: customerId ?? undefined,
-        customer_email: guestMode || customerId ? undefined : checkoutIdentity.email ?? undefined,
+        customer_email: customerId
+          ? undefined
+          : (guestMode ? (checkoutEmail ?? undefined) : (checkoutIdentity.email ?? undefined)),
         ...(guestMode ? {} : { client_reference_id: checkoutIdentity.id ?? undefined }),
         line_items: [{ price: plan.priceId, quantity: 1 }],
         mode: "subscription",
@@ -769,6 +771,7 @@ export function createCheckoutHandler(mode: StripeBillingMode) {
           template_id: templateId ?? "",
           template_name: templateName ?? "",
           fuse_checkout_intent_id: guestIntent?.id ?? "",
+          checkout_email: checkoutEmail ?? "",
           fbc: (typeof body.fbc === "string" ? body.fbc : "") || "",
           fbp: (typeof body.fbp === "string" ? body.fbp : "") || "",
           meta_client_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim(),
