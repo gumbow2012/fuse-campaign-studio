@@ -4,6 +4,8 @@
  * never a substitute for a campaign's real preview media.
  */
 
+import { useState } from "react";
+
 import bodyArt from "@/assets/campaign-refs/body-guide.png.asset.json";
 import type { CampaignField } from "@/lib/campaignFields";
 import { cn } from "@/lib/utils";
