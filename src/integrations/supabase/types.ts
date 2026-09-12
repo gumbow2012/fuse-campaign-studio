@@ -616,6 +616,33 @@ export type Database = {
           },
         ]
       }
+      creator_payout_policy: {
+        Row: {
+          auto_payouts_enabled: boolean
+          created_at: string
+          currency: string
+          id: boolean
+          min_payout_cents: number
+          updated_at: string
+        }
+        Insert: {
+          auto_payouts_enabled?: boolean
+          created_at?: string
+          currency?: string
+          id?: boolean
+          min_payout_cents?: number
+          updated_at?: string
+        }
+        Update: {
+          auto_payouts_enabled?: boolean
+          created_at?: string
+          currency?: string
+          id?: boolean
+          min_payout_cents?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       creator_payouts: {
         Row: {
           amount_cents: number
@@ -1513,6 +1540,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      service_config: {
+        Row: {
+          created_at: string
+          key: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: []
       }
       streetwear_references: {
         Row: {
