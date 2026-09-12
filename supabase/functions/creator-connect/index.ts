@@ -1,5 +1,6 @@
 // creator-connect — Stripe Connect (Accounts v2) onboarding for creators as PAYOUT RECIPIENTS.
-// TEST MODE ONLY (livemode=false) until live money is explicitly authorized.
+// LIVE. Reads the DEDICATED Connect platform key (STRIPE_CONNECT_SECRET_KEY_*) — the payout
+// account is a different Stripe account from customer billing (STRIPE_SECRET_KEY_LIVE); never share.
 // FUSE collects ALL customer payments; creators only RECEIVE transfers + bank payouts, so the
 // connected account uses the v2 `recipient` configuration (stripe_balance.stripe_transfers) —
 // NOT merchant/card_payments. Onboarding status is always read LIVE from Stripe, never from a
@@ -16,16 +17,18 @@ import {
 const LIVEMODE = true;                        // live mode enabled
 const STRIPE_VERSION = "2026-08-26.dahlia";   // V2 Core endpoints require an explicit version header
 
+// The payout (Connect) platform account is a DIFFERENT Stripe account from customer billing.
+// Read its own key so a billing-key change can never repoint creator transfers, and vice versa.
 function stripeKey() {
   if (LIVEMODE) {
-    const k = Deno.env.get("STRIPE_SECRET_KEY_LIVE") || "";
-    if (!k) throw new Error("Stripe LIVE key not configured (STRIPE_SECRET_KEY_LIVE).");
-    if (!k.startsWith("sk_live")) throw new Error("STRIPE_SECRET_KEY_LIVE is not a live key (must start with sk_live).");
+    const k = Deno.env.get("STRIPE_CONNECT_SECRET_KEY_LIVE") || "";
+    if (!k) throw new Error("Connect LIVE key not configured (STRIPE_CONNECT_SECRET_KEY_LIVE).");
+    if (!k.startsWith("sk_live")) throw new Error("STRIPE_CONNECT_SECRET_KEY_LIVE is not a live key (must start with sk_live).");
     return k;
   }
-  const k = Deno.env.get("STRIPE_SECRET_KEY_TEST") || "";
-  if (!k) throw new Error("Stripe test key not configured (STRIPE_SECRET_KEY_TEST).");
-  if (!k.startsWith("sk_test")) throw new Error("STRIPE_SECRET_KEY_TEST is not a test key.");
+  const k = Deno.env.get("STRIPE_CONNECT_SECRET_KEY_TEST") || "";
+  if (!k) throw new Error("Connect test key not configured (STRIPE_CONNECT_SECRET_KEY_TEST).");
+  if (!k.startsWith("sk_test")) throw new Error("STRIPE_CONNECT_SECRET_KEY_TEST is not a test key.");
   return k;
 }
 
