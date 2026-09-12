@@ -24,10 +24,10 @@ async function verifySig(payload: string, header: string, secret: string): Promi
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const admin = createAdminClient();
-  const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET_TEST") || "";
+  const secret = Deno.env.get("STRIPE_CONNECT_WEBHOOK_SECRET_LIVE") || Deno.env.get("STRIPE_WEBHOOK_SECRET_TEST") || "";
   const sig = req.headers.get("stripe-signature") || "";
   const body = await req.text();
-  if (!secret) return json({ error: "webhook secret not configured (STRIPE_WEBHOOK_SECRET_TEST)" }, 500);
+  if (!secret) return json({ error: "webhook secret not configured (STRIPE_CONNECT_WEBHOOK_SECRET_LIVE)" }, 500);
   if (!sig || !(await verifySig(body, sig, secret))) return json({ error: "invalid signature" }, 400);
 
   let event: any; try { event = JSON.parse(body); } catch { return json({ error: "bad json" }, 400); }
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     }
 
     if (acctId && (type.startsWith("account.") || type.includes("account["))) {
-      const key = Deno.env.get("STRIPE_SECRET_KEY_TEST") || "";
+      const key = Deno.env.get("STRIPE_CONNECT_SECRET_KEY_LIVE") || Deno.env.get("STRIPE_CONNECT_SECRET_KEY_TEST") || "";
       if (key) {
         const q = "include=configuration.recipient&include=requirements&include=identity";
         const r = await fetch(`https://api.stripe.com/v2/core/accounts/${acctId}?${q}`, { headers: { Authorization: `Bearer ${key}`, "Stripe-Version": STRIPE_VERSION } });
