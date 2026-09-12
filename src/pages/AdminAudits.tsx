@@ -838,27 +838,39 @@ const AdminAudits = () => {
     [filteredJobs, selectedJobId],
   );
 
+  /**
+   * Deep-link handling. When the page is opened with ?jobId= (or ?versionId=) we clear the
+   * filters once so the linked run is visible. These effects must depend ONLY on the URL
+   * params — listing the filter/search state as dependencies made them re-fire on every
+   * keystroke and filter change and immediately wipe the user's input.
+   * `handledJobIdRef` also lets us ignore jobId values we pushed into the URL ourselves
+   * (see the sync effect below), so clicking a run never resets the search.
+   */
+  const handledJobIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (jobIdParam && allJobs.some((job) => job.id === jobIdParam)) {
-      setSelectedJobId(jobIdParam);
-      if (search) setSearch("");
-      if (filter !== "all") setFilter("all");
-      if (dateWindow !== "all") setDateWindow("all");
-      if (templateFilter !== "all") setTemplateFilter("all");
-      if (planFilter !== "all") setPlanFilter("all");
-      if (subscriptionFilter !== "all") setSubscriptionFilter("all");
-    }
-  }, [allJobs, dateWindow, filter, jobIdParam, planFilter, search, subscriptionFilter, templateFilter]);
+    if (!jobIdParam) return;
+    if (handledJobIdRef.current === jobIdParam) return;
+    if (!allJobs.some((job) => job.id === jobIdParam)) return;
+    handledJobIdRef.current = jobIdParam;
+    setSelectedJobId(jobIdParam);
+    setSearch("");
+    setFilter("all");
+    setDateWindow("all");
+    setTemplateFilter("all");
+    setPlanFilter("all");
+    setSubscriptionFilter("all");
+  }, [allJobs, jobIdParam]);
 
   useEffect(() => {
     if (!versionIdParam || jobIdParam) return;
-    if (search) setSearch("");
-    if (filter !== "all") setFilter("all");
-    if (dateWindow !== "all") setDateWindow("all");
-    if (templateFilter !== "all") setTemplateFilter("all");
-    if (planFilter !== "all") setPlanFilter("all");
-    if (subscriptionFilter !== "all") setSubscriptionFilter("all");
-  }, [dateWindow, filter, jobIdParam, planFilter, search, subscriptionFilter, templateFilter, versionIdParam]);
+    setSearch("");
+    setFilter("all");
+    setDateWindow("all");
+    setTemplateFilter("all");
+    setPlanFilter("all");
+    setSubscriptionFilter("all");
+  }, [jobIdParam, versionIdParam]);
 
   useEffect(() => {
     if (!filteredJobs.length) {
