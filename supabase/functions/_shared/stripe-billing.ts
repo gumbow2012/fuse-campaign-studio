@@ -1078,20 +1078,58 @@ export function createCustomerPortalHandler(mode: StripeBillingMode) {
         },
       }, admin);
 
-      const stripe = createStripeClient(getStripeSecretKey(mode));
+      // Pre-migration subscribers live on the legacy billing account; new customers on the
+      // current one. Serve each from the account that holds their customer, and never create a
+      // phantom customer (or overwrite the stored id) for someone who exists on legacy.
+      const LEGACY_BILLING_ACCOUNT_ID = "acct_1U3RpULgUcIQNya0";
+      const liveKey = getStripeSecretKey(mode);
+      const legacyKey = mode === "live" ? (Deno.env.get("STRIPE_SECRET_KEY_LIVE_LEGACY")?.trim() || null) : null;
       const { data: profile } = await admin
         .from("profiles")
-        .select("stripe_customer_id")
+        .select("stripe_customer_id, stripe_price_id")
         .eq("user_id", user.id)
         .maybeSingle();
 
+      // A subscriber whose plan price is a legacy-account price is looked up on legacy first.
+      let legacyFirst = false;
+      if (legacyKey && profile?.stripe_price_id) {
+        const { data: priceRow } = await admin
+          .from("billing_prices")
+          .select("stripe_account_id")
+          .eq("stripe_price_id", profile.stripe_price_id)
+          .maybeSingle();
+        legacyFirst = priceRow?.stripe_account_id === LEGACY_BILLING_ACCOUNT_ID;
+      }
+
+      let stripe = createStripeClient(legacyFirst && legacyKey ? legacyKey : liveKey);
+      let onLegacyAccount = legacyFirst && !!legacyKey;
       let customerId = await findStripeCustomerId({
         stripe,
         storedCustomerId: profile?.stripe_customer_id ?? null,
         email: user.email,
       });
 
+      // Not where we looked first? Try the other account before ever creating anything.
+      if (!customerId && legacyKey) {
+        const other = createStripeClient(onLegacyAccount ? liveKey : legacyKey);
+        const otherId = await findStripeCustomerId({
+          stripe: other,
+          storedCustomerId: profile?.stripe_customer_id ?? null,
+          email: user.email,
+        });
+        if (otherId) {
+          stripe = other;
+          customerId = otherId;
+          onLegacyAccount = !onLegacyAccount;
+        }
+      }
+
       if (!customerId) {
+        // Truly new: always created on the current account, never on legacy.
+        if (onLegacyAccount) {
+          stripe = createStripeClient(liveKey);
+          onLegacyAccount = false;
+        }
         const createdCustomer = await stripe.customers.create({
           email: user.email,
           metadata: {
@@ -1102,6 +1140,8 @@ export function createCustomerPortalHandler(mode: StripeBillingMode) {
         customerId = createdCustomer.id;
       }
 
+      // Keep the stored id pointing at the customer that actually holds the subscription
+      // (this also repairs any profile previously overwritten with a phantom id).
       if (customerId !== profile?.stripe_customer_id) {
         await admin
           .from("profiles")
@@ -1110,27 +1150,13 @@ export function createCustomerPortalHandler(mode: StripeBillingMode) {
       }
 
       const origin = req.headers.get("origin") || "https://example.com";
-      const portalParams = {
+      const portalSession = await stripe.billingPortal.sessions.create({
         customer: customerId,
-        configuration: getStripePortalConfigurationId(mode) ?? undefined,
+        // The configured portal id belongs to the current account; legacy uses its default.
+        configuration: onLegacyAccount ? undefined : (getStripePortalConfigurationId(mode) ?? undefined),
         return_url: new URL("/billing", origin).toString(),
-      };
-      let portalStripe = stripe;
-      let portalSession;
-      try {
-        portalSession = await portalStripe.billingPortal.sessions.create(portalParams);
-      } catch (err) {
-        const legacyKey = mode === "live" ? Deno.env.get("STRIPE_SECRET_KEY_LIVE_LEGACY")?.trim() : "";
-        const code = (err as { code?: string })?.code;
-        if (!legacyKey || code !== "resource_missing") throw err;
-        // Customer lives on the legacy billing account — retry there (without the
-        // current account's portal configuration id, which does not exist there).
-        portalStripe = createStripeClient(legacyKey);
-        portalSession = await portalStripe.billingPortal.sessions.create({
-          customer: portalParams.customer,
-          return_url: portalParams.return_url,
-        });
-      }
+      });
+
 
       await logAuditEvent({
         eventType: "stripe.portal.created",
