@@ -77,6 +77,7 @@ export default function BeforeAfterProofPreview({
                   {pair.outputType === "video" ? (
                     <video
                       src={pair.outputSrc}
+                      poster={pair.posterSrc}
                       muted
                       loop
                       autoPlay
@@ -101,10 +102,18 @@ export default function BeforeAfterProofPreview({
                   {pair.template} · {pair.useCase}
                 </span>
                 {internalLabels ? (
-                  <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Approval needed
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      Approval needed
+                    </span>
+                    {pair.rightsNote ? (
+                      <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        {pair.rightsNote}
+                      </span>
+                    ) : null}
                   </span>
                 ) : null}
+
               </figcaption>
             </figure>
           );
