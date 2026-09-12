@@ -120,8 +120,9 @@ const CATEGORY_ART: Partial<Record<CampaignRefCategory, string>> = {
 export const BODY_GUIDE_ART = "/campaign-refs/body-guide.png";
 
 
-export function categoryArtwork(category: CampaignRefCategory): string | null {
-  return CATEGORY_ART[category] ?? null;
+/** Categories without dedicated artwork fall back to the accessory illustration. */
+export function categoryArtwork(category: CampaignRefCategory): string {
+  return CATEGORY_ART[category] ?? "/campaign-refs/accessory.png";
 }
 
 /** Internal-looking labels get replaced by the friendly category name. */
