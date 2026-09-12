@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
               responsibilities: { fees_collector: "application", losses_collector: "application" },
               locales: ["en-US"],
             },
-            metadata: { fuse_user_id: user.id, env: "test" },
+            metadata: { fuse_user_id: user.id, env: LIVEMODE ? "live" : "test" },
             include: ["configuration.recipient", "requirements", "identity"],
           },
           `connect-create-${user.id}-${LIVEMODE}`, // idempotent: double-clicks can't make two accounts
