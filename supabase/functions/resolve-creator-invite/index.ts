@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     const { data, error } = await admin
       .from("creator_invites")
       .select(
-        "status, action_link, created_at, last_sent_at, first_name, instagram_handle, display_name, personal_note",
+        "status, action_link, accepted_user_id, created_at, last_sent_at, first_name, instagram_handle, display_name, personal_note",
       )
       .eq("branded_token", token)
       .maybeSingle();
