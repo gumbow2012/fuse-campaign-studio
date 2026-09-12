@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/contexts/BrandContext";
 import { StreakProvider } from "@/hooks/useStreak";
 import { PageTracking } from "@/hooks/usePageTracking";
+import { ScrollToTop } from "@/components/ScrollToTop";
 import { PageViewTracker } from "@/lib/analytics/usePageViews";
 import CreditTopUpSuccessWatcher from "@/components/mvp/CreditTopUpSuccessWatcher";
 import WelcomeActivationModal from "@/components/brand/WelcomeActivationModal";
@@ -136,6 +137,7 @@ const App = () => (
         <BrowserRouter>
           <UtmCapture />
           <PageTracking />
+          <ScrollToTop />
 
           <PageViewTracker />
           <CreditTopUpSuccessWatcher />
