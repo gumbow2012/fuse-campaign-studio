@@ -383,11 +383,31 @@ export default function InlineCampaignRunPanel({
     void runNow();
   };
 
-  const costLine = freeRunAvailable
-    ? "Free first video — no credits used"
-    : creditCost != null
-      ? `${creditCost} credits`
-      : null;
+  /**
+   * CRO: a signed-out visitor buys, so the summary shows the plan they join.
+   * Signed-in visitors keep the real credit cost — that is their spend point.
+   */
+  const croSignedOut = croEnabled("croCampaignPagesDefault") && !user;
+
+  const costLabel = croSignedOut ? "Plan" : "Cost";
+  const costLine = croSignedOut
+    ? "Included in Starter"
+    : freeRunAvailable
+      ? "Free first video — no credits used"
+      : creditCost != null
+        ? `${creditCost} credits`
+        : null;
+
+  /** Same guest Starter checkout the access modal and pricing page already use. */
+  const startGuestCheckout = () => {
+    track("guest_checkout_started", { template_id: templateId });
+    void startPlanCheckout("starter", {
+      templateId,
+      templateName,
+      returnPath: `/templates/${slug}`,
+    });
+  };
+
 
   const buttonLabel = !user
     ? freePreviewEnabled
