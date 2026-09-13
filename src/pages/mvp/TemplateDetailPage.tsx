@@ -18,6 +18,10 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import InlineCampaignRunPanel from "@/components/templates/InlineCampaignRunPanel";
+import CampaignValueBox from "@/components/cro/CampaignValueBox";
+import CampaignCtaButton, { type CroCtaState } from "@/components/cro/CampaignCtaButton";
+import { CAMPAIGN_OFFER_SUBLINE } from "@/lib/croOffer";
+import { croEnabled } from "@/config/featureFlags";
 import CampaignBodyGuide, { bodyGuideFields } from "@/components/campaigns/CampaignBodyGuide";
 
 import SiteShell from "@/components/mvp/SiteShell";
@@ -47,7 +51,7 @@ const STEPS = [
 
 export default function TemplateDetailPage() {
   const { slug = "" } = useParams();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user, profile } = useAuth();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [guideSelection, setGuideSelection] = useState<string | null>(null);
   /** Media column view: the campaign preview, or the reference guide when one exists. */
@@ -57,6 +61,11 @@ export default function TemplateDetailPage() {
     "idle",
   );
   const setupRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * CTA state for the CRO button. Presentation only: the handler scrolls to the
+   * existing setup panel, which owns checkout, generation and upgrade.
+   */
 
   /* Calm chrome: this page drops the decorative background grid. */
   useEffect(() => {
@@ -102,6 +111,16 @@ export default function TemplateDetailPage() {
   }, [catalogQuery.data, slug, template]);
 
   const creditCost = catalogEntry ? Number(catalogEntry.estimated_credits_per_run) : null;
+
+  /**
+   * CTA state for the CRO button. Presentation only: the handler scrolls to the
+   * existing setup panel, which owns checkout, generation and upgrade.
+   */
+  const croCtaState: CroCtaState = !user
+    ? "signed_out"
+    : !isAdmin && creditCost != null && creditCost > 0 && (profile?.credits_balance ?? 0) < creditCost
+      ? "no_credits"
+      : "active";
 
   /** Merchandised media: hero first (video-first), then the returned order. */
   const galleryItems = useMemo<TemplateGalleryItem[]>(() => {
@@ -354,6 +373,16 @@ export default function TemplateDetailPage() {
                   </p>
                 ) : null}
 
+                {/* What you upload / get / plan — real counts, credits behind Advanced. */}
+                {croEnabled("croCampaignPagesDefault") && slug ? (
+                  <CampaignValueBox
+                    slug={slug}
+                    className="mt-6"
+                    showCta={false}
+                    offerSubline={CAMPAIGN_OFFER_SUBLINE}
+                  />
+                ) : null}
+
                 {runTemplateId || configState.status !== "ready" ? (
                   <InlineCampaignRunPanel
                     className="mt-8"
@@ -490,22 +519,39 @@ export default function TemplateDetailPage() {
             <div className="min-w-0">
               <p className="truncate text-[15px] font-medium text-foreground">{template.name}</p>
               <p className="truncate text-[13px] text-muted-foreground">
-                {[deliverables, creditCost != null ? `${creditCost} credits` : null]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {croEnabled("croCampaignPagesDefault")
+                  ? [deliverables, "Included in Starter"].filter(Boolean).join(" · ")
+                  : [deliverables, creditCost != null ? `${creditCost} credits` : null]
+                      .filter(Boolean)
+                      .join(" · ")}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setupRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              className="shrink-0 rounded-full bg-primary px-5 py-3 text-[15px] font-semibold text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {runPhase === "complete"
-                ? "See results"
-                : runPhase === "running"
-                  ? "Generating…"
-                  : "Get started"}
-            </button>
+            {croEnabled("croCampaignPagesDefault") && runPhase !== "complete" && runPhase !== "running" ? (
+              <div className="w-[190px] shrink-0">
+                <CampaignCtaButton
+                  state={croCtaState}
+                  surface="mobile_bar"
+                  templateSlug={slug ?? ""}
+                  logOnly={false}
+                  compact
+                  onActivate={() =>
+                    setupRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setupRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                className="shrink-0 rounded-full bg-primary px-5 py-3 text-[15px] font-semibold text-primary-foreground transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {runPhase === "complete"
+                  ? "See results"
+                  : runPhase === "running"
+                    ? "Generating…"
+                    : "Get started"}
+              </button>
+            )}
           </div>
         </div>
       ) : null}

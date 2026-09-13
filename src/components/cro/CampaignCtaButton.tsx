@@ -11,20 +11,24 @@ const LABELS: Record<CroCtaState, string> = {
 };
 
 /**
- * One CTA with explicit states. On the preview route it logs only and never
- * navigates to checkout.
+ * One CTA with explicit states. It never contains its own commerce logic: the
+ * caller passes the handler the surface already used, so checkout, generation
+ * and upgrade behaviour are unchanged.
  */
 export default function CampaignCtaButton({
   state,
   surface,
   templateSlug,
   logOnly = true,
+  compact = false,
   onActivate,
 }: {
   state: CroCtaState;
   surface: CroCtaSurface;
   templateSlug: string;
   logOnly?: boolean;
+  /** Tighter type scale for dense card grids. */
+  compact?: boolean;
   onActivate?: () => void;
 }) {
   const ctaText = LABELS[state];
@@ -40,12 +44,16 @@ export default function CampaignCtaButton({
   };
 
   return (
-    <div className="space-y-2">
-      <Button size="lg" className="w-full" onClick={handleClick}>
+    <div className={compact ? "space-y-1" : "space-y-2"}>
+      <Button
+        size={compact ? "sm" : "lg"}
+        className={compact ? "h-8 w-full whitespace-normal px-2 text-[10.5px] leading-tight" : "w-full"}
+        onClick={handleClick}
+      >
         {ctaText}
       </Button>
       {state === "signed_out" ? (
-        <p className="text-sm text-muted-foreground">
+        <p className={compact ? "text-[10px] leading-4 text-muted-foreground" : "text-sm text-muted-foreground"}>
           Included in Starter. Create up to 3 campaigns/month.
         </p>
       ) : null}

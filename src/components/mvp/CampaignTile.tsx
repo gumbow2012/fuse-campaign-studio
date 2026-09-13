@@ -125,6 +125,8 @@ export interface CampaignTileProps {
   overlay?: ReactNode;
   /** Media aspect classes (presentation only). Defaults to 4:5. */
   mediaAspectClassName?: string;
+  /** Optional outcome + CTA block rendered under the name. */
+  footer?: ReactNode;
 }
 
 export default function CampaignTile({
@@ -144,6 +146,7 @@ export default function CampaignTile({
   onImpression,
   overlay,
   mediaAspectClassName = "aspect-[4/5]",
+  footer,
 }: CampaignTileProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const impressionSent = useRef(false);
@@ -259,6 +262,8 @@ export default function CampaignTile({
           </button>
         ) : null}
       </div>
+
+      {footer}
     </div>
   );
 }

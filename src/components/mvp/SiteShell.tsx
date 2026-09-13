@@ -15,10 +15,20 @@ import FeatureNewBadge from "@/components/FeatureNewBadge";
 import SiteFooter from "@/components/mvp/SiteFooter";
 import PromoOfferBar from "@/components/mvp/PromoOfferBar";
 import type { FeatureKey } from "@/lib/featureRegistry";
+import { croEnabled } from "@/config/featureFlags";
 
+/**
+ * ONE OFFER — the signed-out header CTA never sits next to a free promise. The
+ * free first video keeps working and is reached from its own section low on the
+ * homepage and at the bottom of /pricing.
+ */
+const signedOutCta = croEnabled("croOfferDefault")
+  ? { label: "See Campaigns", to: "/app/templates" }
+  : { label: "Free first video", to: "/auth?mode=signup" };
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
 
 type PrimaryLink = { label: string; to?: string; href?: string; end?: boolean };
 
@@ -230,7 +240,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                   <Link to="/auth?mode=signin">Sign in</Link>
                 </Button>
                 <Button asChild className={cn("h-9 rounded-full bg-cyan-300 px-3 text-sm font-semibold text-slate-950 hover:bg-cyan-200", focusRing)}>
-                  <Link to="/auth?mode=signup">Free first video</Link>
+                  <Link to={signedOutCta.to}>{signedOutCta.label}</Link>
                 </Button>
               </div>
             )}
@@ -325,8 +335,8 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                     ) : (
                       <>
                         <Button asChild className={cn("min-h-11 w-full rounded-full bg-cyan-300 text-slate-950 hover:bg-cyan-200", focusRing)}>
-                          <Link to="/auth?mode=signup" onClick={closeMenu}>
-                            Free first video
+                          <Link to={signedOutCta.to} onClick={closeMenu}>
+                            {signedOutCta.label}
                           </Link>
                         </Button>
                         <Button
@@ -413,7 +423,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                         <Link to="/auth?mode=signin">Sign in</Link>
                       </Button>
                       <Button asChild className={cn("h-10 rounded-full bg-cyan-300 px-5 text-sm font-semibold text-slate-950 hover:bg-cyan-200", focusRing)}>
-                        <Link to="/auth?mode=signup">Free first video</Link>
+                        <Link to={signedOutCta.to}>{signedOutCta.label}</Link>
                       </Button>
                     </>
 

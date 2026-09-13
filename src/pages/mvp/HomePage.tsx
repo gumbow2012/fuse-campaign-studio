@@ -32,6 +32,8 @@ import {
 } from "@/services/templatePerformance";
 import { PerformanceBlock, PerformanceDisclaimer } from "@/components/TemplatePerformance";
 import HeroCampaignTiles from "@/components/mvp/HeroCampaignTiles";
+import FreeSampleSection from "@/components/cro/FreeSampleSection";
+import { croEnabled } from "@/config/featureFlags";
 import { templateDetailPath } from "@/lib/templateSlug";
 import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
 import FeaturedCollabSection from "@/components/mvp/FeaturedCollabSection";
@@ -1270,6 +1272,9 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* 8b · FREE SAMPLE — deliberately low on the page, never beside a paid offer. */}
+      {croEnabled("croOfferDefault") ? <FreeSampleSection /> : null}
 
       {/* 8 · FINAL CTA */}
       <section className="container pb-16">

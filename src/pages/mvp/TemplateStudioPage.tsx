@@ -120,7 +120,10 @@ import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaignOutputs";
 import { campaignDisplayName } from "@/lib/campaignDisplayName";
 import CampaignTile from "@/components/mvp/CampaignTile";
-import { templateDetailPath } from "@/lib/templateSlug";
+import CampaignTileFooter from "@/components/cro/CampaignTileFooter";
+import type { CroCtaState } from "@/components/cro/CampaignCtaButton";
+import { croEnabled } from "@/config/featureFlags";
+import { templateDetailPath, templateSlug } from "@/lib/templateSlug";
 
 
 /**
@@ -1599,6 +1602,35 @@ export default function TemplateStudioPage() {
   const creditBalance = profile?.credits_balance ?? null;
   const displayedCreditBalance = creditBalance ?? 0;
   const profileIsResolving = !!user && !isPrivilegedUser && !profile;
+
+  /**
+   * CRO card CTA state. Nothing here decides pricing or credits — it only picks
+   * which existing route the card sends the visitor to.
+   */
+  const croCardState = useCallback(
+    (creditsForRun: number): CroCtaState => {
+      if (!user) return "signed_out";
+      if (isPrivilegedUser) return "active";
+      const balance = profile?.credits_balance ?? 0;
+      if (creditsForRun > 0 && balance < creditsForRun) return "no_credits";
+      return "active";
+    },
+    [isPrivilegedUser, profile?.credits_balance, user],
+  );
+
+  const croCardActivate = useCallback(
+    (template: { id: string; name?: string | null; estimated_credits_per_run?: number | null }) => {
+      const state = croCardState(Number(template.estimated_credits_per_run ?? 0));
+      if (state === "no_credits") {
+        navigate("/pricing");
+        return;
+      }
+      // Signed-out and ready members both continue on the campaign page, which
+      // already owns the checkout start and the generate handler.
+      navigate(templateDetailPath(template as Parameters<typeof templateDetailPath>[0]));
+    },
+    [croCardState, navigate],
+  );
   // FREEMIUM: generation is gated on credits, not on membership status.
 
   const adminVisualRemaining = getAdminVisualCreditsRemaining();
@@ -2713,7 +2745,10 @@ export default function TemplateStudioPage() {
         ? missingAssetLabel
         : "Generate my free video →"
     : entitlementLocked
-    ? "Unlock access →"
+    ? croEnabled("croCampaignPagesDefault")
+      ? "Get this campaign →"
+      : "Unlock access →"
+
     : !requiredInputsAreReady
       ? missingAssetLabel
       : checkingCredits
@@ -2726,7 +2761,7 @@ export default function TemplateStudioPage() {
               ? "Generating..."
               : isPrivilegedUser
                 ? "Run template →"
-                : `Run template → ${creditsRequired} cr`;
+                : `Run template → ${creditsRequired} credits`;
 
 
   const inlineBuilderNode =
@@ -2735,7 +2770,7 @@ export default function TemplateStudioPage() {
         key={selectedTemplate.id}
         ref={inlineBuilderRef}
         templateName={selectedTemplate.name}
-        metaLine={`${formatCount(inputFields.length, "input", "inputs")} · ${formatCampaignOutputs(selectedTemplate.counts)} · ${creditsRequired} cr`}
+        metaLine={`${formatCount(inputFields.length, "input", "inputs")} · ${formatCampaignOutputs(selectedTemplate.counts)} · ${creditsRequired} credits`}
         readyCount={readyGroupCount}
         totalCount={totalGroupCount}
         creditsLabel={costDisplay}
@@ -3247,7 +3282,11 @@ export default function TemplateStudioPage() {
                     templateId={String(template.id)}
                     displayName={campaignDisplayName(template.name)}
                     fullName={template.name}
-                    outputsLabel={formatCampaignOutputs(template.counts)}
+                    outputsLabel={
+                      croEnabled("croCampaignPagesDefault") && !selectMode
+                        ? undefined
+                        : formatCampaignOutputs(template.counts)
+                    }
                     previewUrl={template.preview_url}
                     isVideo={isVideoPreview(template)}
                     selected={selectMode ? batchSelected : selected}
@@ -3275,6 +3314,17 @@ export default function TemplateStudioPage() {
                     onImpression={() => {
                       track("marketplace_card_impression", { template_id: template.id });
                     }}
+                    footer={
+                      croEnabled("croCampaignPagesDefault") && !selectMode ? (
+                        <CampaignTileFooter
+                          imageOutputs={Number(template.counts?.imageOutputs ?? 0)}
+                          videoOutputs={Number(template.counts?.videoOutputs ?? 0)}
+                          templateSlug={templateSlug(template)}
+                          state={croCardState(Number(template.estimated_credits_per_run ?? 0))}
+                          onActivate={() => croCardActivate(template)}
+                        />
+                      ) : undefined
+                    }
                     overlay={
                       <>
                         {canFavorite && !selectMode ? (
@@ -3441,7 +3491,7 @@ export default function TemplateStudioPage() {
                       )}
 
                       <span className="inline-flex items-center gap-1 rounded-full border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                        {isPrivilegedUser ? <span className="line-through decoration-cyan-200/90 decoration-2">{creditsRequired} cr</span> : `${creditsRequired} cr`}
+                        {isPrivilegedUser ? <span className="line-through decoration-cyan-200/90 decoration-2">{creditsRequired} cr</span> : `${creditsRequired} credits`}
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button type="button" aria-label="Run cost info" className="text-slate-400 transition-colors hover:text-slate-200">

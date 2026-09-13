@@ -14,7 +14,10 @@ import {
 import { formatMoney, getPlanOffer, type BillingPeriod } from "@/lib/planOffer";
 import { planDifferentiators } from "@/lib/planFeatureModules";
 import { MEDIAN_CAMPAIGN_TOOLTIP, typicalCapacityLabel } from "@/lib/creditOutputs";
+import { CREDITS_BEHIND_THE_SCENES, campaignCapacityLine } from "@/lib/croOffer";
+import { croEnabled } from "@/config/featureFlags";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 import type { STRIPE_TIERS } from "@/lib/stripe-config";
 import {
   STARTER_WELCOME_BADGE,
@@ -180,6 +183,11 @@ function PlanCard({
   const { inherits, items } = planDifferentiators(entry.key);
   const elevated = entry.recommendation === "MOST POPULAR";
 
+  /** Campaign-first framing: plans are sold in campaigns, not raw credits. */
+  const campaignLine = campaignCapacityLine(entry.stripeTierKey ?? entry.key);
+  const campaignFirst = croEnabled("croPricingDefault") && !!campaignLine;
+
+
   return (
     <article
       className={`relative flex flex-col overflow-hidden rounded-2xl border backdrop-blur-sm transition-transform duration-200 hover:-translate-y-1 motion-reduce:transform-none motion-reduce:transition-none ${
@@ -215,30 +223,48 @@ function PlanCard({
       <p className={`mt-3 text-[11px] uppercase tracking-[0.2em] ${accent.tagline}`}>{entry.tagline}</p>
       <p className="mt-2 text-sm leading-6 text-slate-300">{entry.description}</p>
 
-      {/* 3 — CREDIT BLOCK + typical campaign capacity (median-based equivalent) */}
-      <div className={`mt-4 rounded-xl border px-3.5 py-3 ${accent.creditBlock}`}>
-        <p className={`flex items-center gap-1.5 font-display text-sm font-bold ${accent.metric}`}>
-          <Sparkle className="h-3.5 w-3.5" aria-hidden />
-          {credits > 0 ? `${credits.toLocaleString()} credits/month` : entry.creditsLabel}
-        </p>
-        {capacity ? (
-          <TooltipProvider delayDuration={150}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <p className="mt-1.5 cursor-help text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                  Typical capacity ·{" "}
-                  <span className="text-[13px] font-semibold normal-case tracking-normal text-white">
-                    {capacity}
-                  </span>
-                </p>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-[260px] text-xs">{MEDIAN_CAMPAIGN_TOOLTIP}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          <p className="mt-1.5 text-[13px] font-semibold text-white">{entry.goodFor}</p>
-        )}
-      </div>
+      {/* 3 — CAMPAIGN CAPACITY (campaign-first) or the legacy credit block */}
+      {campaignFirst ? (
+        <div className={`mt-4 rounded-xl border px-3.5 py-3 ${accent.creditBlock}`}>
+          <p className={`flex items-center gap-1.5 font-display text-sm font-bold ${accent.metric}`}>
+            <Sparkle className="h-3.5 w-3.5" aria-hidden />
+            {campaignLine ?? entry.goodFor}
+          </p>
+          <p className="mt-1.5 text-[12px] leading-5 text-slate-300">{CREDITS_BEHIND_THE_SCENES}</p>
+          {credits > 0 ? (
+            <details className="mt-2 text-[12px] text-slate-400">
+              <summary className="cursor-pointer">Advanced</summary>
+              <p className="mt-1.5">{credits.toLocaleString()} credits/month</p>
+              {capacity ? <p className="mt-1">Typical capacity · {capacity}</p> : null}
+            </details>
+          ) : null}
+        </div>
+      ) : (
+        <div className={`mt-4 rounded-xl border px-3.5 py-3 ${accent.creditBlock}`}>
+          <p className={`flex items-center gap-1.5 font-display text-sm font-bold ${accent.metric}`}>
+            <Sparkle className="h-3.5 w-3.5" aria-hidden />
+            {credits > 0 ? `${credits.toLocaleString()} credits/month` : entry.creditsLabel}
+          </p>
+          {capacity ? (
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="mt-1.5 cursor-help text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                    Typical capacity ·{" "}
+                    <span className="text-[13px] font-semibold normal-case tracking-normal text-white">
+                      {capacity}
+                    </span>
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[260px] text-xs">{MEDIAN_CAMPAIGN_TOOLTIP}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <p className="mt-1.5 text-[13px] font-semibold text-white">{entry.goodFor}</p>
+          )}
+        </div>
+      )}
+
 
       {/* 4 — price (real current price only) */}
       <div className="mt-5">
@@ -263,18 +289,19 @@ function PlanCard({
           </p>
         ) : null}
         {entry.isFreeState ? (
-          <p className="mt-1 text-xs text-slate-400">
-            $0 · {WELCOME_CREDITS_ONCE} welcome credits · one-time
-          </p>
+          <p className="mt-1 text-xs text-slate-400">$0 · no card required</p>
         ) : offer.purchasable ? (
           <p className="mt-1 text-xs text-slate-400">
-            {showStarterWelcome
-              ? "First month 20% off · then billed monthly · cancel anytime"
-              : "Billed monthly · cancel anytime"}
+            {campaignFirst
+              ? "Billed monthly · cancel anytime"
+              : showStarterWelcome
+                ? "First month 20% off · then billed monthly · cancel anytime"
+                : "Billed monthly · cancel anytime"}
           </p>
         ) : (
           <p className="mt-1 text-xs text-slate-400">Early access — not open for checkout yet</p>
         )}
+
 
         {isCurrent ? (
           <p className="mt-3 inline-flex w-fit items-center rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-xs font-medium text-cyan-50">
@@ -377,6 +404,7 @@ export default function PlanTierCards({
   return (
     <div className={`space-y-5 ${hero ? "max-w-6xl mx-auto" : ""}`}>
       <section
+
         className={`grid grid-cols-1 gap-4 ${
           showAll ? "sm:grid-cols-2 xl:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-3 gap-5"
         }`}
@@ -405,9 +433,12 @@ export default function PlanTierCards({
       <p className="text-center text-[12.5px] text-slate-400 sm:text-left">
         Not ready for a plan?{" "}
         <Link to="/app/templates" className="font-semibold text-cyan-200 underline underline-offset-4 hover:text-cyan-100">
-          Try FUSE with {WELCOME_CREDITS_ONCE} welcome credits
+          {croEnabled("croOfferDefault")
+            ? "Browse the campaign library"
+            : `Try FUSE with ${WELCOME_CREDITS_ONCE} welcome credits`}
         </Link>
       </p>
+
 
       <Button
         variant="outline"

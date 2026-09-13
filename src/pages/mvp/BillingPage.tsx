@@ -16,6 +16,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { track } from "@/lib/analytics/track";
 import { CREDIT_PACKS, STRIPE_TIERS } from "@/lib/stripe-config";
 import { clearPendingCheckout, readPendingCheckout, trackEvent } from "@/lib/metaPixel";
+import { croEnabled } from "@/config/featureFlags";
+import CheckoutLeadInPreview from "@/components/cro/CheckoutLeadInPreview";
+import FreeSampleSection from "@/components/cro/FreeSampleSection";
 
 
 
@@ -314,6 +317,13 @@ export default function BillingPage() {
           ) : null}
         </div>
 
+        {/* Checkout lead-in sits directly above the plan checkout buttons. */}
+        {croEnabled("croPricingDefault") ? (
+          <div className="mt-8 max-w-6xl mx-auto">
+            <CheckoutLeadInPreview />
+          </div>
+        ) : null}
+
         <div className="mt-6">
           <PlanTierCards
             hero
@@ -494,6 +504,25 @@ export default function BillingPage() {
                 q: "What if I don't like the output?",
                 a: "Regenerate with a different vibe. You're not locked in.",
               },
+              ...(croEnabled("croPricingDefault")
+                ? [
+                    {
+                      q: "Will it keep my logo or graphic exact?",
+                      a: "FUSE builds the campaign around the product photo you upload, so your garment and its graphic stay recognizable. If a detail drifts, regenerate that output.",
+                      to: undefined as string | undefined,
+                    },
+                    {
+                      q: "What if I don't like my first campaign?",
+                      a: "Email us and we'll make it right.",
+                      to: undefined as string | undefined,
+                    },
+                    {
+                      q: "Can I cancel?",
+                      a: "Yes. Cancel any time from your account; access continues to the end of the current billing month.",
+                      to: undefined as string | undefined,
+                    },
+                  ]
+                : []),
             ].map((item) => (
               <div key={item.q} className="rounded-[1.5rem] border border-white/10 bg-slate-950/75 p-5">
                 <dt className="text-sm font-semibold text-white">{item.q}</dt>
@@ -513,6 +542,9 @@ export default function BillingPage() {
           </dl>
         </section>
       </section>
+
+      {/* Free sample — bottom of the page, never beside the paid offer. */}
+      {croEnabled("croOfferDefault") ? <FreeSampleSection /> : null}
     </SiteShell>
   );
 }

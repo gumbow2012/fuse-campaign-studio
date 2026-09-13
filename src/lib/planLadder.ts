@@ -1,5 +1,6 @@
 import { Building2, Crown, Layers, Package, Rocket, Sparkles, Zap, type LucideIcon } from "lucide-react";
 import { STRIPE_TIERS, type StripeTierKey } from "@/lib/stripe-config";
+import { croEnabled } from "@/config/featureFlags";
 
 /**
  * Template-first plan ladder for the Membership Center and public pricing page.
@@ -29,6 +30,14 @@ export type PlanCheckoutMode = "live" | "gated" | "none";
 
 /** One-time welcome grant for a fresh free account. No monthly refill on Free. */
 export const WELCOME_CREDITS_ONCE = 250;
+
+/**
+ * ONE OFFER — marketing copy never promises bonus credits. The grant itself is
+ * unchanged; only the label the Free card shows is neutral.
+ */
+const FREE_TRY_LABEL = croEnabled("croOfferDefault")
+  ? "Try FUSE on free-eligible templates"
+  : `${WELCOME_CREDITS_ONCE} welcome credits · one-time`;
 
 /** One controlled accent per plan — dark FUSE system, not a rainbow page. */
 export type PlanAccentKey = "graphite" | "cyan" | "sky" | "violet" | "lime" | "magenta" | "royal";
@@ -87,13 +96,13 @@ export const PLAN_LADDER: PlanLadderEntry[] = [
     price: 0,
     annualPrice: 0,
     monthlyCredits: 0,
-    creditsLabel: `${WELCOME_CREDITS_ONCE} welcome credits · one-time`,
+    creditsLabel: FREE_TRY_LABEL,
     goodFor: "Trying FUSE on free-eligible templates",
     benefits: [
       "Try FUSE",
       "Free-eligible templates",
       "Brand Workspace",
-      `${WELCOME_CREDITS_ONCE} welcome credits (one-time)`,
+      FREE_TRY_LABEL,
     ],
     checkout: "none",
     ctaLabel: "Start free",

@@ -5,6 +5,8 @@ import { supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/integrations
 import UniversalAuthPanel from "@/components/auth/UniversalAuthPanel";
 import { markPlanActivating } from "@/lib/planActivation";
 import { track } from "@/lib/analytics/track";
+import FirstRunGuidePreview from "@/components/cro/FirstRunGuidePreview";
+import { croEnabled } from "@/config/featureFlags";
 
 type ClaimResponse = {
   ok?: boolean;
@@ -18,6 +20,18 @@ type ClaimResponse = {
 
 const CLAIM_TOKEN_KEY = "fuse.claimToken";
 
+/** Turns a stored slug like "group-meet" into "Group Meet" for display only. */
+function prettyCampaignName(value?: string | null): string | null {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  if (/\s/.test(raw)) return raw;
+  return raw
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 /**
  * /welcome — post-Stripe return for the checkout-first (guest) funnel.
  * The claim call is the ONLY gate; ?success is never trusted.
@@ -27,7 +41,9 @@ export default function PaymentReturnPage() {
   const navigate = useNavigate();
   const sessionId = params.get("session_id");
 
-  const [status, setStatus] = useState<"claiming" | "activating" | "signin" | "error">("claiming");
+  const [status, setStatus] = useState<"claiming" | "activating" | "signin" | "success" | "error">("claiming");
+  const [planKey, setPlanKey] = useState<string | null>(null);
+  const [campaignName, setCampaignName] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [existingEmail, setExistingEmail] = useState<string | null>(null);
   const [returnTo, setReturnTo] = useState("/app/templates");
@@ -122,6 +138,15 @@ export default function PaymentReturnPage() {
       return;
     }
 
+    if (croEnabled("croPostPurchaseTourDefault")) {
+      // Success state only: show the first-run guide instead of a silent redirect.
+      setCampaignName(prettyCampaignName(result.template));
+      const { data } = await supabase.functions.invoke("check-subscription");
+      setPlanKey(typeof data?.plan === "string" ? data.plan : null);
+      setStatus("success");
+      return;
+    }
+
     navigate(destination, { replace: true });
   }, [callClaim, navigate, sessionId, waitForEntitlement]);
 
@@ -130,6 +155,23 @@ export default function PaymentReturnPage() {
     startedRef.current = true;
     void runClaim();
   }, [runClaim]);
+
+  if (status === "success") {
+    return (
+      <div className="mx-auto flex min-h-[70vh] w-full max-w-md flex-col justify-center px-4">
+        <div className="flex items-center gap-2 text-primary">
+          <Check className="h-5 w-5" />
+          <span className="font-display text-lg uppercase tracking-widest">Payment complete</span>
+        </div>
+        <FirstRunGuidePreview
+          className="mt-6"
+          campaignName={campaignName}
+          plan={planKey}
+          onStart={() => navigate(returnTo, { replace: true })}
+        />
+      </div>
+    );
+  }
 
   if (status === "signin") {
     return (
