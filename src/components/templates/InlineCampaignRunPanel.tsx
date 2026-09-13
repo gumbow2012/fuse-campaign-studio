@@ -140,6 +140,8 @@ export default function InlineCampaignRunPanel({
 }: Props) {
   const navigate = useNavigate();
   const { user, profile, isAdmin, isCreator, refreshProfile } = useAuth();
+  const { startPlanCheckout } = useMembershipCheckout();
+
   const privileged = isAdmin || isCreator;
 
   const [files, setFiles] = useState<Record<string, File | null>>({});
