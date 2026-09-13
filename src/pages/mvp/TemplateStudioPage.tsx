@@ -120,8 +120,6 @@ import { useCampaignHistory } from "@/hooks/useCampaignHistory";
 import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaignOutputs";
 import { campaignDisplayName } from "@/lib/campaignDisplayName";
 import CampaignTile from "@/components/mvp/CampaignTile";
-import CampaignTileFooter from "@/components/cro/CampaignTileFooter";
-import type { CroCtaState } from "@/components/cro/CampaignCtaButton";
 import { croEnabled } from "@/config/featureFlags";
 import { templateDetailPath, templateSlug } from "@/lib/templateSlug";
 
