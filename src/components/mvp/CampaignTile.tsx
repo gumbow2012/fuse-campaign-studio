@@ -125,8 +125,6 @@ export interface CampaignTileProps {
   overlay?: ReactNode;
   /** Media aspect classes (presentation only). Defaults to 4:5. */
   mediaAspectClassName?: string;
-  /** Optional outcome + CTA block rendered under the name. */
-  footer?: ReactNode;
 }
 
 export default function CampaignTile({

@@ -121,7 +121,7 @@ import { formatCampaignOutputs, formatCampaignOutputsLong } from "@/lib/campaign
 import { campaignDisplayName } from "@/lib/campaignDisplayName";
 import CampaignTile from "@/components/mvp/CampaignTile";
 import { croEnabled } from "@/config/featureFlags";
-import { templateDetailPath, templateSlug } from "@/lib/templateSlug";
+import { templateDetailPath } from "@/lib/templateSlug";
 
 
 /**
