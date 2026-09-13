@@ -566,7 +566,7 @@ export default function InlineCampaignRunPanel({
           ) : null}
           {costLine ? (
             <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-muted-foreground">Cost</dt>
+              <dt className="text-muted-foreground">{costLabel}</dt>
               <dd className="text-right font-medium text-foreground">{costLine}</dd>
             </div>
           ) : null}
@@ -581,29 +581,58 @@ export default function InlineCampaignRunPanel({
           </p>
         ) : null}
 
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={generateDisabled}
-          className={cn(
-            "mt-5 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full px-6 text-[16px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-            generateDisabled
-              ? "cursor-not-allowed bg-muted text-muted-foreground"
-              : "bg-primary text-primary-foreground hover:opacity-90",
-          )}
-        >
-          {submitting ? (
-            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
-          ) : null}
-          {buttonLabel}
-          {!submitting && !generateDisabled ? (
-            <ArrowRight className="h-4 w-4" aria-hidden />
-          ) : null}
-        </button>
-        <p className="mt-3 text-center text-[13px] leading-5 text-muted-foreground" aria-live="polite">
-          {statusLine}
-        </p>
+        {croSignedOut ? (
+          <div className="mt-5 space-y-3">
+            <CampaignCtaButton
+              state="signed_out"
+              surface="campaign_page"
+              templateSlug={slug}
+              logOnly={false}
+              onActivate={startGuestCheckout}
+            />
+            <p className="text-center text-[13px] leading-5 text-muted-foreground">
+              Already a member?{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/auth?mode=signin&returnTo=${encodeURIComponent(`/templates/${slug}`)}&template=${encodeURIComponent(templateId)}`,
+                  )
+                }
+                className="font-medium text-primary underline underline-offset-4"
+              >
+                Sign in
+              </button>
+            </p>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generateDisabled}
+              className={cn(
+                "mt-5 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full px-6 text-[16px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                generateDisabled
+                  ? "cursor-not-allowed bg-muted text-muted-foreground"
+                  : "bg-primary text-primary-foreground hover:opacity-90",
+              )}
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+              ) : null}
+              {buttonLabel}
+              {!submitting && !generateDisabled ? (
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              ) : null}
+            </button>
+            <p className="mt-3 text-center text-[13px] leading-5 text-muted-foreground" aria-live="polite">
+              {statusLine}
+            </p>
+          </>
+        )}
       </section>
+
 
       <GeneratePaywallModal
         open={paywallOpen}
