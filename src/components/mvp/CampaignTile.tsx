@@ -259,8 +259,6 @@ export default function CampaignTile({
           </button>
         ) : null}
       </div>
-
-      {footer}
     </div>
   );
 }
