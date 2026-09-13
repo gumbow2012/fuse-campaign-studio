@@ -144,7 +144,6 @@ export default function CampaignTile({
   onImpression,
   overlay,
   mediaAspectClassName = "aspect-[4/5]",
-  footer,
 }: CampaignTileProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const impressionSent = useRef(false);
