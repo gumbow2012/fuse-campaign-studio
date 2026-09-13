@@ -11,9 +11,17 @@ import CampaignCtaButton, { type CroCtaState } from "@/components/cro/CampaignCt
 export default function CampaignValueBox({
   slug,
   state = "signed_out",
+  /** False when the surface already owns the real CTA (campaign page panel). */
+  showCta = true,
+  /** Single-offer subline shown under the plan block. */
+  offerSubline,
+  className = "",
 }: {
   slug: string;
   state?: CroCtaState;
+  showCta?: boolean;
+  offerSubline?: string;
+  className?: string;
 }) {
   const detailQuery = useQuery({
     queryKey: ["cro-preview-detail", slug],
@@ -42,7 +50,7 @@ export default function CampaignValueBox({
   const failed = detailQuery.isError && catalogQuery.isError;
 
   return (
-    <div className="space-y-4 rounded-[18px] border border-border/70 bg-card p-5">
+    <div className={`space-y-4 rounded-[18px] border border-border/70 bg-card p-5 ${className}`}>
       <h3 className="text-lg font-semibold text-foreground">{detail?.name ?? slug}</h3>
 
       {failed ? (
@@ -86,9 +94,14 @@ export default function CampaignValueBox({
             </p>
             <p className="mt-1 text-base text-foreground">Included in Starter</p>
             <p className="text-sm text-muted-foreground">About 3 campaigns/month on Starter</p>
+            {offerSubline ? (
+              <p className="text-sm text-muted-foreground">{offerSubline}</p>
+            ) : null}
           </div>
 
-          <CampaignCtaButton state={state} surface="campaign_page" templateSlug={slug} />
+          {showCta ? (
+            <CampaignCtaButton state={state} surface="campaign_page" templateSlug={slug} />
+          ) : null}
 
           <details className="text-sm text-muted-foreground">
             <summary className="cursor-pointer">Advanced</summary>

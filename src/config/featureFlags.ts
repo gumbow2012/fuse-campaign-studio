@@ -1,21 +1,22 @@
 /**
- * CRO preview feature flags.
+ * CRO feature flags.
  *
- * `croPreview` only gates the hidden `/preview/cro` route. Every `*Default`
- * flag stays FALSE: the public pages must not render any CRO section until the
- * owner approves the copy. Nothing here touches billing or generation.
+ * `croPreview` gates the hidden `/preview/cro` route. The `*Default` flags gate
+ * the CRO treatment on the live public pages: when a flag is false the page
+ * renders exactly today's UI. Nothing here touches billing or generation.
  */
 export const FEATURE_FLAGS = {
   croPreview: true,
   croHomepageDefault: false,
-  croPricingDefault: false,
-  croCampaignPagesDefault: false,
-  croPostPurchaseTourDefault: false,
+  croOfferDefault: true,
+  croPricingDefault: true,
+  croCampaignPagesDefault: true,
+  croPostPurchaseTourDefault: true,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;
 
-/** No-op guard for public surfaces: returns false for every default flag today. */
+/** Guard for public surfaces. */
 export function croEnabled(flag: FeatureFlagKey): boolean {
   return FEATURE_FLAGS[flag] === true;
 }

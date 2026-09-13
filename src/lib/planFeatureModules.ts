@@ -13,6 +13,7 @@
  */
 
 import { WELCOME_CREDITS_ONCE } from "@/lib/planLadder";
+import { croEnabled } from "@/config/featureFlags";
 
 export type PlanDifferentiators = {
   /** "Everything in Starter, plus:" — omitted for Free. */
@@ -28,7 +29,9 @@ const DIFFERENTIATORS: Record<string, PlanDifferentiators> = {
       "Browse the campaign marketplace",
       "Free-eligible templates",
       "Brand Workspace setup",
-      `${WELCOME_CREDITS_ONCE} welcome credits (one-time)`,
+      croEnabled("croOfferDefault")
+        ? "Try FUSE on free-eligible templates"
+        : `${WELCOME_CREDITS_ONCE} welcome credits (one-time)`,
     ],
   },
   starter: {
