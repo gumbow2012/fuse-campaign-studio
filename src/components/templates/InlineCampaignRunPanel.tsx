@@ -18,6 +18,10 @@ import CampaignReferenceList from "@/components/campaigns/CampaignReferenceList"
 import CampaignResultsStage from "@/components/results/CampaignResultsStage";
 import { type CampaignResultOutput } from "@/components/templates/CampaignResults";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
+import CampaignCtaButton from "@/components/cro/CampaignCtaButton";
+import { croEnabled } from "@/config/featureFlags";
+import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
