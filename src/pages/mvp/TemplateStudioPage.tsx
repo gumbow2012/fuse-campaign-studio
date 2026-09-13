@@ -1648,7 +1648,13 @@ export default function TemplateStudioPage() {
     : profileIsResolving
       ? "Checking"
       : `${formatCredits(displayedCreditBalance)} cr`;
-  const costDisplayBase = isPrivilegedUser ? "Bypassed for team access" : `${creditsRequired} credits`;
+  // CRO: a signed-out visitor sees the plan they join, not a credit number.
+  const costDisplayBase = isPrivilegedUser
+    ? "Bypassed for team access"
+    : !user && croEnabled("croCampaignPagesDefault")
+      ? "Included in Starter"
+      : `${creditsRequired} credits`;
+
   const isPublicTemplateBrowser = !user;
   const selectedTemplateCheckoutPath = selectedTemplate ? buildTemplateCheckoutPath(selectedTemplate) : "/pricing";
   const detailTemplate = templates.find((template) => template.id === detailTemplateId) ?? null;

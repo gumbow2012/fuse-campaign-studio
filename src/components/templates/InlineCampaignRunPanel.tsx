@@ -18,6 +18,10 @@ import CampaignReferenceList from "@/components/campaigns/CampaignReferenceList"
 import CampaignResultsStage from "@/components/results/CampaignResultsStage";
 import { type CampaignResultOutput } from "@/components/templates/CampaignResults";
 import GeneratePaywallModal from "@/components/mvp/GeneratePaywallModal";
+import CampaignCtaButton from "@/components/cro/CampaignCtaButton";
+import { croEnabled } from "@/config/featureFlags";
+import { useMembershipCheckout } from "@/hooks/useMembershipCheckout";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
@@ -136,6 +140,8 @@ export default function InlineCampaignRunPanel({
 }: Props) {
   const navigate = useNavigate();
   const { user, profile, isAdmin, isCreator, refreshProfile } = useAuth();
+  const { startPlanCheckout } = useMembershipCheckout();
+
   const privileged = isAdmin || isCreator;
 
   const [files, setFiles] = useState<Record<string, File | null>>({});
@@ -383,11 +389,31 @@ export default function InlineCampaignRunPanel({
     void runNow();
   };
 
-  const costLine = freeRunAvailable
-    ? "Free first video — no credits used"
-    : creditCost != null
-      ? `${creditCost} credits`
-      : null;
+  /**
+   * CRO: a signed-out visitor buys, so the summary shows the plan they join.
+   * Signed-in visitors keep the real credit cost — that is their spend point.
+   */
+  const croSignedOut = croEnabled("croCampaignPagesDefault") && !user;
+
+  const costLabel = croSignedOut ? "Plan" : "Cost";
+  const costLine = croSignedOut
+    ? "Included in Starter"
+    : freeRunAvailable
+      ? "Free first video — no credits used"
+      : creditCost != null
+        ? `${creditCost} credits`
+        : null;
+
+  /** Same guest Starter checkout the access modal and pricing page already use. */
+  const startGuestCheckout = () => {
+    track("guest_checkout_started", { template_id: templateId });
+    void startPlanCheckout("starter", {
+      templateId,
+      templateName,
+      returnPath: `/templates/${slug}`,
+    });
+  };
+
 
   const buttonLabel = !user
     ? freePreviewEnabled
@@ -546,7 +572,7 @@ export default function InlineCampaignRunPanel({
           ) : null}
           {costLine ? (
             <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-muted-foreground">Cost</dt>
+              <dt className="text-muted-foreground">{costLabel}</dt>
               <dd className="text-right font-medium text-foreground">{costLine}</dd>
             </div>
           ) : null}
@@ -561,29 +587,58 @@ export default function InlineCampaignRunPanel({
           </p>
         ) : null}
 
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={generateDisabled}
-          className={cn(
-            "mt-5 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full px-6 text-[16px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-            generateDisabled
-              ? "cursor-not-allowed bg-muted text-muted-foreground"
-              : "bg-primary text-primary-foreground hover:opacity-90",
-          )}
-        >
-          {submitting ? (
-            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
-          ) : null}
-          {buttonLabel}
-          {!submitting && !generateDisabled ? (
-            <ArrowRight className="h-4 w-4" aria-hidden />
-          ) : null}
-        </button>
-        <p className="mt-3 text-center text-[13px] leading-5 text-muted-foreground" aria-live="polite">
-          {statusLine}
-        </p>
+        {croSignedOut ? (
+          <div className="mt-5 space-y-3">
+            <CampaignCtaButton
+              state="signed_out"
+              surface="campaign_page"
+              templateSlug={slug}
+              logOnly={false}
+              onActivate={startGuestCheckout}
+            />
+            <p className="text-center text-[13px] leading-5 text-muted-foreground">
+              Already a member?{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/auth?mode=signin&returnTo=${encodeURIComponent(`/templates/${slug}`)}&template=${encodeURIComponent(templateId)}`,
+                  )
+                }
+                className="font-medium text-primary underline underline-offset-4"
+              >
+                Sign in
+              </button>
+            </p>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generateDisabled}
+              className={cn(
+                "mt-5 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full px-6 text-[16px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                generateDisabled
+                  ? "cursor-not-allowed bg-muted text-muted-foreground"
+                  : "bg-primary text-primary-foreground hover:opacity-90",
+              )}
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+              ) : null}
+              {buttonLabel}
+              {!submitting && !generateDisabled ? (
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              ) : null}
+            </button>
+            <p className="mt-3 text-center text-[13px] leading-5 text-muted-foreground" aria-live="polite">
+              {statusLine}
+            </p>
+          </>
+        )}
       </section>
+
 
       <GeneratePaywallModal
         open={paywallOpen}
