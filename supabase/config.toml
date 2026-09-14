@@ -230,3 +230,9 @@ verify_jwt = false
 
 [functions.auto-creator-payouts]
 verify_jwt = false
+
+[functions.fuse-mcp]
+verify_jwt = false
+
+[functions.fuse-mcp-staging]
+verify_jwt = false
