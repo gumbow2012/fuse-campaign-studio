@@ -143,6 +143,7 @@ export function AccountMenuContent({
         <MenuLink to="/app/collections" icon={FolderHeart} label="My Drops" />
         <MenuLink to="/app/notifications" icon={Bell} label="Notifications" />
         <MenuLink to="/account/developer" icon={KeyRound} label="Developer / API Keys" />
+        <MenuLink to="/account#connected-apps" icon={ShieldCheck} label="Connected apps" />
       </div>
 
       <div className="my-2 h-px bg-white/10" />
