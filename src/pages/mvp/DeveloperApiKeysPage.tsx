@@ -9,7 +9,8 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, Check, Copy, KeyRound, Loader2, Plus, Terminal, X } from "lucide-react";
 import {
-  API_KEY_SCOPES,
+  API_KEY_SCOPE_GROUPS,
+  DEFAULT_API_KEY_SCOPES,
   createApiKey,
   listApiKeys,
   revokeApiKey,
