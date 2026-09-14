@@ -119,7 +119,7 @@ export default function DeveloperApiKeysPage() {
       const created = await createApiKey(trimmed, scopes);
       setNewKey(created);
       setName("");
-      setScopes(["templates:read", "runs:read"]);
+      setScopes(DEFAULT_API_KEY_SCOPES);
       setFormOpen(false);
       await load();
     } catch (error) {
