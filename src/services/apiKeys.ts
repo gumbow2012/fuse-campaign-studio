@@ -1,8 +1,46 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type ApiKeyScope = "templates:read" | "runs:read" | "runs:create";
+export type ApiKeyScope =
+  | "fuse.templates.read"
+  | "fuse.pricing.read"
+  | "fuse.account.read"
+  | "fuse.runs.read"
+  | "fuse.outputs.read"
+  | "fuse.assets.write"
+  | "fuse.runs.prepare"
+  | "fuse.runs.create"
+  | "fuse.editor.write"
+  | "fuse.exports.create";
 
-export const API_KEY_SCOPES: ApiKeyScope[] = ["templates:read", "runs:read", "runs:create"];
+export type ApiKeyScopeOption = { scope: ApiKeyScope; label: string };
+
+export const API_KEY_READ_SCOPES: ApiKeyScopeOption[] = [
+  { scope: "fuse.templates.read", label: "Search and read campaign templates" },
+  { scope: "fuse.pricing.read", label: "Read pricing" },
+  { scope: "fuse.account.read", label: "Read plan and credit balance" },
+  { scope: "fuse.runs.read", label: "Read my runs" },
+  { scope: "fuse.outputs.read", label: "View and download my outputs" },
+];
+
+export const API_KEY_CREATE_SCOPES: ApiKeyScopeOption[] = [
+  { scope: "fuse.assets.write", label: "Upload product assets" },
+  { scope: "fuse.runs.prepare", label: "Prepare campaign runs (no credits)" },
+  { scope: "fuse.runs.create", label: "Start campaign runs (uses credits)" },
+  { scope: "fuse.editor.write", label: "Edit my campaigns" },
+  { scope: "fuse.exports.create", label: "Export my campaigns" },
+];
+
+export const API_KEY_SCOPE_GROUPS: { title: string; scopes: ApiKeyScopeOption[] }[] = [
+  { title: "Read", scopes: API_KEY_READ_SCOPES },
+  { title: "Create", scopes: API_KEY_CREATE_SCOPES },
+];
+
+export const API_KEY_SCOPES: ApiKeyScope[] = [
+  ...API_KEY_READ_SCOPES.map((item) => item.scope),
+  ...API_KEY_CREATE_SCOPES.map((item) => item.scope),
+];
+
+export const DEFAULT_API_KEY_SCOPES: ApiKeyScope[] = API_KEY_READ_SCOPES.map((item) => item.scope);
 
 export type ApiKeyRecord = {
   id: string;

@@ -9,7 +9,8 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, Check, Copy, KeyRound, Loader2, Plus, Terminal, X } from "lucide-react";
 import {
-  API_KEY_SCOPES,
+  API_KEY_SCOPE_GROUPS,
+  DEFAULT_API_KEY_SCOPES,
   createApiKey,
   listApiKeys,
   revokeApiKey,
@@ -76,7 +77,7 @@ export default function DeveloperApiKeysPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<ApiKeyScope[]>(["templates:read", "runs:read"]);
+  const [scopes, setScopes] = useState<ApiKeyScope[]>(DEFAULT_API_KEY_SCOPES);
   const [creating, setCreating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [newKey, setNewKey] = useState<CreatedApiKey | null>(null);
@@ -118,7 +119,7 @@ export default function DeveloperApiKeysPage() {
       const created = await createApiKey(trimmed, scopes);
       setNewKey(created);
       setName("");
-      setScopes(["templates:read", "runs:read"]);
+      setScopes(DEFAULT_API_KEY_SCOPES);
       setFormOpen(false);
       await load();
     } catch (error) {
@@ -231,20 +232,34 @@ export default function DeveloperApiKeysPage() {
               </div>
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Scopes</p>
-                <div className="mt-2 space-y-2">
-                  {API_KEY_SCOPES.map((scope) => (
-                    <label key={scope} className="flex items-center gap-2 font-mono text-xs text-foreground/85">
-                      <Checkbox
-                        checked={scopes.includes(scope)}
-                        onCheckedChange={() => toggleScope(scope)}
-                        aria-label={scope}
-                      />
-                      {scope}
-                    </label>
+                <div className="mt-3 space-y-4">
+                  {API_KEY_SCOPE_GROUPS.map((group) => (
+                    <div key={group.title}>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-200">{group.title}</p>
+                      <div className="mt-2 space-y-2">
+                        {group.scopes.map(({ scope, label }) => (
+                          <label key={scope} className="flex items-start gap-2 text-xs text-foreground/85">
+                            <Checkbox
+                              className="mt-0.5"
+                              checked={scopes.includes(scope)}
+                              onCheckedChange={() => toggleScope(scope)}
+                              aria-label={label}
+                            />
+                            <span>
+                              {label}
+                              <span className="ml-2 font-mono text-[10px] text-muted-foreground">{scope}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
             </div>
+            <p className="mt-5 text-xs text-muted-foreground">
+              Keys work with the FUSE MCP server (https://fuse-us.com/mcp) and REST API (https://fuse-us.com/openapi.json). Setup guide: docs/FUSE_MCP_SETUP.md in the repo.
+            </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Button
                 onClick={handleCreate}

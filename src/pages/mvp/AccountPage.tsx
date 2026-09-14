@@ -16,6 +16,7 @@ import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisu
 import { updateAccountProfile } from "@/services/account";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { avatarInitials, fileToAvatarDataUrl } from "@/lib/avatarImage";
+import ConnectedAppsSection from "@/components/mvp/ConnectedAppsSection";
 
 export default function AccountPage() {
   const { isAdmin, profile, refreshProfile, user } = useAuth();
@@ -232,6 +233,8 @@ export default function AccountPage() {
                 {savingName ? "Saving..." : "Save profile"}
               </Button>
             </section>
+
+            <ConnectedAppsSection />
 
             <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Security</p>
