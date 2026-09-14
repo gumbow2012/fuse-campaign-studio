@@ -234,6 +234,8 @@ export default function AccountPage() {
               </Button>
             </section>
 
+            <ConnectedAppsSection />
+
             <section className="rounded-[2rem] border border-white/10 bg-slate-950/75 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
               <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Security</p>
               <div className="mt-5 space-y-2">
