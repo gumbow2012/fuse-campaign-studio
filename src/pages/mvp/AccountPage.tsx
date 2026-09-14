@@ -16,6 +16,7 @@ import { ADMIN_VISUAL_BUDGET_TOTAL, getAdminVisualCreditsRemaining, getAdminVisu
 import { updateAccountProfile } from "@/services/account";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { avatarInitials, fileToAvatarDataUrl } from "@/lib/avatarImage";
+import ConnectedAppsSection from "@/components/mvp/ConnectedAppsSection";
 
 export default function AccountPage() {
   const { isAdmin, profile, refreshProfile, user } = useAuth();
