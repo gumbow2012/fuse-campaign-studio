@@ -166,8 +166,8 @@ Deno.serve(async (req) => {
       const b = await req.json().catch(() => ({}));
       args = { ...args, ...(b && typeof b === "object" ? b : {}) };
     }
-    // Path params win over body (run_id in the URL is authoritative).
-    for (const [k, v] of Object.entries(match.params)) args[k] = v;
+    // Path params win over body (run_id in the URL is authoritative). `{slug}` maps to template_slug.
+    for (const [k, v] of Object.entries(match.params)) args[k === "slug" ? "template_slug" : k] = v;
     try {
       const { result } = await callTool(match.tool.name, args, ctx, log(auth, "rest"));
       return json(result, 200);
