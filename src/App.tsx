@@ -106,6 +106,7 @@ import CustomizeWorkflowPage from "@/pages/mvp/CustomizeWorkflowPage";
 import ContestsPage from "@/pages/mvp/ContestsPage";
 import Referrals from "@/pages/Referrals";
 import CroPreviewPage from "@/pages/preview/CroPreviewPage";
+import OAuthConsentPage from "@/pages/OAuthConsentPage";
 
 import CreatorOnboarding from "@/pages/app/creator/CreatorOnboarding";
 
