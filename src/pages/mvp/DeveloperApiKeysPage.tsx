@@ -77,7 +77,7 @@ export default function DeveloperApiKeysPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<ApiKeyScope[]>(["templates:read", "runs:read"]);
+  const [scopes, setScopes] = useState<ApiKeyScope[]>(DEFAULT_API_KEY_SCOPES);
   const [creating, setCreating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [newKey, setNewKey] = useState<CreatedApiKey | null>(null);
