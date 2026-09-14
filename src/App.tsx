@@ -154,6 +154,7 @@ const App = () => (
             <Route path="/welcome" element={<PaymentReturnPage />} />
             {/* Hidden, unlinked, noindex CRO preview. Public pages are untouched. */}
             <Route path="/preview/cro" element={<CroPreviewPage />} />
+            <Route path="/oauth/consent" element={<OAuthConsentPage />} />
 
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/faq" element={<FaqPage />} />
