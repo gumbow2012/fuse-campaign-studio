@@ -40,9 +40,9 @@ const CORS = {
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json", ...headers } });
 
-/** Path inside the function: strips /functions/v1/<fn> and staging/production aliases. */
+/** Path inside the function. The edge runtime strips `/functions/v1`, so the pathname is `/fuse-mcp/…` (or `/fuse-mcp-staging/…`). */
 function routePath(url: URL): { path: string; staging: boolean } {
-  const m = url.pathname.match(/^\/functions\/v1\/(fuse-mcp(?:-staging)?)(\/.*)?$/);
+  const m = url.pathname.match(/^(?:\/functions\/v1)?\/(fuse-mcp(?:-staging)?)(\/.*)?$/);
   const staging = m?.[1] === "fuse-mcp-staging";
   let path = m ? (m[2] ?? "/") : url.pathname;
   if (path === "") path = "/";
