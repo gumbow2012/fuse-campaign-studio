@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { resolveExecutionUrl, resolveExecutionUrls } from "../_shared/asset-access.ts";
+import { resolveExecutionUrl, resolveExecutionUrls, resolveRequiredVideoUrls } from "../_shared/asset-access.ts";
+import { assertVideoReferenceRoute, referenceMediaType } from "../_shared/video-reference.ts";
 
 import {
   corsHeaders,
@@ -21,6 +22,8 @@ import {
   submitImageJob,
   normalizeImageResolution,
   submitVideoJob,
+  submitSeedanceReferenceVideoJob,
+  referenceToVideoEndpoint,
   VERTICAL_VIDEO_ASPECT_RATIO,
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
@@ -137,9 +140,11 @@ async function resolveNodeInputs(admin: AdminClient, args: {
     ),
   ];
   const { data: assets } = assetIds.length
-    ? await admin.from("assets").select("id, supabase_storage_url").in("id", assetIds)
-    : { data: [] as Array<{ id: string; supabase_storage_url: string | null }> };
-  const assetMap = new Map((assets ?? []).map((asset: any) => [asset.id, asset.supabase_storage_url as string | null]));
+    ? await admin.from("assets").select("id, supabase_storage_url, asset_type").in("id", assetIds)
+    : { data: [] as Array<{ id: string; supabase_storage_url: string | null; asset_type: string }> };
+  const assetMap = new Map<string, { supabase_storage_url: string | null; asset_type: string }>(
+    (assets ?? []).map((asset: any) => [asset.id, asset]),
+  );
 
   const latestByNode = new Map<string, { url: string; type: string | null }>();
   if (sourceIds.length) {
@@ -166,7 +171,8 @@ async function resolveNodeInputs(admin: AdminClient, args: {
     const param = String(edge.mapping_logic?.target_param ?? "image").toLowerCase();
 
     const upstream = latestByNode.get(source.id);
-    const assetUrl = source.default_asset_id ? assetMap.get(source.default_asset_id) ?? null : null;
+    const asset = source.default_asset_id ? assetMap.get(source.default_asset_id) : undefined;
+    const assetUrl = asset?.supabase_storage_url ?? null;
     const url = assetUrl ?? upstream?.url ?? null;
 
     if (!url) {
@@ -177,16 +183,18 @@ async function resolveNodeInputs(admin: AdminClient, args: {
     params.push({
       param,
       url,
-      type: upstream?.type ?? "image",
+      type: assetUrl ? referenceMediaType(asset?.asset_type, source.prompt_config) : upstream?.type ?? "image",
       sourceName: source.name,
     });
   }
 
-  const ownReferenceUrl = args.node.default_asset_id
-    ? assetMap.get(args.node.default_asset_id) ?? null
+  const ownAsset = args.node.default_asset_id
+    ? assetMap.get(args.node.default_asset_id)
     : null;
+  const ownReferenceUrl = ownAsset?.supabase_storage_url ?? null;
+  const ownReferenceType = referenceMediaType(ownAsset?.asset_type, args.node.prompt_config);
 
-  return { params, missing, ownReferenceUrl, incomingCount: incoming.length };
+  return { params, missing, ownReferenceUrl, ownReferenceType, incomingCount: incoming.length };
 }
 
 async function startRun(admin: AdminClient, args: { versionId: string; nodeId: string; userId: string }) {
@@ -223,11 +231,26 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
   });
 
   const imageInputs = [
-    ...(resolved.ownReferenceUrl ? [resolved.ownReferenceUrl] : []),
-    ...resolved.params.filter((entry) => !entry.param.includes("prompt")).map((entry) => entry.url),
+    ...(resolved.ownReferenceUrl && resolved.ownReferenceType === "image" ? [resolved.ownReferenceUrl] : []),
+    ...resolved.params.filter((entry) => entry.type === "image" && !entry.param.includes("prompt")).map((entry) => entry.url),
   ].filter(Boolean);
+  const videoInputs = [
+    ...(resolved.ownReferenceUrl && resolved.ownReferenceType === "video" ? [resolved.ownReferenceUrl] : []),
+    ...resolved.params.filter((entry) => entry.type === "video").map((entry) => entry.url),
+  ];
+  if (node.node_type === "image_gen" && videoInputs.length) {
+    throw new Error("Image steps cannot accept video references; connect the source to Seedance");
+  }
+  if (node.node_type === "video_gen") {
+    const model = getVideoModel(node.prompt_config?.video_model);
+    assertVideoReferenceRoute(node.prompt_config, videoInputs.length,
+      model.family === "seedance" && !!model.supportsMultiReference);
+  }
+  if (node.prompt_config?.requires_source_video === true && resolved.missing.length) {
+    throw new Error(`Required reconstruction inputs are missing: ${resolved.missing.join(", ")}`);
+  }
 
-  if (!imageInputs.length) {
+  if (!imageInputs.length && !videoInputs.length) {
     const hint = resolved.missing.length
       ? `Upstream step${resolved.missing.length > 1 ? "s" : ""} ${resolved.missing.join(", ")} ${resolved.missing.length > 1 ? "have" : "has"} no image yet — run ${resolved.missing.length > 1 ? "them" : "it"} first.`
       : "Connect or upload an image first, or run the upstream step.";
@@ -310,7 +333,28 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
         ? String(node.prompt_config?.aspect_ratio)
         : VERTICAL_VIDEO_ASPECT_RATIO);
 
-    const byParam = new Map(resolved.params.map((entry) => [entry.param, entry.url]));
+    if (node.prompt_config?.video_mode === "multi_reference" && videoModel.family === "seedance" &&
+        videoModel.supportsMultiReference && (videoInputs.length || imageInputs.length >= 2)) {
+      const estimatedCostUsd = await estimateUsd({
+        endpointId: referenceToVideoEndpoint(videoModel.key), seconds: duration,
+        fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
+      });
+      const { requestId, endpointId, input } = await submitSeedanceReferenceVideoJob({
+        modelKey: videoModel.key, prompt,
+        imageUrls: (await resolveExecutionUrls(admin, imageInputs)) as string[],
+        videoUrls: await resolveRequiredVideoUrls(admin, videoInputs),
+        duration, resolution, aspectRatio, generateAudio,
+        webhookUrl: `${webhookUrl}${encodeURIComponent(inserted.id)}`,
+      });
+      const { data: updated } = await admin.from("node_runs").update({
+        status: "running", provider_model: endpointId, provider_request_id: requestId,
+        estimated_cost_usd: estimatedCostUsd, estimated_credits: creditsFromUsd(estimatedCostUsd),
+        input_payload: { ...input, video_model: videoModel.key, multi_reference: true },
+      }).eq("id", inserted.id).select("*").single();
+      return serializeRun(updated ?? inserted);
+    }
+
+    const byParam = new Map(resolved.params.filter((entry) => entry.type === "image").map((entry) => [entry.param, entry.url]));
     const initImageUrl = byParam.get("init_image") ??
       byParam.get("start_frame_image") ??
       imageInputs[0];

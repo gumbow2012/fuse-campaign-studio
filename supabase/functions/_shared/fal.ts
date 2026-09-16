@@ -1,4 +1,5 @@
 import { fal } from "npm:@fal-ai/client";
+import { validateReferenceUrls } from "./video-reference.ts";
 
 export const IMAGE_MODEL = "fal-ai/nano-banana-pro/edit";
 /** Additive: Nano Banana 2 image-edit endpoint, used for opt-in comparisons. */
@@ -519,12 +520,13 @@ export function referenceToVideoEndpoint(modelKey: unknown) {
 
 /**
  * Builds the Seedance reference-to-video payload. Endpoint + fields mirror the
- * known-good Outfit Swap reconstruction call; Outfit Swap itself is unchanged.
+ * image and video reference contract. Video-only conditioning is supported.
  */
 export function buildSeedanceReferenceInput(args: {
   modelKey: unknown;
   prompt: string;
   imageUrls: string[];
+  videoUrls?: string[];
   duration?: unknown;
   resolution?: string | null;
   aspectRatio?: string | null;
@@ -535,12 +537,7 @@ export function buildSeedanceReferenceInput(args: {
     throw new Error(`${model.label} does not support multi-reference video`);
   }
 
-  const urls: string[] = [];
-  for (const entry of args.imageUrls ?? []) {
-    const url = String(entry ?? "").trim();
-    if (url && !urls.includes(url)) urls.push(url);
-  }
-  if (urls.length < 2) throw new Error("Multi-reference video requires at least two images");
+  const { images: urls, videos } = validateReferenceUrls(args.imageUrls ?? [], args.videoUrls);
 
   const endpointId = referenceToVideoEndpoint(model.key);
   const duration = String(clampSeedanceDuration(args.duration ?? 5, model));
@@ -563,6 +560,7 @@ export function buildSeedanceReferenceInput(args: {
   const input: Record<string, unknown> = {
     prompt: clampVideoPrompt(args.prompt),
     image_urls: urls,
+    ...(videos.length ? { video_urls: videos } : {}),
     duration,
 
     resolution,
@@ -578,6 +576,7 @@ export async function submitSeedanceReferenceVideoJob(args: {
   modelKey: unknown;
   prompt: string;
   imageUrls: string[];
+  videoUrls?: string[];
   duration?: unknown;
   resolution?: string | null;
   aspectRatio?: string | null;
