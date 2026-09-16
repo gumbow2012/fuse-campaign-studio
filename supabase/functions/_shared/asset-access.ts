@@ -124,6 +124,20 @@ export const resolveExecutionUrls = (
 
 export { FUSE_BUCKET };
 
+/** Required motion references must never fall back to an expired/private URL. */
+export async function resolveRequiredVideoUrls(admin: any, refs: string[]): Promise<string[]> {
+  return Promise.all(refs.map(async (ref) => {
+    const path = extractFuseAssetPath(ref);
+    if (!path) {
+      if (!/^https:\/\//i.test(ref)) throw new Error("Video reference must be stored or accessible over HTTPS");
+      return ref;
+    }
+    const { data, error } = await admin.storage.from(FUSE_BUCKET).createSignedUrl(path, 21600);
+    if (error || !data?.signedUrl) throw new Error("Could not access required source video");
+    return data.signedUrl as string;
+  }));
+}
+
 /**
  * Deep response signer: walks a browser-bound payload and replaces every
  * fuse-assets reference with a short-lived signed URL. Anything else (external

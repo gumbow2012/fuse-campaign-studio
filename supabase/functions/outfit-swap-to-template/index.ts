@@ -9,6 +9,9 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
  */
 
 import { signDeepDisplayUrls } from "../_shared/asset-access.ts";
+import { resolveOwnedSourceVideo } from "../_shared/source-video.ts";
+import { sourceMotionPrompt } from "../_shared/video-reference.ts";
+import { buildSeedanceReferenceInput } from "../_shared/fal.ts";
 import {
   corsHeaders,
   createAdminClient,
@@ -103,6 +106,7 @@ Deno.serve(async (req) => {
     const products = readProducts(body.products);
     if (!frames.length) throw new Error("At least one approved swapped frame is required");
     if (!products.length) throw new Error("At least one product reference is required");
+    const sourceVideo = await resolveOwnedSourceVideo(admin, user.id, body.sourceVideo);
 
     const name = cleanText(body.name, `Outfit Swap – ${new Date().toISOString().slice(0, 10)}`);
     const description = cleanText(
@@ -121,6 +125,12 @@ Deno.serve(async (req) => {
     const aspectRatio = ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"].includes(cleanText(body.aspectRatio))
       ? cleanText(body.aspectRatio)
       : "9:16";
+    // Validate the provider contract before creating any template records.
+    buildSeedanceReferenceInput({
+      modelKey: videoModel, prompt: UNIVERSAL_RECONSTRUCTION_PROMPT,
+      imageUrls: frames.map((frame) => frame.url), videoUrls: [sourceVideo.executionUrl],
+      duration, resolution, aspectRatio,
+    });
 
     const { data: template, error: templateError } = await admin
       .from("fuse_templates")
@@ -150,6 +160,26 @@ Deno.serve(async (req) => {
     const nodes: Record<string, unknown>[] = [];
     const edges: Record<string, unknown>[] = [];
     const positions: Record<string, { x: number; y: number }> = {};
+
+    const { data: sourceAsset, error: sourceAssetError } = await admin.from("assets")
+      .insert({
+        supabase_storage_url: sourceVideo.canonicalUrl,
+        asset_type: "video",
+        metadata: { source: "outfit_swap_source_video", templateId: template.id, versionId, ...sourceVideo.source },
+      }).select("id").single();
+    if (sourceAssetError || !sourceAsset) throw new Error(sourceAssetError?.message ?? "Could not save source video");
+    const sourceVideoNodeId = crypto.randomUUID();
+    nodes.push({
+      id: sourceVideoNodeId, version_id: versionId, node_type: "user_input", model_id: null,
+      name: "Creator source video · motion reference", default_asset_id: sourceAsset.id,
+      prompt_config: {
+        editor_mode: "reference", locked: true, weavy_exposed: false,
+        editor_slot_key: "creator_source_video", editor_label: "Creator source video",
+        editor_expected: "video", media_type: "video", required: true,
+        outfit_swap_role: "source_video", sample_url: sourceVideo.canonicalUrl,
+      },
+    });
+    positions[sourceVideoNodeId] = { x: STAGE_X.image, y: 80 + Math.max(frames.length, products.length) * ROW_GAP };
 
     // --- Persist each product image as a locked template asset ---
     const { data: productAssets, error: productAssetsError } = await admin
@@ -310,13 +340,14 @@ Deno.serve(async (req) => {
       node_type: "video_gen",
       model_id: null,
       prompt_config: {
-        prompt: UNIVERSAL_RECONSTRUCTION_PROMPT,
+        prompt: sourceMotionPrompt(UNIVERSAL_RECONSTRUCTION_PROMPT),
         video_model: videoModel,
         video_mode: "multi_reference",
+        requires_source_video: true,
         duration,
         resolution,
         aspect_ratio: aspectRatio,
-        generate_audio: true,
+        generate_audio: body.generateAudio === true,
         output_exposed: true,
         outfit_swap_role: "reconstruction",
       },
@@ -327,6 +358,11 @@ Deno.serve(async (req) => {
       x: STAGE_X.video,
       y: 80 + Math.max(0, (frames.length - 1) / 2) * ROW_GAP,
     };
+    edges.push({
+      id: crypto.randomUUID(), version_id: versionId,
+      source_node_id: sourceVideoNodeId, target_node_id: seedanceId,
+      mapping_logic: { target_param: "video_1", edge_order: frames.length + 1 }, condition_logic: null,
+    });
     frameNodes.forEach((frame, index) => {
       edges.push({
         id: crypto.randomUUID(),
@@ -394,6 +430,7 @@ Deno.serve(async (req) => {
         adminUserId: user.id,
         inputSlots: frames.length,
         productReferences: products.length,
+        sourceVideo: sourceVideo.source,
         includeAnimation,
         nodeCount: nodes.length,
         edgeCount: edges.length,

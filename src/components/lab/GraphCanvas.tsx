@@ -138,7 +138,7 @@ function inputPortsFor(data: GraphCanvasNodeData): Port[] {
 
 function outputPortFor(data: GraphCanvasNodeData): Port {
   if (data.kind === "prompt") return { id: "prompt", label: "Prompt", type: "prompt" };
-  if (data.kind === "video") return { id: "video", label: "Video", type: "video" };
+  if (data.kind === "video" || (data.kind === "input" && data.expected === "video")) return { id: "video", label: "Video", type: "video" };
   return { id: "image", label: "Image", type: "image" };
 }
 
@@ -341,7 +341,10 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
         <p className="mt-1 truncate text-[11px] font-medium uppercase tracking-[0.14em] text-primary/80">{data.modelBadge}</p>
       ) : null}
 
-      {data.assetUrl ? (
+      {data.assetUrl && data.expected === "video" ? (
+        <video src={data.assetUrl} controls playsInline preload="metadata"
+          className="nodrag mt-3 h-24 w-full rounded-xl border border-border/50 bg-background/70 object-contain" />
+      ) : data.assetUrl ? (
         <img
           src={data.assetUrl}
           alt={data.title}
@@ -355,7 +358,9 @@ const TemplateFlowNode = ({ id, data, selected }: NodeProps<GraphCanvasNode>) =>
         </div>
       ) : null}
 
-      {data.isReference && data.onUploadReference ? (
+      {data.isReference && data.expected === "video" ? (
+        <p className="mt-2 text-[11px] text-muted-foreground">Source clip saved from Outfit Swap.</p>
+      ) : data.isReference && data.onUploadReference ? (
         <label className="nodrag mt-3 flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary transition hover:bg-primary/20">
           {data.uploadingReference ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
           {data.assetUrl ? "Replace image" : "Upload image"}

@@ -399,7 +399,10 @@ function VideoProgress({
 
 export default function OutfitSwap() {
   const { user } = useAuth();
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [sourceVideo, setSourceVideo] = useState<{
+    path: string; duration: number; width: number; height: number;
+  } | null>(null);
+  const sourceUploadInFlight = useRef(false);
 
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
@@ -442,7 +445,7 @@ export default function OutfitSwap() {
   const [swapping, setSwapping] = useState(false);
 
   const [videoModel, setVideoModel] = useState("seedance-2.0");
-  const [preserveAudio, setPreserveAudio] = useState(true);
+  const [generateAudio, setGenerateAudio] = useState(false);
   const [resolution, setResolution] = useState("1080p");
   // Every Outfit Swap video the user has started — newest first. Jobs live
   // server-side, so refreshing simply re-attaches to the running ones.
@@ -502,6 +505,17 @@ export default function OutfitSwap() {
   }, []);
 
   const handleVideoFile = useCallback(async (file: File) => {
+    if (sourceUploadInFlight.current) return;
+    if (!/\.(mp4|mov)$/i.test(file.name) ||
+        !["video/mp4", "video/quicktime"].includes(file.type) ||
+        file.size <= 0 || file.size >= 50_000_000) {
+      toast.error("Choose an MP4 or MOV smaller than 50 MB");
+      return;
+    }
+    sourceUploadInFlight.current = true;
+    setUploadingVideo(true);
+    setSourceVideo(null);
+    setMeta(null);
     const objectUrl = URL.createObjectURL(file);
     setVideoPreview(objectUrl);
     setFrames([]);
@@ -517,13 +531,15 @@ export default function OutfitSwap() {
     try {
       const element = await loadVideo(objectUrl);
       const nextMeta = readMeta(element);
+      if (!Number.isFinite(nextMeta.duration) || nextMeta.duration < 2 || nextMeta.duration > 15) {
+        throw new Error("Use a source clip between 2 and 15 seconds");
+      }
       setMeta(nextMeta);
 
       const folder = await createOutfitSwapFolder();
 
       setUploadingVideo(true);
       const uploadedVideo = await uploadToStorage(folder, file, file.name);
-      setVideoUrl(uploadedVideo.url);
 
       // Extract ~1 frame/second plus the final frame, then upload each frame.
       setExtracting(true);
@@ -543,6 +559,12 @@ export default function OutfitSwap() {
         (done, total) => setExtractProgress(50 + Math.round((done / total) * 50)),
       );
       setFrames(uploaded);
+      setSourceVideo({
+        path: uploadedVideo.path,
+        duration: nextMeta.duration,
+        width: nextMeta.width,
+        height: nextMeta.height,
+      });
       // Offer a spread of frames by default; the user can change the selection.
       const spread = uploaded
         .map((_, index) => index)
@@ -555,6 +577,7 @@ export default function OutfitSwap() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not process that video");
     } finally {
+      sourceUploadInFlight.current = false;
       setUploadingVideo(false);
       setExtracting(false);
     }
@@ -909,6 +932,10 @@ export default function OutfitSwap() {
   }, [videoModel, videoDuration, resolution]);
 
   const reconstruct = useCallback(async () => {
+    if (!sourceVideo) {
+      toast.error("Upload a source video and wait for its frames to finish first");
+      return;
+    }
     if (!approvedUrls.length) {
       toast.error("Approve at least one swapped frame first");
       return;
@@ -931,15 +958,15 @@ export default function OutfitSwap() {
 
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "reconstruct",
+        sourceVideo,
         frameUrls: approvedUrls,
         garments,
         model: videoModel,
         duration: videoDuration,
         resolution,
         aspectRatio: meta?.aspectRatio,
-        // Keeps the uploaded clip's own audio on the rebuilt video.
-        preserveAudio,
-        generateAudio: preserveAudio,
+        // Provider-generated audio; this does not copy the source soundtrack.
+        generateAudio,
         extraPrompt,
         frameSubjects: subjectUnion,
         castAssignment,
@@ -955,10 +982,11 @@ export default function OutfitSwap() {
     }
   }, [
     approvedUrls,
+    sourceVideo,
     garments,
     videoModel,
     resolution,
-    preserveAudio,
+    generateAudio,
     meta,
     extraPrompt,
     videoDuration,
@@ -1312,7 +1340,7 @@ export default function OutfitSwap() {
 
   /* ------------------- Serialize this run into a real template -------------- */
 
-  const canMakeTemplate = frames.length > 0 && garments.length > 0 && approvedFrames.length > 0;
+  const canMakeTemplate = !!sourceVideo && frames.length > 0 && garments.length > 0 && approvedFrames.length > 0;
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState(
@@ -1340,7 +1368,9 @@ export default function OutfitSwap() {
     try {
       const result = await createTemplateFromOutfitSwap({
         name: templateName,
+        sourceVideo,
         description: templateDescription,
+        generateAudio,
         // Approved swapped frames define the STRUCTURE — each becomes a
         // replaceable input slot with the swapped frame as its example.
         frames: approvedFrames.map((frame, index) => ({
@@ -1370,6 +1400,8 @@ export default function OutfitSwap() {
     }
   }, [
     canMakeTemplate,
+    sourceVideo,
+    generateAudio,
     templateName,
     templateDescription,
     approvedFrames,
@@ -1403,7 +1435,7 @@ export default function OutfitSwap() {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
           {/* LEFT: inputs */}
           <div className="space-y-5">
-            <SectionCard step={1} title="Source video" hint="MP4 or MOV, up to 60 MB.">
+            <SectionCard step={1} title="Source video" hint="MP4 or MOV, 2–15 seconds, under 50 MB.">
               <input
                 ref={videoInputRef}
                 type="file"
@@ -1783,26 +1815,26 @@ export default function OutfitSwap() {
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={preserveAudio}
-                  onClick={() => setPreserveAudio((prev) => !prev)}
+                  aria-checked={generateAudio}
+                  onClick={() => setGenerateAudio((prev) => !prev)}
                   className={cn(
                     "flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-xs font-medium transition-colors",
-                    preserveAudio
+                    generateAudio
                       ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
                       : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
                   )}
                 >
-                  <span>Preserve original audio</span>
+                  <span>Generate audio <span className="text-muted-foreground">(new soundtrack)</span></span>
                   <span
                     className={cn(
                       "relative h-4 w-8 shrink-0 rounded-full transition-colors",
-                      preserveAudio ? "bg-cyan-300/80" : "bg-white/15",
+                      generateAudio ? "bg-cyan-300/80" : "bg-white/15",
                     )}
                   >
                     <span
                       className={cn(
                         "absolute top-0.5 h-3 w-3 rounded-full bg-black transition-all",
-                        preserveAudio ? "left-[18px]" : "left-0.5",
+                        generateAudio ? "left-[18px]" : "left-0.5",
                       )}
                     />
                   </span>
@@ -1827,7 +1859,7 @@ export default function OutfitSwap() {
 
                 <Button
                   onClick={reconstruct}
-                  disabled={reconstructing || !approvedUrls.length}
+                  disabled={reconstructing || !sourceVideo || !approvedUrls.length}
                   className="w-full rounded-xl bg-[hsl(var(--primary))] py-5 font-semibold text-primary-foreground hover:bg-[hsl(var(--primary))]/90"
                 >
                   {reconstructing ? <Loader2 size={15} className="animate-spin" /> : <Film size={15} />}

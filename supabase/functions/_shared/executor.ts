@@ -1,5 +1,6 @@
 import { createAdminClient, logAuditEvent } from "./supabase-admin.ts";
-import { resolveExecutionUrl, resolveExecutionUrls } from "./asset-access.ts";
+import { resolveExecutionUrl, resolveExecutionUrls, resolveRequiredVideoUrls } from "./asset-access.ts";
+import { assertVideoReferenceRoute, referenceMediaType } from "./video-reference.ts";
 import {
   getFalPricing,
   getFalQueueResult,
@@ -44,14 +45,14 @@ const SEEDANCE_MAX_REFERENCE_IMAGES = 9;
 /**
  * True only when the node is EXPLICITLY configured for multi-reference
  * (prompt_config.video_mode === "multi_reference"), its model is a Seedance
- * reference-capable model, AND the step resolved 2+ incoming images.
+ * reference-capable model, AND the step resolved 2+ images or a source video.
  * Without the explicit flag we always fall through to the single-image path.
  */
-function isSeedanceMultiReferenceRequest(node: NodeRow, resolvedImageInputs: string[]) {
+function isSeedanceMultiReferenceRequest(node: NodeRow, resolvedImageInputs: string[], resolvedVideoInputs: string[] = []) {
   if (node.prompt_config?.video_mode !== "multi_reference") return false;
   const model = getVideoModel(node.prompt_config?.video_model);
   if (model.family !== "seedance" || !model.supportsMultiReference) return false;
-  return (resolvedImageInputs ?? []).filter(Boolean).length >= 2;
+  return resolvedVideoInputs.length > 0 || (resolvedImageInputs ?? []).filter(Boolean).length >= 2;
 }
 
 /** Submits the known-good Seedance reference-to-video job for one video step. */
@@ -61,6 +62,7 @@ async function runSeedanceMultiReference(admin: AdminClient, args: {
   node: NodeRow;
   prompt: string;
   imageUrls: string[];
+  videoUrls: string[];
 }) {
   const { node, step } = args;
   const model = getVideoModel(node.prompt_config?.video_model);
@@ -73,8 +75,11 @@ async function runSeedanceMultiReference(admin: AdminClient, args: {
     : VERTICAL_VIDEO_ASPECT_RATIO;
   const generateAudio = node.prompt_config?.generate_audio !== false;
 
-  // Never silently drop references: cap at the provider limit and surface it.
+  // Source-driven reconstruction must keep every approved visual reference.
   const requestedImages = (args.imageUrls ?? []).filter(Boolean);
+  if (args.videoUrls.length && requestedImages.length > SEEDANCE_MAX_REFERENCE_IMAGES) {
+    throw new Error("Choose at most 9 reference images for source-video reconstruction");
+  }
   const sentImages = requestedImages.slice(0, SEEDANCE_MAX_REFERENCE_IMAGES);
   const droppedImages = requestedImages.slice(SEEDANCE_MAX_REFERENCE_IMAGES);
   const capNote = droppedImages.length
@@ -86,6 +91,7 @@ async function runSeedanceMultiReference(admin: AdminClient, args: {
     modelKey: model.key,
     prompt: args.prompt,
     imageUrls: sentImages,
+    videoUrls: args.videoUrls,
     duration,
     resolution,
     aspectRatio,
@@ -114,6 +120,7 @@ async function runSeedanceMultiReference(admin: AdminClient, args: {
         video_model: model.key,
         multi_reference: true,
         reference_image_count: sentImages.length,
+        reference_video_count: args.videoUrls.length,
         ...(capNote
           ? { reference_images_dropped: droppedImages.length, reference_cap_note: capNote }
           : {}),
@@ -541,7 +548,7 @@ function getNodeReferenceAsset(node: NodeRow, assetMap: Map<string, AssetRow>) {
   return {
     assetId: asset.id,
     url: asset.supabase_storage_url,
-    type: "image" as const,
+    type: referenceMediaType(asset.asset_type, node.prompt_config),
   };
 }
 
@@ -1207,24 +1214,25 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
     const editorMode = typeof node.prompt_config?.editor_mode === "string"
       ? node.prompt_config.editor_mode
       : null;
-    const explicitUrl = jobInputs[node.id] ?? jobInputs[node.name];
+    const explicitUrl = node.prompt_config?.outfit_swap_role === "source_video"
+      ? undefined : jobInputs[node.id] ?? jobInputs[node.name];
     const isHiddenWorkflowPlaceholder =
       node.prompt_config?.weavy_exposed === false &&
       editorMode === "reference" &&
       !node.default_asset_id &&
       !explicitUrl;
-    if (isHiddenWorkflowPlaceholder) continue;
+    if (isHiddenWorkflowPlaceholder && node.prompt_config?.required !== true) continue;
     if (!nodeIdsWithOutgoingEdges.has(node.id)) continue;
 
     if (explicitUrl) {
-      resolved.set(node.id, { url: explicitUrl, type: "image" });
+      resolved.set(node.id, { url: explicitUrl, type: referenceMediaType(undefined, node.prompt_config) });
       continue;
     }
 
     if (node.default_asset_id) {
       const asset = assetMap.get(node.default_asset_id);
       if (asset?.supabase_storage_url) {
-        resolved.set(node.id, { assetId: asset.id, url: asset.supabase_storage_url, type: "image" });
+        resolved.set(node.id, { assetId: asset.id, url: asset.supabase_storage_url, type: referenceMediaType(asset.asset_type, node.prompt_config) });
         continue;
       }
     }
@@ -1244,6 +1252,18 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
       url: asset.supabase_storage_url,
       type: node.node_type === "video_gen" ? "video" : "image",
     });
+  }
+
+  // Check locked source inputs before any paid image steps can start.
+  for (const node of nodes as NodeRow[]) {
+    if (node.prompt_config?.requires_source_video !== true) continue;
+    const sources = (incomingByTarget.get(node.id) ?? [])
+      .map((edge) => resolved.get(edge.source_node_id))
+      .filter((value): value is ResolvedOutput => value?.type === "video");
+    const model = getVideoModel(node.prompt_config?.video_model);
+    assertVideoReferenceRoute(node.prompt_config, sources.length,
+      model.family === "seedance" && !!model.supportsMultiReference);
+    await resolveRequiredVideoUrls(admin, sources.map((source) => source.url));
   }
 
   await admin.from("execution_jobs").update({ status: "running", progress: 10 }).eq("id", job.id);
@@ -1350,6 +1370,9 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
         try {
           const prompt = lockPrompt(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap));
           const referenceAsset = getNodeReferenceAsset(node, assetMap);
+          if (referenceAsset?.type === "video" || orderedParamEntries.some(([, value]) => value.type === "video")) {
+            throw new Error(`${node.name} accepts images only; connect the source video to the Seedance step`);
+          }
           const orderedInputs = orderedParamEntries
             .map(([, value]) => value.url)
             .filter(Boolean);
@@ -1473,12 +1496,18 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             continue;
           }
 
-          // Guarded additive branch: Seedance reference-to-video for 2+ images.
+          // Keep media types separate at the provider boundary.
           const resolvedImageInputs = orderedParamEntries
             .filter(([, value]) => value.type === "image")
             .map(([, value]) => value.url)
             .filter(Boolean);
-          if (isSeedanceMultiReferenceRequest(node, resolvedImageInputs)) {
+          const resolvedVideoInputs = orderedParamEntries
+            .filter(([, value]) => value.type === "video")
+            .map(([, value]) => value.url).filter(Boolean);
+          const referenceModel = getVideoModel(node.prompt_config?.video_model);
+          assertVideoReferenceRoute(node.prompt_config, resolvedVideoInputs.length,
+            referenceModel.family === "seedance" && !!referenceModel.supportsMultiReference);
+          if (isSeedanceMultiReferenceRequest(node, resolvedImageInputs, resolvedVideoInputs)) {
             const multiRefRequestId = await runSeedanceMultiReference(admin, {
               jobId: job.id,
               step,
@@ -1486,6 +1515,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
               prompt,
               // Provider boundary signing (6h TTL); external URLs unchanged.
               imageUrls: (await resolveExecutionUrls(admin, resolvedImageInputs)) as string[],
+              videoUrls: await resolveRequiredVideoUrls(admin, resolvedVideoInputs),
             });
 
             step.provider_request_id = multiRefRequestId;

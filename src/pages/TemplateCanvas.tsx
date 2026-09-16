@@ -1666,6 +1666,10 @@ const TemplateCanvas = () => {
 
   const uploadReferenceAsset = useCallback(async () => {
     if (!detail || !selectedNode || !draft || !referenceUploadFile) return;
+    if ((selectedNode.editor?.expected ?? selectedNode.expected) === "video") {
+      toast({ title: "Source videos are saved from Outfit Swap", description: "Create the workflow from Outfit Swap to attach its source clip.", variant: "destructive" });
+      return;
+    }
     if (selectedNode.nodeType !== "user_input") {
       toast({ title: "Pick an input node first", variant: "destructive" });
       return;
@@ -1738,6 +1742,10 @@ const TemplateCanvas = () => {
     if (!detail) return;
     const node = detail.nodes.find((candidate) => candidate.id === nodeId);
     if (!node) return;
+    if ((node.editor?.expected ?? node.expected) === "video") {
+      toast({ title: "Source videos are saved from Outfit Swap", variant: "destructive" });
+      return;
+    }
     setReferenceUploadNodeId(nodeId);
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
@@ -2541,7 +2549,7 @@ const TemplateCanvas = () => {
       const param = (incoming.targetParam ?? "").trim().toLowerCase();
       const portType: PortType = param.includes("prompt") || sourceNode?.nodeType === "prompt"
         ? "prompt"
-        : sourceNode?.nodeType === "video_gen"
+        : sourceNode?.nodeType === "video_gen" || (sourceNode?.editor?.expected ?? sourceNode?.expected) === "video"
         ? "video"
         : "image";
       const stroke = PORT_COLOR[portType];
@@ -2557,7 +2565,7 @@ const TemplateCanvas = () => {
       }
       const sourceHandle = sourceNode?.nodeType === "prompt"
         ? "prompt"
-        : sourceNode?.nodeType === "video_gen"
+        : sourceNode?.nodeType === "video_gen" || (sourceNode?.editor?.expected ?? sourceNode?.expected) === "video"
         ? "video"
         : "image";
       return [{

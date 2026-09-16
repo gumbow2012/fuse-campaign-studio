@@ -1,4 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { resolveOwnedSourceVideo } from "../_shared/source-video.ts";
+import { sourceMotionPrompt } from "../_shared/video-reference.ts";
+import { resolveExecutionUrls } from "../_shared/asset-access.ts";
 
 import {
   corsHeaders,
@@ -13,6 +16,7 @@ import {
   getFalQueueResult,
   getFalQueueStatus,
   buildVideoModelInput,
+  buildSeedanceReferenceInput,
   getVideoModel,
   IMAGE_MODEL,
   referenceToVideoEndpoint,
@@ -422,6 +426,7 @@ async function startSwapFrame(admin: AdminClient, args: {
 
 async function startReconstruction(admin: AdminClient, args: {
   userId: string;
+  sourceVideo: unknown;
   frameUrls: string[];
   garments: GarmentReference[];
   model?: string;
@@ -438,6 +443,7 @@ async function startReconstruction(admin: AdminClient, args: {
 }) {
   const referenceUrls = cleanUrls(args.frameUrls);
   if (!referenceUrls.length) throw new Error("Approve at least one swapped frame first");
+  const sourceVideo = await resolveOwnedSourceVideo(admin, args.userId, args.sourceVideo);
 
   const videoModel = getVideoModel(
     args.model === "seedance-2.0-fast" ? "seedance-2.0-fast" : "seedance-2.0",
@@ -460,7 +466,7 @@ async function startReconstruction(admin: AdminClient, args: {
     modelAssignment: resolvedVideoModels,
     extraPrompt: args.extraPrompt,
   });
-  const prompt = reconstruction.prompt;
+  const prompt = sourceMotionPrompt(reconstruction.prompt);
   if (reconstruction.enriched) {
     console.log(
       "[outfit-swap][phase7][enriched-reconstruction]",
@@ -497,15 +503,16 @@ async function startReconstruction(admin: AdminClient, args: {
     const aspect = String(args.aspectRatio ?? "").trim();
     const aspectRatio = videoModel.aspectRatios?.includes(aspect) ? aspect : "9:16";
 
-    const falInput: Record<string, unknown> = {
+    const { input: falInput } = buildSeedanceReferenceInput({
+      modelKey: videoModel.key,
       prompt,
-      reference_image_urls: referenceUrls,
-      image_urls: referenceUrls,
-      duration: String(duration),
+      imageUrls: (await resolveExecutionUrls(admin, referenceUrls)) as string[],
+      videoUrls: [sourceVideo.executionUrl],
+      duration,
       resolution,
-      aspect_ratio: aspectRatio,
-      generate_audio: generateAudio,
-    };
+      aspectRatio,
+      generateAudio,
+    });
 
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
     const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
@@ -522,6 +529,7 @@ async function startReconstruction(admin: AdminClient, args: {
           ...falInput,
           feature: "outfit-swap",
           stage: "reconstruction",
+          source_video: sourceVideo.source,
           video_model: videoModel.key,
           reconstruction_mode: reconstruction.enriched ? "fused_multi_subject" : "legacy",
           reconstruction_plan: reconstruction.enriched ? reconstruction.plan : null,
@@ -781,6 +789,7 @@ Deno.serve(async (req) => {
     if (action === "reconstruct") {
       const generation = await startReconstruction(admin, {
         userId: user.id,
+        sourceVideo: body.sourceVideo,
         frameUrls: body.frameUrls ?? [],
         garments: body.garments ?? [],
         model: body.model,
