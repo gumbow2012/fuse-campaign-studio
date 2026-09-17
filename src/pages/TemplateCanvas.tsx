@@ -1172,6 +1172,11 @@ const TemplateCanvas = () => {
       generateAudio: resolveVideoModelOption(selectedNode.editor?.videoModel).family === "kling_v2v"
         ? selectedNode.editor?.keepSourceAudio !== false
         : selectedNode.editor?.generateAudio !== false,
+      sourceDuration: selectedNode.editor?.sourceVideo?.duration
+        ? String(selectedNode.editor.sourceVideo.duration)
+        : "",
+      sourceWidth: selectedNode.editor?.sourceVideo?.width ? String(selectedNode.editor.sourceVideo.width) : "",
+      sourceHeight: selectedNode.editor?.sourceVideo?.height ? String(selectedNode.editor.sourceVideo.height) : "",
     });
   }, [selectedNode]);
 
