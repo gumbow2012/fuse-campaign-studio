@@ -260,7 +260,7 @@ const VIDEO_MODEL_OPTIONS: Array<{
     key: "kling-o3-pro-video-edit",
     label: "Kling O3 Pro — source video edit",
     family: "kling_v2v",
-    usdPerSecond: 0.32,
+    usdPerSecond: 0.168,
   },
   {
     key: "seedance-2.0",
