@@ -44,6 +44,18 @@ type Body = {
   generateAudio?: boolean | null;
   /** Source-video edit route only: keep the ORIGINAL soundtrack. */
   keepSourceAudio?: boolean | null;
+  /** Source-video edit route only: explicit route marker. */
+  videoMode?: string | null;
+  /**
+   * Source-video edit route only: measured facts about the attached clip.
+   * The provider derives length and framing from the clip itself, so these
+   * values are used for cost estimation and pre-submit validation only.
+   */
+  sourceVideo?: {
+    duration?: number | string | null;
+    width?: number | string | null;
+    height?: number | string | null;
+  } | null;
   referenceFile?: {
     dataUrl?: string | null;
     filename?: string | null;
