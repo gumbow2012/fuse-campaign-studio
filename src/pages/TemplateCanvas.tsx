@@ -1728,6 +1728,7 @@ const TemplateCanvas = () => {
               // The source clip sets length and framing; only the audio choice is stored.
               ? {
                 videoModel: draft.videoModel,
+                videoMode: "source_video_edit",
                 keepSourceAudio: draft.generateAudio,
                 sourceVideo: draft.sourceDuration.trim()
                   ? {
