@@ -122,3 +122,61 @@ test("the helper never touches configs for other routes", () => {
   applySourceVideoEditConfig(copy, { modelKey: MODEL });
   assert.deepEqual(copy, original, "input config must not be mutated");
 });
+
+test("each edge must be inside the provider's 720–3840 range", () => {
+  // 719 is below the provider minimum even though it is positive.
+  assert.throws(
+    () => normalizeSourceVideoMetadata({ duration: 12.535918, width: 719, height: 1280 }),
+    /between 720 and 3840/,
+  );
+  assert.throws(
+    () => normalizeSourceVideoMetadata({ duration: 12.535918, width: 1280, height: 719 }),
+    /between 720 and 3840/,
+  );
+  // A short edge under the minimum must fail even when the long edge is legal.
+  assert.throws(
+    () => normalizeSourceVideoMetadata({ duration: 12.535918, width: 480, height: 3840 }),
+    /between 720 and 3840/,
+  );
+  assert.throws(
+    () => normalizeSourceVideoMetadata({ duration: 12.535918, width: 3841, height: 1280 }),
+    /between 720 and 3840/,
+  );
+});
+
+test("zero, fractional and non-finite dimensions are rejected", () => {
+  assert.throws(() => normalizeSourceVideoMetadata({ duration: 12.535918, width: 0, height: 1280 }));
+  assert.throws(() => normalizeSourceVideoMetadata({ duration: 12.535918, width: 720, height: 0 }));
+  assert.throws(
+    () => normalizeSourceVideoMetadata({ duration: 12.535918, width: 720.5, height: 1280 }),
+    /whole numbers/,
+  );
+  assert.throws(
+    () => normalizeSourceVideoMetadata({ duration: 12.535918, width: 720, height: 1280.25 }),
+    /whole numbers/,
+  );
+  assert.throws(() => normalizeSourceVideoMetadata({ duration: 12.535918, width: "abc", height: 1280 }));
+  assert.throws(() => normalizeSourceVideoMetadata({ duration: 12.535918, width: Infinity, height: 1280 }));
+  assert.throws(() => normalizeSourceVideoMetadata({ duration: 12.535918, width: -720, height: 1280 }));
+});
+
+test("the real Jerry source clip is accepted unchanged", () => {
+  assert.deepEqual(
+    normalizeSourceVideoMetadata({ duration: 12.535918, width: 720, height: 1280 }),
+    { duration: 12.535918, width: 720, height: 1280 },
+  );
+  const saved = applySourceVideoEditConfig({}, {
+    modelKey: MODEL,
+    hasSourceVideo: true,
+    sourceVideo: { duration: "12.535918", width: "720", height: "1280" },
+  });
+  assert.deepEqual(saved.source_video, { duration: 12.535918, width: 720, height: 1280 });
+  assert.equal(saved.video_mode, "source_video_edit");
+});
+
+test("the 3–15 second boundary is preserved", () => {
+  assert.deepEqual(normalizeSourceVideoMetadata({ duration: 3, width: 720, height: 1280 }).duration, 3);
+  assert.deepEqual(normalizeSourceVideoMetadata({ duration: 15, width: 720, height: 1280 }).duration, 15);
+  assert.throws(() => normalizeSourceVideoMetadata({ duration: 2.999, width: 720, height: 1280 }));
+  assert.throws(() => normalizeSourceVideoMetadata({ duration: 15.001, width: 720, height: 1280 }));
+});
