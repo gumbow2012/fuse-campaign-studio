@@ -3333,10 +3333,11 @@ const TemplateCanvas = () => {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Clip height</Label>
+                          <Label>Clip height (720–3840)</Label>
                           <Input
                             type="number"
-                            min={1}
+                            step="1"
+                            min={720}
                             max={3840}
                             value={draft.sourceHeight}
                             onChange={(event) =>
