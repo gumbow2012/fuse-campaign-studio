@@ -1180,6 +1180,50 @@ const TemplateCanvas = () => {
     });
   }, [selectedNode]);
 
+  // When the source-edit step has no stored clip facts yet, read them from the
+  // clip that is actually connected to it. Nothing is written until Save.
+  useEffect(() => {
+    if (!selectedNode || selectedNode.nodeType !== "video_gen" || !detail) return;
+    if (resolveVideoModelOption(selectedNode.editor?.videoModel).family !== "kling_v2v") return;
+    if (selectedNode.editor?.sourceVideo?.duration) return;
+
+    const nodeMap = new Map(detail.nodes.map((node) => [node.id, node]));
+    const clipUrl = selectedNode.incoming
+      .map((edge) => nodeMap.get(edge.sourceNodeId)?.defaultAssetUrl ?? null)
+      .find((url) => !!url && /\.(mp4|mov|m4v|webm)(\?|$)/i.test(url));
+    if (!clipUrl) return;
+
+    let cancelled = false;
+    const probe = document.createElement("video");
+    probe.preload = "metadata";
+    probe.muted = true;
+    probe.onloadedmetadata = () => {
+      const duration = Number(probe.duration);
+      const width = Number(probe.videoWidth);
+      const height = Number(probe.videoHeight);
+      probe.src = "";
+      if (cancelled) return;
+      if (!Number.isFinite(duration) || duration <= 0 || width <= 0 || height <= 0) return;
+      setDraft((current) =>
+        current && !current.sourceDuration.trim()
+          ? {
+            ...current,
+            sourceDuration: String(duration),
+            sourceWidth: String(width),
+            sourceHeight: String(height),
+          }
+          : current
+      );
+    };
+    probe.src = clipUrl;
+
+    return () => {
+      cancelled = true;
+      probe.onloadedmetadata = null;
+      probe.src = "";
+    };
+  }, [selectedNode, detail]);
+
   useEffect(() => {
     setReferenceUploadFile(null);
     setReferenceUploadPreview((current) => {
