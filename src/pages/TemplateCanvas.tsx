@@ -1695,13 +1695,20 @@ const TemplateCanvas = () => {
     const isSourceEdit = selectedNode.nodeType === "video_gen" &&
       resolveVideoModelOption(draft.videoModel).family === "kling_v2v";
     if (isSourceEdit && draft.sourceDuration.trim()) {
-      const numbers = [draft.sourceDuration, draft.sourceWidth, draft.sourceHeight].map((value) =>
-        Number(value)
+      // Same rules the runner enforces before submitting, so nothing can be
+      // stored here that the generator would reject later.
+      const duration = Number(draft.sourceDuration);
+      const width = Number(draft.sourceWidth);
+      const height = Number(draft.sourceHeight);
+      const badDuration = !Number.isFinite(duration) || duration < 3 || duration > 15;
+      const badSize = [width, height].some(
+        (value) => !Number.isInteger(value) || value < 720 || value > 3840,
       );
-      if (numbers.some((value) => !Number.isFinite(value) || value <= 0)) {
+      if (badDuration || badSize) {
         toast({
           title: "Check the clip numbers",
-          description: "Clip length, width and height must all be positive numbers.",
+          description:
+            "Clip length must be 3–15 seconds, and width and height must each be whole numbers between 720 and 3840 pixels.",
           variant: "destructive",
         });
         return;
