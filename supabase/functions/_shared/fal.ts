@@ -449,7 +449,9 @@ export const VIDEO_MODELS: Record<VideoModelKey, VideoModelDefinition> = {
     maxReferences: KLING_VIDEO_EDIT_MAX_REFERENCES,
     durationRange: { min: KLING_VIDEO_EDIT_MIN_SECONDS, max: KLING_VIDEO_EDIT_MAX_SECONDS },
     // Conservative fallback only; the live fal pricing lookup stays authoritative.
-    fallbackUsdPerSecond: 0.32,
+    // Published fal rate for this endpoint (verified 2026-09-17): $0.168/sec.
+    // The live price lookup still wins when it returns.
+    fallbackUsdPerSecond: 0.168,
   },
   "seedance-2.0": {
     key: "seedance-2.0",

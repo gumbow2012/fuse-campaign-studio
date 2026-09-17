@@ -161,6 +161,8 @@ type TemplateDetailNode = {
     aspectRatio?: string | null;
     generateAudio?: boolean | null;
     keepSourceAudio?: boolean | null;
+    videoMode?: string | null;
+    sourceVideo?: { duration?: number | null; width?: number | null; height?: number | null } | null;
     sampleUrl?: string | null;
     isUserFacingInput?: boolean;
     isReferenceInput?: boolean;
@@ -217,6 +219,10 @@ type NodeDraft = {
   resolution: string;
   aspectRatio: string;
   generateAudio: boolean;
+  /** Source-clip edit route: measured facts about the attached clip. */
+  sourceDuration: string;
+  sourceWidth: string;
+  sourceHeight: string;
 };
 
 type VideoModelKey =
@@ -254,7 +260,7 @@ const VIDEO_MODEL_OPTIONS: Array<{
     key: "kling-o3-pro-video-edit",
     label: "Kling O3 Pro — source video edit",
     family: "kling_v2v",
-    usdPerSecond: 0.32,
+    usdPerSecond: 0.168,
   },
   {
     key: "seedance-2.0",
@@ -1166,6 +1172,11 @@ const TemplateCanvas = () => {
       generateAudio: resolveVideoModelOption(selectedNode.editor?.videoModel).family === "kling_v2v"
         ? selectedNode.editor?.keepSourceAudio !== false
         : selectedNode.editor?.generateAudio !== false,
+      sourceDuration: selectedNode.editor?.sourceVideo?.duration
+        ? String(selectedNode.editor.sourceVideo.duration)
+        : "",
+      sourceWidth: selectedNode.editor?.sourceVideo?.width ? String(selectedNode.editor.sourceVideo.width) : "",
+      sourceHeight: selectedNode.editor?.sourceVideo?.height ? String(selectedNode.editor.sourceVideo.height) : "",
     });
   }, [selectedNode]);
 
@@ -1658,7 +1669,17 @@ const TemplateCanvas = () => {
           ...(selectedNode.nodeType === "video_gen"
             ? (resolveVideoModelOption(draft.videoModel).family === "kling_v2v"
               // The source clip sets length and framing; only the audio choice is stored.
-              ? { videoModel: draft.videoModel, keepSourceAudio: draft.generateAudio }
+              ? {
+                videoModel: draft.videoModel,
+                keepSourceAudio: draft.generateAudio,
+                sourceVideo: draft.sourceDuration.trim()
+                  ? {
+                    duration: Number(draft.sourceDuration),
+                    width: Number(draft.sourceWidth),
+                    height: Number(draft.sourceHeight),
+                  }
+                  : null,
+              }
               : {
                 videoModel: draft.videoModel,
                 duration: draft.duration,
@@ -3221,6 +3242,49 @@ const TemplateCanvas = () => {
                       </label>
                       <p className="text-xs text-muted-foreground">
                         This step edits the source clip you attach, so its length and framing come from that clip.
+                      </p>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label>Clip length (seconds)</Label>
+                          <Input
+                            type="number"
+                            step="0.001"
+                            min={3}
+                            max={15}
+                            value={draft.sourceDuration}
+                            onChange={(event) =>
+                              setDraft((current) => current ? { ...current, sourceDuration: event.target.value } : current)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Clip width</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={3840}
+                            value={draft.sourceWidth}
+                            onChange={(event) =>
+                              setDraft((current) => current ? { ...current, sourceWidth: event.target.value } : current)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Clip height</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={3840}
+                            value={draft.sourceHeight}
+                            onChange={(event) =>
+                              setDraft((current) => current ? { ...current, sourceHeight: event.target.value } : current)
+                            }
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        These are the real numbers from your clip. They are used to price the step and to check it
+                        before anything is charged — leave them empty if you don't know them yet.
                       </p>
                     </div>
                   ) : resolveVideoModelOption(draft.videoModel).family === "seedance" ? (

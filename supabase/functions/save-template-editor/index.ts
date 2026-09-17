@@ -44,6 +44,18 @@ type Body = {
   generateAudio?: boolean | null;
   /** Source-video edit route only: keep the ORIGINAL soundtrack. */
   keepSourceAudio?: boolean | null;
+  /** Source-video edit route only: explicit route marker. */
+  videoMode?: string | null;
+  /**
+   * Source-video edit route only: measured facts about the attached clip.
+   * The provider derives length and framing from the clip itself, so these
+   * values are used for cost estimation and pre-submit validation only.
+   */
+  sourceVideo?: {
+    duration?: number | string | null;
+    width?: number | string | null;
+    height?: number | string | null;
+  } | null;
   referenceFile?: {
     dataUrl?: string | null;
     filename?: string | null;
@@ -188,7 +200,30 @@ Deno.serve(async (req) => {
         delete nextPromptConfig.resolution;
         delete nextPromptConfig.aspect_ratio;
         delete nextPromptConfig.generate_audio;
-        delete nextPromptConfig.video_mode;
+        // Explicit route marker so the step reads as a source-clip edit even
+        // before a model lookup. Never "multi_reference" — that is a different
+        // route with different provider keys.
+        nextPromptConfig.video_mode = "source_video_edit";
+
+        if ("sourceVideo" in body) {
+          const measured = body.sourceVideo ?? null;
+          if (measured === null) {
+            delete nextPromptConfig.source_video;
+          } else {
+            const duration = Number(measured.duration ?? 0);
+            const width = Number(measured.width ?? 0);
+            const height = Number(measured.height ?? 0);
+            if (!Number.isFinite(duration) || duration < 3 || duration > 15) {
+              throw new Error("Source clip length must be between 3 and 15 seconds");
+            }
+            const longestEdge = Math.max(width, height);
+            const shortestEdge = Math.min(width, height);
+            if (!Number.isFinite(longestEdge) || shortestEdge <= 0 || longestEdge > 3840) {
+              throw new Error("Source clip size must be positive and no larger than 3840 pixels");
+            }
+            nextPromptConfig.source_video = { duration, width, height };
+          }
+        }
       } else if (isKling3) {
         nextPromptConfig.video_model = modelKey;
         nextPromptConfig.duration = "duration" in body
