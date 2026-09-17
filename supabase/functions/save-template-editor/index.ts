@@ -9,6 +9,7 @@ import {
 } from "../_shared/supabase-admin.ts";
 import { assertVersionAccess, FORBIDDEN_TEMPLATE_MESSAGE } from "../_shared/template-scope.ts";
 import { uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
+import { applySourceVideoEditConfig } from "../_shared/source-video-config.ts";
 
 const VERTICAL_VIDEO_ASPECT_RATIO = "9:16";
 const MAX_VIDEO_DURATION_SECONDS = 5;
@@ -189,41 +190,16 @@ Deno.serve(async (req) => {
       if (isSourceVideoEdit) {
         // The route derives length and framing from the source clip, so no
         // duration / resolution / aspect / generate_audio value is stored.
-        nextPromptConfig.video_model = modelKey;
-        nextPromptConfig.requires_source_video = true;
-        if ("keepSourceAudio" in body) {
-          nextPromptConfig.keep_source_audio = body.keepSourceAudio !== false;
-        } else if (typeof nextPromptConfig.keep_source_audio !== "boolean") {
-          nextPromptConfig.keep_source_audio = true;
-        }
-        delete nextPromptConfig.duration;
-        delete nextPromptConfig.resolution;
-        delete nextPromptConfig.aspect_ratio;
-        delete nextPromptConfig.generate_audio;
-        // Explicit route marker so the step reads as a source-clip edit even
-        // before a model lookup. Never "multi_reference" — that is a different
-        // route with different provider keys.
-        nextPromptConfig.video_mode = "source_video_edit";
-
-        if ("sourceVideo" in body) {
-          const measured = body.sourceVideo ?? null;
-          if (measured === null) {
-            delete nextPromptConfig.source_video;
-          } else {
-            const duration = Number(measured.duration ?? 0);
-            const width = Number(measured.width ?? 0);
-            const height = Number(measured.height ?? 0);
-            if (!Number.isFinite(duration) || duration < 3 || duration > 15) {
-              throw new Error("Source clip length must be between 3 and 15 seconds");
-            }
-            const longestEdge = Math.max(width, height);
-            const shortestEdge = Math.min(width, height);
-            if (!Number.isFinite(longestEdge) || shortestEdge <= 0 || longestEdge > 3840) {
-              throw new Error("Source clip size must be positive and no larger than 3840 pixels");
-            }
-            nextPromptConfig.source_video = { duration, width, height };
-          }
-        }
+        // Shared, pure helper so this behaviour is directly testable.
+        const applied = applySourceVideoEditConfig(nextPromptConfig, {
+          modelKey,
+          keepSourceAudio: body.keepSourceAudio,
+          hasKeepSourceAudio: "keepSourceAudio" in body,
+          sourceVideo: body.sourceVideo,
+          hasSourceVideo: "sourceVideo" in body,
+        });
+        for (const key of Object.keys(nextPromptConfig)) delete nextPromptConfig[key];
+        Object.assign(nextPromptConfig, applied);
       } else if (isKling3) {
         nextPromptConfig.video_model = modelKey;
         nextPromptConfig.duration = "duration" in body
@@ -324,12 +300,26 @@ Deno.serve(async (req) => {
       nextDefaultAssetId = null;
     }
 
+    const nodeUpdate: Record<string, unknown> = {
+      prompt_config: nextPromptConfig,
+      default_asset_id: nextDefaultAssetId,
+    };
+
+    // Narrowly scoped rename: on the source-clip edit route only, the chosen
+    // display label also becomes the node's stored name, so execution outputs
+    // stop reporting a stale model name. Every other node type keeps its name.
+    if (
+      node.node_type === "video_gen" &&
+      nextPromptConfig.video_mode === "source_video_edit" &&
+      "displayLabel" in body
+    ) {
+      const label = normalizeNullable(body.displayLabel);
+      if (label) nodeUpdate.name = label;
+    }
+
     const { error: updateError } = await admin
       .from("nodes")
-      .update({
-        prompt_config: nextPromptConfig,
-        default_asset_id: nextDefaultAssetId,
-      })
+      .update(nodeUpdate)
       .eq("id", node.id);
     if (updateError) throw new Error(updateError.message);
     await markVersionNeedsReview(admin, versionId);
