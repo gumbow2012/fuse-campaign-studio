@@ -36,14 +36,18 @@ export function normalizeSourceVideoMetadata(input: SourceVideoInput) {
       `Source clip length must be between ${SOURCE_VIDEO_MIN_SECONDS} and ${SOURCE_VIDEO_MAX_SECONDS} seconds`,
     );
   }
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    throw new Error("Source clip width and height must be positive numbers");
-  }
-  const longestEdge = Math.max(width, height);
-  if (longestEdge < SOURCE_VIDEO_MIN_EDGE_PX || longestEdge > SOURCE_VIDEO_MAX_EDGE_PX) {
-    throw new Error(
-      `Source clip size must be between ${SOURCE_VIDEO_MIN_EDGE_PX} and ${SOURCE_VIDEO_MAX_EDGE_PX} pixels`,
-    );
+  // Matches buildKlingVideoEditInput exactly: EVERY edge must be a whole
+  // number of pixels inside the provider's accepted range, so the editor can
+  // never store a size the runner rejects at submit time.
+  for (const value of [width, height]) {
+    if (!Number.isFinite(value) || !Number.isInteger(value)) {
+      throw new Error("Source clip width and height must be whole numbers of pixels");
+    }
+    if (value < SOURCE_VIDEO_MIN_EDGE_PX || value > SOURCE_VIDEO_MAX_EDGE_PX) {
+      throw new Error(
+        `Source clip width and height must each be between ${SOURCE_VIDEO_MIN_EDGE_PX} and ${SOURCE_VIDEO_MAX_EDGE_PX} pixels`,
+      );
+    }
   }
   // Exact values are preserved (e.g. 12.535918) — never rounded to a timeline.
   return { duration, width, height };
