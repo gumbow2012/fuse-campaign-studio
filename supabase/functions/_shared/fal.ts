@@ -271,12 +271,105 @@ export function normalizeVideoDuration(value: unknown) {
     : MAX_VIDEO_DURATION_SECONDS;
 }
 
+/* ==================== Kling source-video editing (additive) ==================== */
+
+/** Official fal endpoint for source-video editing (verified live API). */
+export const KLING_VIDEO_EDIT_ENDPOINT = "fal-ai/kling-video/o3/pro/video-to-video/edit";
+/** image_urls + elements combined may never exceed four entries. */
+export const KLING_VIDEO_EDIT_MAX_REFERENCES = 4;
+export const KLING_VIDEO_EDIT_MIN_SECONDS = 3;
+export const KLING_VIDEO_EDIT_MAX_SECONDS = 15;
+export const KLING_VIDEO_EDIT_MAX_BYTES = 200_000_000;
+export const KLING_VIDEO_EDIT_MIN_EDGE_PX = 720;
+export const KLING_VIDEO_EDIT_MAX_EDGE_PX = 3840;
+
+/**
+ * Builds the source-video edit payload. Validation happens BEFORE any credit
+ * charge or queue submission, so an unusable request never costs anything.
+ * Unsupported keys (duration / resolution / generate_audio) are never sent.
+ */
+export function buildKlingVideoEditInput(args: {
+  prompt: string;
+  videoUrl: string | null | undefined;
+  imageUrls?: string[];
+  elements?: unknown[];
+  keepAudio?: boolean | null;
+  sourceDurationSec?: number | null;
+  sourceWidth?: number | null;
+  sourceHeight?: number | null;
+}) {
+  const videoUrl = String(args.videoUrl ?? "").trim();
+  if (!videoUrl) {
+    throw new Error(
+      "Source video edit needs its source clip. Attach the hidden source video reference before generating.",
+    );
+  }
+  if (!/^https:\/\//i.test(videoUrl)) {
+    throw new Error("The source clip must be reachable over HTTPS before it can be edited");
+  }
+
+  const imageUrls = [...new Set((args.imageUrls ?? []).map((url) => String(url ?? "").trim()).filter(Boolean))];
+  const elements = args.elements ?? [];
+  const total = imageUrls.length + elements.length;
+  if (total > KLING_VIDEO_EDIT_MAX_REFERENCES) {
+    throw new Error(
+      `Source video edit accepts at most ${KLING_VIDEO_EDIT_MAX_REFERENCES} references in total — ${total} were supplied`,
+    );
+  }
+
+  const duration = Number(args.sourceDurationSec);
+  if (Number.isFinite(duration) && duration > 0 &&
+      (duration < KLING_VIDEO_EDIT_MIN_SECONDS || duration > KLING_VIDEO_EDIT_MAX_SECONDS)) {
+    throw new Error(
+      `Source clips must be between ${KLING_VIDEO_EDIT_MIN_SECONDS} and ${KLING_VIDEO_EDIT_MAX_SECONDS} seconds`,
+    );
+  }
+  for (const edge of [args.sourceWidth, args.sourceHeight]) {
+    const value = Number(edge);
+    if (!Number.isFinite(value) || value <= 0) continue;
+    if (value < KLING_VIDEO_EDIT_MIN_EDGE_PX || value > KLING_VIDEO_EDIT_MAX_EDGE_PX) {
+      throw new Error(
+        `Source clip dimensions must be between ${KLING_VIDEO_EDIT_MIN_EDGE_PX} and ${KLING_VIDEO_EDIT_MAX_EDGE_PX} pixels`,
+      );
+    }
+  }
+
+  const input: Record<string, unknown> = {
+    prompt: clampVideoPrompt(args.prompt),
+    video_url: videoUrl,
+    ...(imageUrls.length ? { image_urls: imageUrls } : {}),
+    ...(elements.length ? { elements } : {}),
+    keep_audio: args.keepAudio !== false,
+    shot_type: "customize",
+  };
+
+  return { endpointId: KLING_VIDEO_EDIT_ENDPOINT, input };
+}
+
+/** Source-video edit submit (queue + webhook). Explicit provider failures pass through. */
+export async function submitKlingVideoEditJob(args: {
+  prompt: string;
+  videoUrl: string | null | undefined;
+  imageUrls?: string[];
+  elements?: unknown[];
+  keepAudio?: boolean | null;
+  sourceDurationSec?: number | null;
+  sourceWidth?: number | null;
+  sourceHeight?: number | null;
+  webhookUrl: string;
+}) {
+  const { endpointId, input } = buildKlingVideoEditInput(args);
+  const requestId = await submitFalJob(endpointId, input, args.webhookUrl);
+  return { requestId, endpointId, input };
+}
+
 /* ============================ Video model registry ============================ */
 
 export type VideoModelKey =
   | "kling-3.0-pro"
   | "kling-3.0-standard"
   | "kling-2.5"
+  | "kling-o3-pro-video-edit"
   | "seedance-2.0"
   | "seedance-2.0-fast";
 
@@ -284,7 +377,12 @@ export type VideoModelDefinition = {
   key: VideoModelKey;
   endpointId: string;
   label: string;
-  family: "kling" | "kling3" | "seedance";
+  /** `kling_v2v` edits an existing source clip; it is NOT an image-to-video route. */
+  family: "kling" | "kling3" | "seedance" | "kling_v2v";
+  /** True when the route cannot run without a source video reference. */
+  requiresSourceVideo?: boolean;
+  /** Hard cap on image references + elements accepted by the route. */
+  maxReferences?: number;
   /** Fallback price per second in USD when audio is enabled (kling3). */
   fallbackUsdPerSecondAudio?: number;
   supportsAudio: boolean;
@@ -333,6 +431,25 @@ export const VIDEO_MODELS: Record<VideoModelKey, VideoModelDefinition> = {
     supportsAudio: false,
     fixedAspect: VERTICAL_VIDEO_ASPECT_RATIO,
     maxDurationSec: MAX_VIDEO_DURATION_SECONDS,
+  },
+  /**
+   * Source-video editing route (official fal API:
+   * https://fal.ai/models/fal-ai/kling-video/o3/pro/video-to-video/edit/api).
+   * It takes video_url + up to four image references/elements, references
+   * @Video1 in the prompt and keeps or replaces the ORIGINAL audio via
+   * keep_audio. It never accepts duration / resolution / generate_audio.
+   */
+  "kling-o3-pro-video-edit": {
+    key: "kling-o3-pro-video-edit",
+    endpointId: KLING_VIDEO_EDIT_ENDPOINT,
+    label: "Kling O3 Pro — source video edit",
+    family: "kling_v2v",
+    supportsAudio: true,
+    requiresSourceVideo: true,
+    maxReferences: KLING_VIDEO_EDIT_MAX_REFERENCES,
+    durationRange: { min: KLING_VIDEO_EDIT_MIN_SECONDS, max: KLING_VIDEO_EDIT_MAX_SECONDS },
+    // Conservative fallback only; the live fal pricing lookup stays authoritative.
+    fallbackUsdPerSecond: 0.32,
   },
   "seedance-2.0": {
     key: "seedance-2.0",

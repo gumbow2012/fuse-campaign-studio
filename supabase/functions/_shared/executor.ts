@@ -16,6 +16,7 @@ import {
   normalizeVideoDuration,
   submitImageJob,
   submitVideoJob,
+  submitKlingVideoEditJob,
   submitSeedanceReferenceVideoJob,
 } from "./fal.ts";
 import { refundRegenCreditsIfNeeded } from "./regeneration-run.ts";
@@ -1506,7 +1507,72 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             .map(([, value]) => value.url).filter(Boolean);
           const referenceModel = getVideoModel(node.prompt_config?.video_model);
           assertVideoReferenceRoute(node.prompt_config, resolvedVideoInputs.length,
-            referenceModel.family === "seedance" && !!referenceModel.supportsMultiReference);
+            referenceModel.family === "seedance" && !!referenceModel.supportsMultiReference,
+            referenceModel.family === "kling_v2v");
+
+          // Source-video editing route (Kling O3 Pro video-to-video edit).
+          // Validated before any submit; duration/resolution/generate_audio are
+          // never sent and keep_audio owns the original soundtrack.
+          if (referenceModel.family === "kling_v2v") {
+            if (!resolvedVideoInputs.length) {
+              throw new Error(`${node.name} edits a source clip, so it needs its source video reference`);
+            }
+            const sourceMeta = (node.prompt_config?.source_video ?? {}) as Record<string, unknown>;
+            const sourceSeconds = Number(sourceMeta.duration ?? node.prompt_config?.duration ?? 0) || null;
+            const editCostEstimate = await getStepCostEstimate(
+              referenceModel.endpointId,
+              node.prompt_config,
+              {
+                fallbackUsdPerSecond: referenceModel.fallbackUsdPerSecond,
+                seconds: sourceSeconds ?? 5,
+              },
+            );
+            const signedSourceVideo = (await resolveRequiredVideoUrls(admin, resolvedVideoInputs.slice(0, 1)))[0];
+            const { requestId: editRequestId, endpointId: editEndpointId, input: editInput } =
+              await submitKlingVideoEditJob({
+                prompt,
+                videoUrl: signedSourceVideo,
+                imageUrls: (await resolveExecutionUrls(admin, resolvedImageInputs)) as string[],
+                keepAudio: node.prompt_config?.keep_source_audio !== false,
+                sourceDurationSec: sourceSeconds,
+                sourceWidth: Number(sourceMeta.width) || null,
+                sourceHeight: Number(sourceMeta.height) || null,
+                webhookUrl: `${Deno.env.get("SUPABASE_URL")}/functions/v1/fal-webhook?jobId=${encodeURIComponent(job.id)}&stepId=${encodeURIComponent(step.id)}`,
+              });
+
+            await admin
+              .from("execution_steps")
+              .update({
+                provider_request_id: editRequestId,
+                provider_model: editEndpointId,
+                input_payload: {
+                  ...(step.input_payload ?? {}),
+                  ...editInput,
+                  // Canonical (unsigned) references are stored, never tokens.
+                  video_url: resolvedVideoInputs[0],
+                  ...(resolvedImageInputs.length ? { image_urls: resolvedImageInputs } : {}),
+                  video_model: referenceModel.key,
+                  source_video_edit: true,
+                },
+                output_payload: {
+                  requestId: editRequestId,
+                  status: "queued",
+                  ...castAudit,
+                  telemetry: {
+                    estimatedCostUsd: editCostEstimate?.estimatedCostUsd ?? null,
+                    billingUnit: editCostEstimate?.unit ?? null,
+                    billingQuantity: editCostEstimate?.quantity ?? null,
+                    unitPriceUsd: editCostEstimate?.unitPriceUsd ?? null,
+                    currency: editCostEstimate?.currency ?? null,
+                  },
+                },
+              })
+              .eq("id", step.id);
+
+            step.provider_request_id = editRequestId;
+            await refreshJobProgress(admin, job.id);
+            continue;
+          }
           if (isSeedanceMultiReferenceRequest(node, resolvedImageInputs, resolvedVideoInputs)) {
             const multiRefRequestId = await runSeedanceMultiReference(admin, {
               jobId: job.id,

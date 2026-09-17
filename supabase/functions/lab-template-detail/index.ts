@@ -218,6 +218,9 @@ Deno.serve(async (req) => {
             generateAudio: node.node_type === "video_gen"
               ? (typeof node.prompt_config?.generate_audio === "boolean" ? node.prompt_config.generate_audio : true)
               : null,
+            keepSourceAudio: node.node_type === "video_gen"
+              ? (typeof node.prompt_config?.keep_source_audio === "boolean" ? node.prompt_config.keep_source_audio : true)
+              : null,
             isUserFacingInput,
             isReferenceInput,
             sampleUrl,

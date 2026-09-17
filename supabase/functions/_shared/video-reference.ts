@@ -45,9 +45,21 @@ export function validateReferenceUrls(imageUrls: string[], videoUrls: string[] =
   return { images, videos };
 }
 
-export function assertVideoReferenceRoute(config: Record<string, unknown> | null, videoCount: number, supportsReferences: boolean) {
+export function assertVideoReferenceRoute(
+  config: Record<string, unknown> | null,
+  videoCount: number,
+  supportsReferences: boolean,
+  /** True for source-video editing routes, which consume the clip directly. */
+  supportsSourceVideoEdit = false,
+) {
   if (config?.requires_source_video === true && videoCount === 0) {
     throw new Error("Required source video is missing. Restore its reference before generating");
+  }
+  if (supportsSourceVideoEdit) {
+    if (videoCount > 1) {
+      throw new Error("Source video editing accepts exactly one source clip");
+    }
+    return;
   }
   if (videoCount && (config?.video_mode !== "multi_reference" || !supportsReferences)) {
     throw new Error("Video references require a Seedance multi-reference step");

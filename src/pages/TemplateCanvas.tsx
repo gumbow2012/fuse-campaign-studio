@@ -160,6 +160,7 @@ type TemplateDetailNode = {
     resolution?: string | null;
     aspectRatio?: string | null;
     generateAudio?: boolean | null;
+    keepSourceAudio?: boolean | null;
     sampleUrl?: string | null;
     isUserFacingInput?: boolean;
     isReferenceInput?: boolean;
@@ -222,13 +223,14 @@ type VideoModelKey =
   | "kling-3.0-pro"
   | "kling-3.0-standard"
   | "kling-2.5"
+  | "kling-o3-pro-video-edit"
   | "seedance-2.0"
   | "seedance-2.0-fast";
 
 const VIDEO_MODEL_OPTIONS: Array<{
   key: VideoModelKey;
   label: string;
-  family: "kling" | "kling3" | "seedance";
+  family: "kling" | "kling3" | "kling_v2v" | "seedance";
   usdPerSecond: number;
   usdPerSecondAudio?: number;
   resolutionMultiplier?: Record<string, number>;
@@ -248,6 +250,12 @@ const VIDEO_MODEL_OPTIONS: Array<{
     usdPerSecondAudio: 0.168,
   },
   { key: "kling-2.5", label: "Kling 2.5", family: "kling", usdPerSecond: 0.07 },
+  {
+    key: "kling-o3-pro-video-edit",
+    label: "Kling O3 Pro — source video edit",
+    family: "kling_v2v",
+    usdPerSecond: 0.32,
+  },
   {
     key: "seedance-2.0",
     label: "Seedance 2.0",
@@ -279,6 +287,11 @@ function estimateVideoCredits(draft: {
   generateAudio: boolean;
 }) {
   const option = resolveVideoModelOption(draft.videoModel);
+  if (option.family === "kling_v2v") {
+    // Length comes from the source clip; fall back to a mid-length estimate.
+    const seconds = Math.min(15, Math.max(3, Number(draft.duration) || 10));
+    return Math.ceil((option.usdPerSecond * seconds) / USD_PER_CREDIT);
+  }
   if (option.family === "kling") return Math.ceil((option.usdPerSecond * 5) / USD_PER_CREDIT);
   if (option.family === "kling3") {
     const perSecond = draft.generateAudio ? (option.usdPerSecondAudio ?? option.usdPerSecond) : option.usdPerSecond;
@@ -1150,7 +1163,9 @@ const TemplateCanvas = () => {
       duration: Number(selectedNode.editor?.duration ?? 5) || 5,
       resolution: selectedNode.editor?.resolution ?? "720p",
       aspectRatio: selectedNode.editor?.aspectRatio ?? "9:16",
-      generateAudio: selectedNode.editor?.generateAudio !== false,
+      generateAudio: resolveVideoModelOption(selectedNode.editor?.videoModel).family === "kling_v2v"
+        ? selectedNode.editor?.keepSourceAudio !== false
+        : selectedNode.editor?.generateAudio !== false,
     });
   }, [selectedNode]);
 
@@ -1641,13 +1656,16 @@ const TemplateCanvas = () => {
           sampleUrl: selectedNode.nodeType === "user_input" ? draft.sampleUrl : null,
           outputExposed: selectedNode.nodeType === "image_gen" || selectedNode.nodeType === "video_gen" ? draft.outputExposed : null,
           ...(selectedNode.nodeType === "video_gen"
-            ? {
-              videoModel: draft.videoModel,
-              duration: draft.duration,
-              resolution: draft.resolution,
-              aspectRatio: draft.aspectRatio,
-              generateAudio: draft.generateAudio,
-            }
+            ? (resolveVideoModelOption(draft.videoModel).family === "kling_v2v"
+              // The source clip sets length and framing; only the audio choice is stored.
+              ? { videoModel: draft.videoModel, keepSourceAudio: draft.generateAudio }
+              : {
+                videoModel: draft.videoModel,
+                duration: draft.duration,
+                resolution: draft.resolution,
+                aspectRatio: draft.aspectRatio,
+                generateAudio: draft.generateAudio,
+              })
             : {}),
         }),
       });
@@ -2437,7 +2455,21 @@ const TemplateCanvas = () => {
       },
     }));
     try {
-      const data = await invokeRunNode({ action: "start", versionId: detail.versionId, nodeId });
+      // Single-step previews use the SAME uploads the full run uses, so Ref N
+      // never changes meaning between a preview and a real run.
+      const uploadedInputs = Object.fromEntries(
+        await Promise.all(
+          runInputs
+            .filter((input) => files[input.id])
+            .map(async (input) => [input.id, await uploadRunInputFile(files[input.id]!)] as const),
+        ),
+      );
+      const data = await invokeRunNode({
+        action: "start",
+        versionId: detail.versionId,
+        nodeId,
+        inputs: uploadedInputs,
+      });
       if (data.run) applyNodeRun(data.run);
       toast({ title: "Step generating", description: "This can take 10–60 seconds." });
     } catch (runError) {
@@ -2448,7 +2480,7 @@ const TemplateCanvas = () => {
       }));
       toast({ title: "Run failed", description: message, variant: "destructive" });
     }
-  }, [applyNodeRun, detail, invokeRunNode]);
+  }, [applyNodeRun, detail, files, invokeRunNode, runInputs]);
 
   useEffect(() => {
     const pending = Object.values(nodeRuns).filter((run) => run.runId && (run.status === "queued" || run.status === "running"));
@@ -2487,7 +2519,9 @@ const TemplateCanvas = () => {
       modelBadge = option.label;
       const seconds = Number(node.editor?.duration ?? (option.family === "kling" ? 5 : 5)) || 5;
       const audio = node.editor?.generateAudio !== false;
-      detailLine = option.family === "kling"
+      detailLine = option.family === "kling_v2v"
+        ? `edits source clip · ${node.editor?.keepSourceAudio !== false ? "keeps original audio" : "no audio"}`
+        : option.family === "kling"
         ? "5s · 9:16 · locked"
         : `${seconds}s · ${audio ? "audio on" : "no audio"}${option.family === "seedance" ? ` · ${node.editor?.resolution ?? "720p"}` : ""}`;
     } else if (kind === "input") {
@@ -3173,7 +3207,23 @@ const TemplateCanvas = () => {
                     </select>
                   </div>
 
-                  {resolveVideoModelOption(draft.videoModel).family === "seedance" ? (
+                  {resolveVideoModelOption(draft.videoModel).family === "kling_v2v" ? (
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-3 rounded-xl border border-border/50 bg-background/50 px-4 py-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={draft.generateAudio}
+                          onChange={(event) =>
+                            setDraft((current) => current ? { ...current, generateAudio: event.target.checked } : current)
+                          }
+                        />
+                        Keep the original soundtrack
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        This step edits the source clip you attach, so its length and framing come from that clip.
+                      </p>
+                    </div>
+                  ) : resolveVideoModelOption(draft.videoModel).family === "seedance" ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-2">
                         <Label>Duration (seconds)</Label>

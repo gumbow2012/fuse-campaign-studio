@@ -10,6 +10,7 @@ import {
   requireBuilderUser,
 } from "../_shared/supabase-admin.ts";
 import { assertVersionAccess, FORBIDDEN_TEMPLATE_MESSAGE } from "../_shared/template-scope.ts";
+import { resolveSingleNodeInputs } from "../_shared/single-node-inputs.ts";
 import { isPromptNode, resolveNodePrompt } from "../_shared/prompt-nodes.ts";
 import {
   clampSeedanceDuration,
@@ -22,6 +23,7 @@ import {
   submitImageJob,
   normalizeImageResolution,
   submitVideoJob,
+  submitKlingVideoEditJob,
   submitSeedanceReferenceVideoJob,
   referenceToVideoEndpoint,
   VERTICAL_VIDEO_ASPECT_RATIO,
@@ -118,12 +120,42 @@ function serializeRun(run: any) {
   };
 }
 
-/** Resolve the image URLs feeding a node: reference/upload assets + upstream single-node outputs. */
+/**
+ * Only the signed-in builder's own uploads (or system/template assets) may be
+ * injected into a preview run — a caller cannot point a step at someone else's
+ * private object.
+ */
+function assertOwnedUploadUrl(url: string, userId: string) {
+  const value = String(url ?? "").trim();
+  if (value.startsWith("fuse-assets:")) {
+    const path = value.slice("fuse-assets:".length);
+    if (path.startsWith(`${userId}/`) || path.startsWith("system/")) return value;
+    throw new Error("That upload does not belong to your account");
+  }
+  if (!/^https:\/\//i.test(value)) throw new Error("Uploads must be HTTPS URLs");
+  const marker = "/storage/v1/object/";
+  const index = value.indexOf(marker);
+  if (index < 0) throw new Error("Uploads must be stored in your FUSE asset bucket");
+  const path = decodeURIComponent(value.slice(index + marker.length))
+    .replace(/^(public|sign|authenticated)\//, "")
+    .replace(/^fuse-assets\//, "")
+    .split("?")[0];
+  if (path.startsWith(`${userId}/`) || path.startsWith("system/")) return value;
+  throw new Error("That upload does not belong to your account");
+}
+
+/**
+ * Resolve every reference feeding a node exactly as a full run would: the
+ * uploads currently selected in the test panel, then hidden/built-in assets,
+ * then upstream single-node outputs for generated steps only.
+ */
 async function resolveNodeInputs(admin: AdminClient, args: {
   versionId: string;
+  templateName: string;
   node: NodeRow;
   edges: EdgeRow[];
   nodes: NodeRow[];
+  suppliedInputs: Record<string, string>;
 }) {
   const nodeMap = new Map(args.nodes.map((node) => [node.id, node]));
 
@@ -146,12 +178,14 @@ async function resolveNodeInputs(admin: AdminClient, args: {
     (assets ?? []).map((asset: any) => [asset.id, asset]),
   );
 
+  // Generated outputs only ever feed generative steps.
+  const generativeSourceIds = sourceIds.filter((id) => nodeMap.get(id)?.node_type !== "user_input");
   const latestByNode = new Map<string, { url: string; type: string | null }>();
-  if (sourceIds.length) {
+  if (generativeSourceIds.length) {
     const { data: upstreamRuns } = await admin
       .from("node_runs")
       .select("node_id, output_url, output_type, created_at")
-      .in("node_id", sourceIds)
+      .in("node_id", generativeSourceIds)
       .eq("status", "complete")
       .order("created_at", { ascending: false });
     for (const run of upstreamRuns ?? []) {
@@ -162,47 +196,59 @@ async function resolveNodeInputs(admin: AdminClient, args: {
     }
   }
 
-  const params: Array<{ param: string; url: string; type: string; sourceName: string }> = [];
-  const missing: string[] = [];
+  const resolution = resolveSingleNodeInputs({
+    templateName: args.templateName,
+    node: args.node as never,
+    nodes: args.nodes as never,
+    edges: args.edges as never,
+    assets: assetMap,
+    suppliedInputs: args.suppliedInputs,
+    upstreamOutputs: latestByNode,
+  });
 
-  for (const edge of incoming) {
-    const source = nodeMap.get(edge.source_node_id);
-    if (!source) continue;
-    const param = String(edge.mapping_logic?.target_param ?? "image").toLowerCase();
-
-    const upstream = latestByNode.get(source.id);
-    const asset = source.default_asset_id ? assetMap.get(source.default_asset_id) : undefined;
-    const assetUrl = asset?.supabase_storage_url ?? null;
-    const url = assetUrl ?? upstream?.url ?? null;
-
-    if (!url) {
-      missing.push(source.name);
-      continue;
-    }
-
-    params.push({
-      param,
-      url,
-      type: assetUrl ? referenceMediaType(asset?.asset_type, source.prompt_config) : upstream?.type ?? "image",
-      sourceName: source.name,
-    });
-  }
-
-  const ownAsset = args.node.default_asset_id
-    ? assetMap.get(args.node.default_asset_id)
-    : null;
-  const ownReferenceUrl = ownAsset?.supabase_storage_url ?? null;
-  const ownReferenceType = referenceMediaType(ownAsset?.asset_type, args.node.prompt_config);
-
-  return { params, missing, ownReferenceUrl, ownReferenceType, incomingCount: incoming.length };
+  return {
+    params: resolution.refs.map((ref) => ({
+      param: ref.param,
+      url: ref.url,
+      type: ref.type,
+      sourceName: ref.sourceName,
+      origin: ref.origin,
+    })),
+    missing: resolution.omittedTrailingOptional,
+    ownReferenceUrl: resolution.ownReference?.url ?? null,
+    ownReferenceType: resolution.ownReference?.type ?? "image",
+    incomingCount: incoming.length,
+  };
 }
 
-async function startRun(admin: AdminClient, args: { versionId: string; nodeId: string; userId: string }) {
+async function startRun(admin: AdminClient, args: {
+  versionId: string;
+  nodeId: string;
+  userId: string;
+  /** Slot- or node-keyed uploads currently selected in the builder test panel. */
+  suppliedInputs?: Record<string, string>;
+}) {
   const { data: nodes, error: nodesError } = await admin
     .from("nodes")
     .select("id, name, node_type, prompt_config, default_asset_id")
     .eq("version_id", args.versionId);
   if (nodesError) throw new Error(nodesError.message);
+
+  const { data: version } = await admin
+    .from("template_versions")
+    .select("fuse_templates(name)")
+    .eq("id", args.versionId)
+    .maybeSingle();
+  const relation = (version as any)?.fuse_templates;
+  const templateName = String(
+    (Array.isArray(relation) ? relation[0]?.name : relation?.name) ?? "Untitled Template",
+  );
+
+  const suppliedInputs: Record<string, string> = {};
+  for (const [key, value] of Object.entries(args.suppliedInputs ?? {})) {
+    if (!value) continue;
+    suppliedInputs[key] = assertOwnedUploadUrl(String(value), args.userId);
+  }
 
   const node = (nodes as NodeRow[] | null)?.find((candidate) => candidate.id === args.nodeId);
   if (!node) throw new Error("Step not found on this template version");
@@ -225,9 +271,11 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
 
   const resolved = await resolveNodeInputs(admin, {
     versionId: args.versionId,
+    templateName,
     node,
     edges: (edges ?? []) as EdgeRow[],
     nodes: (nodes ?? []) as NodeRow[],
+    suppliedInputs,
   });
 
   const imageInputs = [
@@ -244,7 +292,13 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
   if (node.node_type === "video_gen") {
     const model = getVideoModel(node.prompt_config?.video_model);
     assertVideoReferenceRoute(node.prompt_config, videoInputs.length,
-      model.family === "seedance" && !!model.supportsMultiReference);
+      model.family === "seedance" && !!model.supportsMultiReference,
+      model.family === "kling_v2v");
+    if (model.family === "kling_v2v" && !videoInputs.length) {
+      throw new Error(
+        "This step edits a source clip, so it needs its source video reference. Nothing was charged.",
+      );
+    }
   }
   if (node.prompt_config?.requires_source_video === true && resolved.missing.length) {
     throw new Error(`Required reconstruction inputs are missing: ${resolved.missing.join(", ")}`);
@@ -318,6 +372,43 @@ async function startRun(admin: AdminClient, args: { versionId: string; nodeId: s
     const videoModel = getVideoModel(node.prompt_config?.video_model);
     const isKling = videoModel.family === "kling";
     const isKling3 = videoModel.family === "kling3";
+
+    // Source-video editing route: the clip itself is the subject. No duration,
+    // resolution or generate_audio keys are ever sent; keep_audio owns audio.
+    if (videoModel.family === "kling_v2v") {
+      const sourceVideoUrl = (await resolveRequiredVideoUrls(admin, videoInputs.slice(0, 1)))[0];
+      const sourceMeta = (node.prompt_config?.source_video ?? {}) as Record<string, unknown>;
+      const sourceSeconds = Number(sourceMeta.duration ?? node.prompt_config?.duration ?? 0) || null;
+      const estimatedCostUsd = await estimateUsd({
+        endpointId: videoModel.endpointId,
+        seconds: sourceSeconds ?? 5,
+        fallbackUsdPerSecond: videoModel.fallbackUsdPerSecond ?? null,
+      });
+      const { requestId, endpointId, input } = await submitKlingVideoEditJob({
+        prompt,
+        videoUrl: sourceVideoUrl,
+        imageUrls: (await resolveExecutionUrls(admin, imageInputs)) as string[],
+        keepAudio: node.prompt_config?.keep_source_audio !== false,
+        sourceDurationSec: sourceSeconds,
+        sourceWidth: Number(sourceMeta.width) || null,
+        sourceHeight: Number(sourceMeta.height) || null,
+        webhookUrl: `${webhookUrl}${encodeURIComponent(inserted.id)}`,
+      });
+      const { data: updated } = await admin.from("node_runs").update({
+        status: "running", provider_model: endpointId, provider_request_id: requestId,
+        estimated_cost_usd: estimatedCostUsd, estimated_credits: creditsFromUsd(estimatedCostUsd),
+        input_payload: {
+          ...input,
+          // Store canonical (unsigned) references, never the temporary tokens.
+          video_url: videoInputs[0],
+          ...(imageInputs.length ? { image_urls: imageInputs } : {}),
+          video_model: videoModel.key,
+          source_video_edit: true,
+        },
+      }).eq("id", inserted.id).select("*").single();
+      return serializeRun(updated ?? inserted);
+    }
+
     const duration = isKling
       ? normalizeVideoDuration(node.prompt_config?.duration)
       : clampSeedanceDuration(node.prompt_config?.duration ?? (isKling3 ? 5 : undefined), videoModel);
@@ -538,6 +629,7 @@ Deno.serve(async (req) => {
       nodeId?: string;
       runId?: string;
       nodeIds?: string[];
+      inputs?: Record<string, string>;
     };
     const action = body.action ?? (body.runId ? "status" : "start");
 
@@ -581,6 +673,7 @@ Deno.serve(async (req) => {
       versionId: body.versionId,
       nodeId: body.nodeId,
       userId: user.id,
+      suppliedInputs: body.inputs ?? {},
     });
 
     return json({ run });
