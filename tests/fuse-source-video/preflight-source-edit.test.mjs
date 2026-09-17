@@ -84,7 +84,7 @@ test('the early preflight no longer misroutes a source-edit graph to the multi-r
   );
   const job = admin.tables.execution_jobs[0];
   assert.notEqual(job.status, 'failed');
-  assert.notMatch(String(job.error ?? ''), /Seedance multi-reference/);
+  assert.equal(/Seedance multi-reference/.test(String(job.error ?? '')), false);
 });
 
 test('a missing source clip still rejects before any paid work', async () => {
