@@ -16,6 +16,7 @@ const VIDEO_MODEL_KEYS = [
   "kling-3.0-pro",
   "kling-3.0-standard",
   "kling-2.5",
+  "kling-o3-pro-video-edit",
   "seedance-2.0",
   "seedance-2.0-fast",
 ] as const;
@@ -41,6 +42,8 @@ type Body = {
   resolution?: string | null;
   aspectRatio?: string | null;
   generateAudio?: boolean | null;
+  /** Source-video edit route only: keep the ORIGINAL soundtrack. */
+  keepSourceAudio?: boolean | null;
   referenceFile?: {
     dataUrl?: string | null;
     filename?: string | null;
@@ -169,8 +172,24 @@ Deno.serve(async (req) => {
       const modelKey = normalizeVideoModel(nextPromptConfig.video_model);
       const isSeedance = modelKey.startsWith("seedance");
       const isKling3 = modelKey.startsWith("kling-3.0");
+      const isSourceVideoEdit = modelKey === "kling-o3-pro-video-edit";
 
-      if (isKling3) {
+      if (isSourceVideoEdit) {
+        // The route derives length and framing from the source clip, so no
+        // duration / resolution / aspect / generate_audio value is stored.
+        nextPromptConfig.video_model = modelKey;
+        nextPromptConfig.requires_source_video = true;
+        if ("keepSourceAudio" in body) {
+          nextPromptConfig.keep_source_audio = body.keepSourceAudio !== false;
+        } else if (typeof nextPromptConfig.keep_source_audio !== "boolean") {
+          nextPromptConfig.keep_source_audio = true;
+        }
+        delete nextPromptConfig.duration;
+        delete nextPromptConfig.resolution;
+        delete nextPromptConfig.aspect_ratio;
+        delete nextPromptConfig.generate_audio;
+        delete nextPromptConfig.video_mode;
+      } else if (isKling3) {
         nextPromptConfig.video_model = modelKey;
         nextPromptConfig.duration = "duration" in body
           ? clampKling3Duration(body.duration)
