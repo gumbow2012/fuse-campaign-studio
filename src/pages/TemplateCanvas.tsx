@@ -1691,6 +1691,19 @@ const TemplateCanvas = () => {
 
   const saveNode = useCallback(async () => {
     if (!detail || !selectedNode || !draft) return;
+
+    const isSourceEdit = selectedNode.nodeType === "video_gen" &&
+      resolveVideoModelOption(draft.videoModel).family === "kling_v2v";
+    if (isSourceEdit && draft.sourceDuration.trim()) {
+      const numbers = [draft.sourceDuration, draft.sourceWidth, draft.sourceHeight].map((value) =>
+        Number(value)
+      );
+      if (numbers.some((value) => !Number.isFinite(value) || value <= 0)) {
+        toast.error("Clip length, width and height must all be positive numbers");
+        return;
+      }
+    }
+
     setSavingNode(true);
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/save-template-editor`, {
