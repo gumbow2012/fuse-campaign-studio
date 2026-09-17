@@ -221,6 +221,16 @@ Deno.serve(async (req) => {
             keepSourceAudio: node.node_type === "video_gen"
               ? (typeof node.prompt_config?.keep_source_audio === "boolean" ? node.prompt_config.keep_source_audio : true)
               : null,
+            videoMode: node.node_type === "video_gen"
+              ? (typeof node.prompt_config?.video_mode === "string" ? node.prompt_config.video_mode : null)
+              : null,
+            sourceVideo: node.node_type === "video_gen" && node.prompt_config?.source_video
+              ? {
+                duration: Number((node.prompt_config.source_video as any)?.duration) || null,
+                width: Number((node.prompt_config.source_video as any)?.width) || null,
+                height: Number((node.prompt_config.source_video as any)?.height) || null,
+              }
+              : null,
             isUserFacingInput,
             isReferenceInput,
             sampleUrl,
