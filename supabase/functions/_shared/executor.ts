@@ -1262,8 +1262,12 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
       .map((edge) => resolved.get(edge.source_node_id))
       .filter((value): value is ResolvedOutput => value?.type === "video");
     const model = getVideoModel(node.prompt_config?.video_model);
+    // The fourth argument must be passed here too: without it the source-clip
+    // edit route was judged by the multi-reference rule and every run failed at
+    // progress 0 with "Video references require a Seedance multi-reference step".
     assertVideoReferenceRoute(node.prompt_config, sources.length,
-      model.family === "seedance" && !!model.supportsMultiReference);
+      model.family === "seedance" && !!model.supportsMultiReference,
+      model.family === "kling_v2v");
     await resolveRequiredVideoUrls(admin, sources.map((source) => source.url));
   }
 
