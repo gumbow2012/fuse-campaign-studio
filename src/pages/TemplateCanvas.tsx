@@ -161,6 +161,8 @@ type TemplateDetailNode = {
     aspectRatio?: string | null;
     generateAudio?: boolean | null;
     keepSourceAudio?: boolean | null;
+    videoMode?: string | null;
+    sourceVideo?: { duration?: number | null; width?: number | null; height?: number | null } | null;
     sampleUrl?: string | null;
     isUserFacingInput?: boolean;
     isReferenceInput?: boolean;
@@ -217,6 +219,10 @@ type NodeDraft = {
   resolution: string;
   aspectRatio: string;
   generateAudio: boolean;
+  /** Source-clip edit route: measured facts about the attached clip. */
+  sourceDuration: string;
+  sourceWidth: string;
+  sourceHeight: string;
 };
 
 type VideoModelKey =
