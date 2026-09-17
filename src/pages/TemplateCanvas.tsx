@@ -3243,6 +3243,49 @@ const TemplateCanvas = () => {
                       <p className="text-xs text-muted-foreground">
                         This step edits the source clip you attach, so its length and framing come from that clip.
                       </p>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label>Clip length (seconds)</Label>
+                          <Input
+                            type="number"
+                            step="0.001"
+                            min={3}
+                            max={15}
+                            value={draft.sourceDuration}
+                            onChange={(event) =>
+                              setDraft((current) => current ? { ...current, sourceDuration: event.target.value } : current)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Clip width</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={3840}
+                            value={draft.sourceWidth}
+                            onChange={(event) =>
+                              setDraft((current) => current ? { ...current, sourceWidth: event.target.value } : current)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Clip height</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={3840}
+                            value={draft.sourceHeight}
+                            onChange={(event) =>
+                              setDraft((current) => current ? { ...current, sourceHeight: event.target.value } : current)
+                            }
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        These are the real numbers from your clip. They are used to price the step and to check it
+                        before anything is charged — leave them empty if you don't know them yet.
+                      </p>
                     </div>
                   ) : resolveVideoModelOption(draft.videoModel).family === "seedance" ? (
                     <div className="grid gap-3 sm:grid-cols-2">
