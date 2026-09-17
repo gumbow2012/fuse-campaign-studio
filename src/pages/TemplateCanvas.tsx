@@ -1669,7 +1669,17 @@ const TemplateCanvas = () => {
           ...(selectedNode.nodeType === "video_gen"
             ? (resolveVideoModelOption(draft.videoModel).family === "kling_v2v"
               // The source clip sets length and framing; only the audio choice is stored.
-              ? { videoModel: draft.videoModel, keepSourceAudio: draft.generateAudio }
+              ? {
+                videoModel: draft.videoModel,
+                keepSourceAudio: draft.generateAudio,
+                sourceVideo: draft.sourceDuration.trim()
+                  ? {
+                    duration: Number(draft.sourceDuration),
+                    width: Number(draft.sourceWidth),
+                    height: Number(draft.sourceHeight),
+                  }
+                  : null,
+              }
               : {
                 videoModel: draft.videoModel,
                 duration: draft.duration,
