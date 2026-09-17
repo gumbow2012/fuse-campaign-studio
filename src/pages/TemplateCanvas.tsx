@@ -1699,7 +1699,11 @@ const TemplateCanvas = () => {
         Number(value)
       );
       if (numbers.some((value) => !Number.isFinite(value) || value <= 0)) {
-        toast.error("Clip length, width and height must all be positive numbers");
+        toast({
+          title: "Check the clip numbers",
+          description: "Clip length, width and height must all be positive numbers.",
+          variant: "destructive",
+        });
         return;
       }
     }
