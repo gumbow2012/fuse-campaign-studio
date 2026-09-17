@@ -9,6 +9,7 @@ import {
 } from "../_shared/supabase-admin.ts";
 import { assertVersionAccess, FORBIDDEN_TEMPLATE_MESSAGE } from "../_shared/template-scope.ts";
 import { uploadTemplateReferenceAsset } from "../_shared/template-assets.ts";
+import { applySourceVideoEditConfig } from "../_shared/source-video-config.ts";
 
 const VERTICAL_VIDEO_ASPECT_RATIO = "9:16";
 const MAX_VIDEO_DURATION_SECONDS = 5;
@@ -299,12 +300,26 @@ Deno.serve(async (req) => {
       nextDefaultAssetId = null;
     }
 
+    const nodeUpdate: Record<string, unknown> = {
+      prompt_config: nextPromptConfig,
+      default_asset_id: nextDefaultAssetId,
+    };
+
+    // Narrowly scoped rename: on the source-clip edit route only, the chosen
+    // display label also becomes the node's stored name, so execution outputs
+    // stop reporting a stale model name. Every other node type keeps its name.
+    if (
+      node.node_type === "video_gen" &&
+      nextPromptConfig.video_mode === "source_video_edit" &&
+      "displayLabel" in body
+    ) {
+      const label = normalizeNullable(body.displayLabel);
+      if (label) nodeUpdate.name = label;
+    }
+
     const { error: updateError } = await admin
       .from("nodes")
-      .update({
-        prompt_config: nextPromptConfig,
-        default_asset_id: nextDefaultAssetId,
-      })
+      .update(nodeUpdate)
       .eq("id", node.id);
     if (updateError) throw new Error(updateError.message);
     await markVersionNeedsReview(admin, versionId);
