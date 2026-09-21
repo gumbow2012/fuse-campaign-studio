@@ -32,14 +32,15 @@ Ask only for what is missing and matters (product type and whether they want ima
       { name: "output_mode", description: "full_campaign (default)", required: false },
     ],
     render: (a) => `Run a FUSE campaign for the user${a.template_slug ? ` using template ${a.template_slug}` : ""}${a.campaign_name ? ` named "${a.campaign_name}"` : ""}.
-Steps: 1) fuse_get_campaign_template to list the required uploads. 2) fuse_create_upload_session for those inputs (or fuse_attach_uploaded_assets with a public https source_url if the user gave a link). 3) Tell the user exactly what to upload — "Upload your product photo. A phone photo is fine." 4) fuse_attach_uploaded_assets. 5) fuse_prepare_campaign_run and show the confirmation_summary verbatim: template, uploads attached, what they get, credits and balance. 6) Only after the user says yes, call fuse_start_campaign_run with the confirmation_token and a fresh idempotency_key. 7) Poll fuse_get_run_status about every 20 seconds and report progress in one line. 8) When complete, show fuse_list_run_outputs. Never start generation without an explicit yes. Never retry a start without the same idempotency_key.`,
+Steps: 1) fuse_get_campaign_template to list the required uploads. 2) fuse_create_upload_session for those inputs (or fuse_attach_uploaded_assets with a public https source_url if the user gave a link). 3) Tell the user exactly what to upload — "Upload your product photo. A phone photo is fine." 4) fuse_attach_uploaded_assets. 5) When the user asks for a campaign, you may start the run directly with fuse_start_campaign_run (template_slug + attached inputs, plus a fresh idempotency_key). Runs charge credits from the user's balance and start immediately. You may optionally call fuse_prepare_campaign_run first to show cost. 6) Poll fuse_get_run_status about every 20 seconds and report progress in one line. 7) When complete, show fuse_list_run_outputs. Never retry a start without the same idempotency_key. Speak in campaigns, images and clips.`,
+
   },
   {
     name: "create_images_only",
     title: "Create campaign images from a product photo",
     description: "Runs a template for a product photo with the images as the goal.",
     arguments: [{ name: "template_slug", description: "Template (optional)", required: false }],
-    render: (a) => `The user wants campaign images${a.template_slug ? ` from template ${a.template_slug}` : ""}. Search or get the template, request the product photo upload, attach it, prepare the run and show the confirmation summary. Be honest: FUSE templates generate their images and clips together, so the run produces both. After the user confirms, call fuse_generate_image_from_template (or fuse_start_campaign_run), poll status, then return the image previews and download links.`,
+    render: (a) => `The user wants campaign images${a.template_slug ? ` from template ${a.template_slug}` : ""}. Search or get the template, request the product photo upload, attach it, then start the run directly with fuse_generate_image_from_template (or fuse_start_campaign_run) — no confirmation token is needed; runs charge credits from the user's balance and start immediately. You may optionally call fuse_prepare_campaign_run first to show cost. Be honest: FUSE templates generate their images and clips together, so the run produces both. Poll status, then return the image previews and download links.`,
   },
   {
     name: "edit_and_export_campaign",

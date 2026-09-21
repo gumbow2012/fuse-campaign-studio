@@ -31,14 +31,16 @@ function slugOf(t: Awaited<ReturnType<typeof loadTemplate>>) {
   return t.row.slug ?? t.row.id;
 }
 
-/** Validate a run before consuming credits. Returns a confirmation token when ready. */
-export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: {
+export type RunPlanArgs = {
   template_slug: string;
   campaign_draft_id?: string;
   inputs?: Record<string, string>;
   campaign_name?: string;
   output_mode?: OutputMode;
-}) {
+};
+
+/** Build and validate a run plan. No credits, no confirmation token. */
+export async function buildRunPlan(admin: Admin, auth: AuthContext, args: RunPlanArgs) {
   if (!auth.userId) throw new FuseError("AUTH_REQUIRED");
   const t = await loadTemplate(admin, { slug: args.template_slug }, auth.isPrivileged);
   const { required, optional, slotKeys } = inputsFor(t);
@@ -95,16 +97,23 @@ export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: 
     estimated_credits: estimated,
     campaign_name: name,
   };
+  return { ready, issues, plan, counts, account, estimated, template: t, required, optional, base, surcharge, affordability, name };
+}
+
+/** Validate a run before consuming credits. Returns a confirmation token when ready. */
+export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: RunPlanArgs) {
+  const built = await buildRunPlan(admin, auth, args);
+  const { ready, issues, plan, counts, account, estimated, template: t, required, optional, base, surcharge, affordability, name } = built;
   const confirmation = ready ? await issueConfirmationToken(await signingSecret(admin), plan) : null;
   const summary = ready
-    ? `Template: ${t.meta?.public_name ?? t.row.name}. Uploads: ${Object.keys(inputs).length} attached. You get: ${counts.imageOutputs} images + ${counts.videoOutputs} clips. Credits: ${estimated === 0 ? "none (no charge on your account)" : `${estimated} (about ${estimated >= 945 ? "one campaign" : "part of a campaign"} worth)`}. Balance: ${account.credit_balance}. Run this campaign?`
+    ? `Template: ${t.meta?.public_name ?? t.row.name}. Uploads: ${Object.keys(plan.inputs).length} attached. You get: ${counts.imageOutputs} images + ${counts.videoOutputs} clips. Credits: ${estimated === 0 ? "none (no charge on your account)" : `${estimated} (about ${estimated >= 945 ? "one campaign" : "part of a campaign"} worth)`}. Balance: ${account.credit_balance}. Run this campaign?`
     : `Not ready: ${issues.map((i) => i.message).join(" ")}`;
   return {
     ready,
     template: { slug: slugOf(t), name: t.meta?.public_name ?? t.row.name, version_id: t.versionId },
     campaign_name: name,
-    required_inputs_status: required.map((i) => ({ key: i.key, label: i.label, attached: !!inputs[i.key] })),
-    optional_inputs_status: optional.map((i) => ({ key: i.key, label: i.label, attached: !!inputs[i.key] })),
+    required_inputs_status: required.map((i) => ({ key: i.key, label: i.label, attached: !!plan.inputs[i.key] })),
+    optional_inputs_status: optional.map((i) => ({ key: i.key, label: i.label, attached: !!plan.inputs[i.key] })),
     estimated_outputs: { images_count: counts.imageOutputs, clips_count: counts.videoOutputs },
     estimated_credits: estimated,
     credits_breakdown: { base, creator_surcharge: surcharge },
@@ -119,27 +128,55 @@ export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: 
   };
 }
 
-/** Start a prepared run. Same idempotency key or same token → the existing run, no second charge. */
-export async function startCampaignRun(admin: Admin, auth: AuthContext, args: { confirmation_token: string; idempotency_key?: string; campaign_name?: string }) {
-  if (!auth.userId) throw new FuseError("AUTH_REQUIRED");
-  if (!args.confirmation_token) throw new FuseError("CONFIRMATION_REQUIRED");
-  const verified = await verifyConfirmationToken(await signingSecret(admin), args.confirmation_token);
-  if (!verified.ok) {
-    if (verified.reason === "expired") throw new FuseError("CONFIRMATION_EXPIRED");
-    throw new FuseError("CONFIRMATION_MISMATCH", `Token ${verified.reason}`);
-  }
-  const plan = verified.plan;
-  if (plan.user_id !== auth.userId) throw new FuseError("CONFIRMATION_MISMATCH", "Token issued to another account");
-  if ((await planHash(plan)) !== plan.h) throw new FuseError("CONFIRMATION_MISMATCH");
 
-  const idem = args.idempotency_key?.trim() || plan.h;
+/** Start a run. With a confirmation_token, or directly from a template slug + inputs. Idempotent. */
+export async function startCampaignRun(admin: Admin, auth: AuthContext, args: {
+  confirmation_token?: string;
+  idempotency_key?: string;
+  campaign_name?: string;
+  template_slug?: string;
+  campaign_draft_id?: string;
+  inputs?: Record<string, string>;
+  output_mode?: OutputMode;
+}) {
+  if (!auth.userId) throw new FuseError("AUTH_REQUIRED");
+  let plan: RunPlan & { h?: string };
+  if (args.confirmation_token) {
+    const verified = await verifyConfirmationToken(await signingSecret(admin), args.confirmation_token);
+    if (!verified.ok) {
+      if (verified.reason === "expired") throw new FuseError("CONFIRMATION_EXPIRED");
+      throw new FuseError("CONFIRMATION_MISMATCH", `Token ${verified.reason}`);
+    }
+    plan = verified.plan;
+    if (plan.user_id !== auth.userId) throw new FuseError("CONFIRMATION_MISMATCH", "Token issued to another account");
+    if ((await planHash(plan)) !== (plan as any).h) throw new FuseError("CONFIRMATION_MISMATCH");
+  } else {
+    if (!args.template_slug) throw new FuseError("INVALID_INPUT", "template_slug is required to start a run", { nextAction: "Pass template_slug (with campaign_draft_id or inputs), or a confirmation_token." });
+    const built = await buildRunPlan(admin, auth, {
+      template_slug: args.template_slug,
+      campaign_draft_id: args.campaign_draft_id,
+      inputs: args.inputs,
+      campaign_name: args.campaign_name,
+      output_mode: args.output_mode,
+    });
+    if (!built.ready) {
+      const first = built.issues[0];
+      const code = first?.code === "INSUFFICIENT_CREDITS" ? "INSUFFICIENT_CREDITS" : "INVALID_INPUT";
+      throw new FuseError(code, first?.message ?? "This campaign isn't ready to run", { userMessage: first?.message });
+    }
+    plan = { ...built.plan, h: await planHash(built.plan) };
+  }
+  const planKey = (plan as any).h ?? (await planHash(plan));
+
+  const idem = args.idempotency_key?.trim() || planKey;
+
   const { data: existing } = await admin.from("mcp_run_requests").select("job_id,response").eq("user_id", auth.userId).eq("idempotency_key", idem).maybeSingle();
   if ((existing as any)?.job_id) return { ...(existing as any).response, idempotent_replay: true };
-  const { data: byToken } = await admin.from("mcp_run_requests").select("job_id,response").eq("confirmation_hash", plan.h).maybeSingle();
+  const { data: byToken } = await admin.from("mcp_run_requests").select("job_id,response").eq("confirmation_hash", planKey).maybeSingle();
   if ((byToken as any)?.job_id) return { ...(byToken as any).response, idempotent_replay: true };
 
   // Claim the (user, key) and the token BEFORE calling the runner so a concurrent retry cannot double-charge.
-  const { error: claimError } = await admin.from("mcp_run_requests").insert({ user_id: auth.userId, idempotency_key: idem, confirmation_hash: plan.h });
+  const { error: claimError } = await admin.from("mcp_run_requests").insert({ user_id: auth.userId, idempotency_key: idem, confirmation_hash: planKey });
   if (claimError) {
     const { data: raced } = await admin.from("mcp_run_requests").select("job_id,response").eq("user_id", auth.userId).eq("idempotency_key", idem).maybeSingle();
     if ((raced as any)?.job_id) return { ...(raced as any).response, idempotent_replay: true };

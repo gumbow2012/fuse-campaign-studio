@@ -216,7 +216,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "fuse_prepare_campaign_run",
     title: "Prepare a campaign run (no credits used)",
-    description: "Safety checkpoint before generation. Validates inputs, computes the real credit cost server-side, checks the balance, and returns a confirmation_token when everything is ready. Nothing is generated and no credits are used. ALWAYS show the confirmation_summary to the user and get an explicit yes before calling fuse_start_campaign_run. Requires a connected account.",
+    description: "Optional cost preview before generation. Validates inputs, computes the real credit cost server-side, checks the balance, and returns a confirmation_token. Nothing is generated and no credits are used. Confirmation is optional — runs can be started directly with fuse_start_campaign_run. Use this when the user wants to see the cost first. Requires a connected account.",
     scope: "fuse.runs.prepare",
     inputSchema: obj({
       template_slug: str("Template slug"),
@@ -233,18 +233,23 @@ export const TOOLS: ToolDef[] = [
       needScope(ctx, "fuse.runs.prepare");
       return await prepareCampaignRun(ctx.admin, ctx.auth, args as any);
     },
-    summarize: (r) => r.confirmation_summary + (r.ready ? " (confirmation_token issued — ask the user to confirm before starting)" : ""),
+    summarize: (r) => r.confirmation_summary + (r.ready ? " (ready — you can start the run now)" : ""),
   },
   {
     name: "fuse_start_campaign_run",
-    title: "Start a confirmed campaign run",
-    description: "Generates the campaign. Requires the confirmation_token from fuse_prepare_campaign_run and the user's explicit approval; consumes credits. Pass an idempotency_key so a retried call returns the same run instead of starting a second one. Returns immediately with a run_id — poll fuse_get_run_status. Requires a connected account.",
+    title: "Start a campaign run",
+    description: "Starts a campaign run immediately and charges credits from the user's balance. No confirmation token is required — pass either template_slug (+ campaign_draft_id or inputs) to auto-start, or a confirmation_token from fuse_prepare_campaign_run. Idempotent via idempotency_key. Returns a run_id to poll.",
     scope: "fuse.runs.create",
     inputSchema: obj({
-      confirmation_token: str("Token from fuse_prepare_campaign_run"),
+      template_slug: str("Template slug (required unless a confirmation_token is passed)"),
+      campaign_draft_id: str("campaign_draft_id / upload_session_id with attached assets"),
+      inputs: { type: "object", description: "Inputs {input_key: https URL of an attached asset}", additionalProperties: { type: "string" } },
+      confirmation_token: str("Optional token from fuse_prepare_campaign_run"),
       idempotency_key: str("Client-generated unique key for this start request (recommended)"),
       campaign_name: str("Optional campaign name override"),
-    }, ["confirmation_token"]),
+      output_mode: str("Default full_campaign", { enum: ["images_only", "video_only", "full_campaign"] }),
+    }, []),
+
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     rest: { method: "POST", path: "/api/runs/start", operationId: "startCampaignRun", summary: "Start a confirmed campaign run" },
     widget: "ui://fuse/run-status.html",
@@ -257,16 +262,19 @@ export const TOOLS: ToolDef[] = [
   {
     name: "fuse_generate_image_from_template",
     title: "Generate campaign images from a template",
-    description: "Image-first entry point: runs a template for a product photo. FUSE templates render their images and clips together, so this starts the template's full campaign (the images are part of it) — the tool says so honestly. Requires a confirmation_token from fuse_prepare_campaign_run and user approval; consumes credits. Requires a connected account.",
+    description: "Image-first entry point: runs a template for a product photo. FUSE templates render their images and clips together, so this starts the template's full campaign (the images are part of it) — the tool says so honestly. No confirmation token is required: pass template_slug with campaign_draft_id or inputs to auto-start. Charges credits from the user's balance. Requires a connected account.",
     scope: "fuse.runs.create",
     inputSchema: obj({
       template_slug: str("Template slug"),
-      confirmation_token: str("Token from fuse_prepare_campaign_run"),
+      campaign_draft_id: str("campaign_draft_id / upload_session_id with attached assets"),
+      inputs: { type: "object", description: "Inputs {input_key: https URL of an attached asset}", additionalProperties: { type: "string" } },
+      confirmation_token: str("Optional token from fuse_prepare_campaign_run"),
       campaign_name: str("Optional"),
       idempotency_key: str("Recommended"),
       image_count: num("Ignored unless the template supports a variable count (none do today)"),
       aspect_ratio: str("Ignored unless the template supports it (templates declare their own ratio)"),
-    }, ["template_slug", "confirmation_token"]),
+    }, ["template_slug"]),
+
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     rest: { method: "POST", path: "/api/runs/start-images", operationId: "generateImagesFromTemplate", summary: "Start an image-first campaign run" },
     widget: "ui://fuse/run-status.html",
