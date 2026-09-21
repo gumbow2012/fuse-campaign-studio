@@ -129,20 +129,47 @@ export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: 
 }
 
 
-/** Start a prepared run. Same idempotency key or same token → the existing run, no second charge. */
-export async function startCampaignRun(admin: Admin, auth: AuthContext, args: { confirmation_token: string; idempotency_key?: string; campaign_name?: string }) {
+/** Start a run. With a confirmation_token, or directly from a template slug + inputs. Idempotent. */
+export async function startCampaignRun(admin: Admin, auth: AuthContext, args: {
+  confirmation_token?: string;
+  idempotency_key?: string;
+  campaign_name?: string;
+  template_slug?: string;
+  campaign_draft_id?: string;
+  inputs?: Record<string, string>;
+  output_mode?: OutputMode;
+}) {
   if (!auth.userId) throw new FuseError("AUTH_REQUIRED");
-  if (!args.confirmation_token) throw new FuseError("CONFIRMATION_REQUIRED");
-  const verified = await verifyConfirmationToken(await signingSecret(admin), args.confirmation_token);
-  if (!verified.ok) {
-    if (verified.reason === "expired") throw new FuseError("CONFIRMATION_EXPIRED");
-    throw new FuseError("CONFIRMATION_MISMATCH", `Token ${verified.reason}`);
+  let plan: RunPlan & { h?: string };
+  if (args.confirmation_token) {
+    const verified = await verifyConfirmationToken(await signingSecret(admin), args.confirmation_token);
+    if (!verified.ok) {
+      if (verified.reason === "expired") throw new FuseError("CONFIRMATION_EXPIRED");
+      throw new FuseError("CONFIRMATION_MISMATCH", `Token ${verified.reason}`);
+    }
+    plan = verified.plan;
+    if (plan.user_id !== auth.userId) throw new FuseError("CONFIRMATION_MISMATCH", "Token issued to another account");
+    if ((await planHash(plan)) !== (plan as any).h) throw new FuseError("CONFIRMATION_MISMATCH");
+  } else {
+    if (!args.template_slug) throw new FuseError("INVALID_INPUT", "template_slug is required to start a run", { nextAction: "Pass template_slug (with campaign_draft_id or inputs), or a confirmation_token." });
+    const built = await buildRunPlan(admin, auth, {
+      template_slug: args.template_slug,
+      campaign_draft_id: args.campaign_draft_id,
+      inputs: args.inputs,
+      campaign_name: args.campaign_name,
+      output_mode: args.output_mode,
+    });
+    if (!built.ready) {
+      const first = built.issues[0];
+      const code = first?.code === "INSUFFICIENT_CREDITS" ? "INSUFFICIENT_CREDITS" : "INVALID_INPUT";
+      throw new FuseError(code, first?.message ?? "This campaign isn't ready to run", { userMessage: first?.message });
+    }
+    plan = { ...built.plan, h: await planHash(built.plan) };
   }
-  const plan = verified.plan;
-  if (plan.user_id !== auth.userId) throw new FuseError("CONFIRMATION_MISMATCH", "Token issued to another account");
-  if ((await planHash(plan)) !== plan.h) throw new FuseError("CONFIRMATION_MISMATCH");
+  const planKey = (plan as any).h ?? (await planHash(plan));
 
-  const idem = args.idempotency_key?.trim() || plan.h;
+  const idem = args.idempotency_key?.trim() || planKey;
+
   const { data: existing } = await admin.from("mcp_run_requests").select("job_id,response").eq("user_id", auth.userId).eq("idempotency_key", idem).maybeSingle();
   if ((existing as any)?.job_id) return { ...(existing as any).response, idempotent_replay: true };
   const { data: byToken } = await admin.from("mcp_run_requests").select("job_id,response").eq("confirmation_hash", plan.h).maybeSingle();
