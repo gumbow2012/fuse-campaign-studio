@@ -172,11 +172,11 @@ export async function startCampaignRun(admin: Admin, auth: AuthContext, args: {
 
   const { data: existing } = await admin.from("mcp_run_requests").select("job_id,response").eq("user_id", auth.userId).eq("idempotency_key", idem).maybeSingle();
   if ((existing as any)?.job_id) return { ...(existing as any).response, idempotent_replay: true };
-  const { data: byToken } = await admin.from("mcp_run_requests").select("job_id,response").eq("confirmation_hash", plan.h).maybeSingle();
+  const { data: byToken } = await admin.from("mcp_run_requests").select("job_id,response").eq("confirmation_hash", planKey).maybeSingle();
   if ((byToken as any)?.job_id) return { ...(byToken as any).response, idempotent_replay: true };
 
   // Claim the (user, key) and the token BEFORE calling the runner so a concurrent retry cannot double-charge.
-  const { error: claimError } = await admin.from("mcp_run_requests").insert({ user_id: auth.userId, idempotency_key: idem, confirmation_hash: plan.h });
+  const { error: claimError } = await admin.from("mcp_run_requests").insert({ user_id: auth.userId, idempotency_key: idem, confirmation_hash: planKey });
   if (claimError) {
     const { data: raced } = await admin.from("mcp_run_requests").select("job_id,response").eq("user_id", auth.userId).eq("idempotency_key", idem).maybeSingle();
     if ((raced as any)?.job_id) return { ...(raced as any).response, idempotent_replay: true };
