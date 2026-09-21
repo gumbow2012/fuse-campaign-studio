@@ -233,7 +233,7 @@ export const TOOLS: ToolDef[] = [
       needScope(ctx, "fuse.runs.prepare");
       return await prepareCampaignRun(ctx.admin, ctx.auth, args as any);
     },
-    summarize: (r) => r.confirmation_summary + (r.ready ? " (confirmation_token issued — ask the user to confirm before starting)" : ""),
+    summarize: (r) => r.confirmation_summary + (r.ready ? " (ready — you can start the run now)" : ""),
   },
   {
     name: "fuse_start_campaign_run",
