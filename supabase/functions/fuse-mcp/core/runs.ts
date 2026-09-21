@@ -31,14 +31,16 @@ function slugOf(t: Awaited<ReturnType<typeof loadTemplate>>) {
   return t.row.slug ?? t.row.id;
 }
 
-/** Validate a run before consuming credits. Returns a confirmation token when ready. */
-export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: {
+export type RunPlanArgs = {
   template_slug: string;
   campaign_draft_id?: string;
   inputs?: Record<string, string>;
   campaign_name?: string;
   output_mode?: OutputMode;
-}) {
+};
+
+/** Build and validate a run plan. No credits, no confirmation token. */
+export async function buildRunPlan(admin: Admin, auth: AuthContext, args: RunPlanArgs) {
   if (!auth.userId) throw new FuseError("AUTH_REQUIRED");
   const t = await loadTemplate(admin, { slug: args.template_slug }, auth.isPrivileged);
   const { required, optional, slotKeys } = inputsFor(t);
@@ -95,16 +97,23 @@ export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: 
     estimated_credits: estimated,
     campaign_name: name,
   };
+  return { ready, issues, plan, counts, account, estimated, template: t, required, optional, base, surcharge, affordability, name };
+}
+
+/** Validate a run before consuming credits. Returns a confirmation token when ready. */
+export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: RunPlanArgs) {
+  const built = await buildRunPlan(admin, auth, args);
+  const { ready, issues, plan, counts, account, estimated, template: t, required, optional, base, surcharge, affordability, name } = built;
   const confirmation = ready ? await issueConfirmationToken(await signingSecret(admin), plan) : null;
   const summary = ready
-    ? `Template: ${t.meta?.public_name ?? t.row.name}. Uploads: ${Object.keys(inputs).length} attached. You get: ${counts.imageOutputs} images + ${counts.videoOutputs} clips. Credits: ${estimated === 0 ? "none (no charge on your account)" : `${estimated} (about ${estimated >= 945 ? "one campaign" : "part of a campaign"} worth)`}. Balance: ${account.credit_balance}. Run this campaign?`
+    ? `Template: ${t.meta?.public_name ?? t.row.name}. Uploads: ${Object.keys(plan.inputs).length} attached. You get: ${counts.imageOutputs} images + ${counts.videoOutputs} clips. Credits: ${estimated === 0 ? "none (no charge on your account)" : `${estimated} (about ${estimated >= 945 ? "one campaign" : "part of a campaign"} worth)`}. Balance: ${account.credit_balance}. Run this campaign?`
     : `Not ready: ${issues.map((i) => i.message).join(" ")}`;
   return {
     ready,
     template: { slug: slugOf(t), name: t.meta?.public_name ?? t.row.name, version_id: t.versionId },
     campaign_name: name,
-    required_inputs_status: required.map((i) => ({ key: i.key, label: i.label, attached: !!inputs[i.key] })),
-    optional_inputs_status: optional.map((i) => ({ key: i.key, label: i.label, attached: !!inputs[i.key] })),
+    required_inputs_status: required.map((i) => ({ key: i.key, label: i.label, attached: !!plan.inputs[i.key] })),
+    optional_inputs_status: optional.map((i) => ({ key: i.key, label: i.label, attached: !!plan.inputs[i.key] })),
     estimated_outputs: { images_count: counts.imageOutputs, clips_count: counts.videoOutputs },
     estimated_credits: estimated,
     credits_breakdown: { base, creator_surcharge: surcharge },
@@ -118,6 +127,7 @@ export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: 
     credits_will_be_consumed: ready && estimated > 0,
   };
 }
+
 
 /** Start a prepared run. Same idempotency key or same token → the existing run, no second charge. */
 export async function startCampaignRun(admin: Admin, auth: AuthContext, args: { confirmation_token: string; idempotency_key?: string; campaign_name?: string }) {
