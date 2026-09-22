@@ -15,6 +15,7 @@ import { listRunOutputs, renameCampaign } from "./core/outputs.ts";
 import { getTimeline, saveCampaignEdit } from "./core/editor.ts";
 import { exportCampaign, getExportStatus } from "./core/exports.ts";
 import { getHelp } from "./core/help.ts";
+import { getStandaloneGenerationStatus, listStandaloneGenerations, startStandaloneGeneration } from "./core/generate.ts";
 
 export type JsonSchema = Record<string, unknown>;
 
