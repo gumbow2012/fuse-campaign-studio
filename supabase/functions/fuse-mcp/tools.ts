@@ -444,7 +444,92 @@ export const TOOLS: ToolDef[] = [
     summarize: (r) => r.campaigns.length ? r.campaigns.map((c: any) => `${c.campaign_name} (${c.template_slug}) — ${c.status}, ${c.outputs_count} outputs, run ${c.run_id}`).join("; ") : "No campaigns yet.",
   },
   {
+    name: "fuse_generate_image",
+    title: "Generate an image",
+    description: "Generate campaign-quality still image(s) from a text prompt (and optional reference product photos) using FUSE's image engine. Charges credits from the user's balance and starts immediately — poll fuse_get_generation_status. Reference images must be https URLs or assets uploaded via fuse_create_upload_session. Requires a connected account.",
+    scope: "fuse.runs.create",
+    inputSchema: obj({
+      prompt: str("What to generate"),
+      reference_image_urls: arr(str("https URL"), "Optional reference/product photos"),
+      aspect_ratio: str("Optional, e.g. 9:16, 1:1, 16:9"),
+      model: str("Optional image model override"),
+    }, ["prompt"]),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    rest: { method: "POST", path: "/api/generate/image", operationId: "generateImage", summary: "Generate an image" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.create");
+      return await startStandaloneGeneration(ctx.admin, ctx.auth, {
+        kind: "image",
+        prompt: String(args.prompt),
+        imageUrls: args.reference_image_urls,
+        aspectRatio: args.aspect_ratio,
+        model: args.model,
+      });
+    },
+    summarize: (r) => `Image generation ${r.generation_id} — ${r.status}${r.estimated_credits ? `, ~${r.estimated_credits} credits` : ""}. Poll fuse_get_generation_status in ~${r.next_poll_after_seconds}s.`,
+  },
+  {
+    name: "fuse_generate_video",
+    title: "Generate a video",
+    description: "Generate a short campaign video from a text prompt, optionally animating a start image (image-to-video) using FUSE's video engine (Kling). Charges credits and starts immediately — poll fuse_get_generation_status. Requires a connected account.",
+    scope: "fuse.runs.create",
+    inputSchema: obj({
+      prompt: str("What happens in the clip"),
+      start_image_url: str("Optional https URL to animate from"),
+      end_image_url: str("Optional https end frame"),
+      duration: num("Optional seconds"),
+      aspect_ratio: str("Optional, e.g. 9:16"),
+      model: str("Optional video model override"),
+      generate_audio: bool("Optional native audio"),
+    }, ["prompt"]),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    rest: { method: "POST", path: "/api/generate/video", operationId: "generateVideo", summary: "Generate a video" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.create");
+      return await startStandaloneGeneration(ctx.admin, ctx.auth, {
+        kind: "video",
+        prompt: String(args.prompt),
+        startImageUrl: args.start_image_url,
+        endImageUrl: args.end_image_url,
+        duration: args.duration,
+        aspectRatio: args.aspect_ratio,
+        model: args.model,
+        generateAudio: args.generate_audio,
+      });
+    },
+    summarize: (r) => `Video generation ${r.generation_id} — ${r.status}${r.estimated_credits ? `, ~${r.estimated_credits} credits` : ""}. Poll fuse_get_generation_status in ~${r.next_poll_after_seconds}s.`,
+  },
+  {
+    name: "fuse_get_generation_status",
+    title: "Check a generation",
+    description: "Check a standalone image/video generation started with fuse_generate_image or fuse_generate_video; returns status and (when ready) a signed output URL. Requires a connected account.",
+    scope: "fuse.runs.read",
+    inputSchema: obj({ generation_id: str("id from fuse_generate_image/fuse_generate_video") }, ["generation_id"]),
+    annotations: RO,
+    rest: { method: "GET", path: "/api/generations/{generation_id}", operationId: "getGenerationStatus", summary: "Get generation status" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.read");
+      return await getStandaloneGenerationStatus(ctx.admin, ctx.auth, String(args.generation_id));
+    },
+    summarize: (r) => `Generation ${r.generation_id} — ${r.status}${r.output_url ? "; output ready" : r.public_failure ? `; ${r.public_failure}` : ""}.`,
+  },
+  {
+    name: "fuse_list_generations",
+    title: "List my generations",
+    description: "List the user's recent standalone image/video generations.",
+    scope: "fuse.runs.read",
+    inputSchema: obj({ limit: num("Default 20, max 50", { minimum: 1, maximum: 50 }) }),
+    annotations: RO,
+    rest: { method: "GET", path: "/api/generations", operationId: "listGenerations", summary: "List generations" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.read");
+      return await listStandaloneGenerations(ctx.admin, ctx.auth, { limit: args.limit });
+    },
+    summarize: (r) => r.generations?.length ? `${r.generations.length} recent generations.` : "No generations yet.",
+  },
+  {
     name: "fuse_get_help",
+
     title: "FUSE help",
     description: "Answers common questions from FUSE's approved help copy: what a campaign is, what to upload, what you get, credits, running, downloading, editing, failures, the make-it-right policy, billing. Public.",
     scope: null,
