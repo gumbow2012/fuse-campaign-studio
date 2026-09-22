@@ -128,7 +128,7 @@ export async function handleRpc(message: Rpc, ctx: ToolContext, log: CallLog): P
           protocolVersion: negotiated,
           capabilities: { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { subscribe: false, listChanged: false } },
           serverInfo: SERVER_INFO,
-          instructions: "FUSE turns a product photo into a campaign: search templates (public), then upload → attach → start → poll status → outputs. When the user asks for a campaign, you may start the run directly with fuse_start_campaign_run (template_slug + attached inputs). Runs charge credits from the user's balance and start immediately. You may optionally call fuse_prepare_campaign_run first to show cost. Speak in campaigns, images and clips.",
+          instructions: "FUSE turns a product photo into a campaign: search templates (public), then upload → attach → start → poll status → outputs. When the user asks for a campaign, you may start the run directly with fuse_start_campaign_run (template_slug + attached inputs). Runs charge credits from the user's balance and start immediately. You may optionally call fuse_prepare_campaign_run first to show cost. Speak in campaigns, images and clips. FUSE can also generate standalone images and videos from a prompt in chat via fuse_generate_image and fuse_generate_video — these charge credits and start immediately; poll fuse_get_generation_status.",
         });
       }
       case "ping":
