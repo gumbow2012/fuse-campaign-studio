@@ -7,6 +7,7 @@
 import { resolveRequiredVideoUrls } from "./asset-access.ts";
 import {
   FINISH_MAX_INPUT_BYTES,
+  FINISH_MEMORY_BUDGET_BYTES,
   finishSourceEditMp4,
   Mp4FinishError,
   shouldFinishSourceEdit,
@@ -24,17 +25,44 @@ export type SourceEditFinishing = {
   report?: Record<string, unknown>;
 };
 
+/**
+ * Streams at most `maxBytes`; aborts as soon as the limit is crossed whether or
+ * not content-length is present or truthful. Pre-sizes when a valid length is
+ * declared so there is no second copy.
+ */
 export async function fetchBounded(url: string, maxBytes: number, label: string): Promise<Uint8Array> {
+  if (!Number.isFinite(maxBytes) || maxBytes < 1) throw new Mp4FinishError("too_large", `No memory budget left for ${label}`);
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Failed to fetch ${label}: ${response.status}`);
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared && declared > maxBytes) {
-    await response.body?.cancel();
-    throw new Mp4FinishError("too_large", `${label} is larger than ${maxBytes} bytes`);
+  const tooLarge = () => new Mp4FinishError("too_large", `${label} is larger than ${maxBytes} bytes`);
+  const declaredRaw = response.headers.get("content-length");
+  const declared = declaredRaw != null && /^\d+$/.test(declaredRaw) ? Number(declaredRaw) : null;
+  if (declared != null && declared > maxBytes) {
+    await response.body?.cancel().catch(() => {});
+    throw tooLarge();
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > maxBytes) throw new Mp4FinishError("too_large", `${label} is larger than ${maxBytes} bytes`);
-  return bytes;
+  if (!response.body) return new Uint8Array(0);
+  const reader = response.body.getReader();
+  let buffer = new Uint8Array(declared ?? Math.min(maxBytes, 4_000_000));
+  let length = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (length + value.byteLength > maxBytes) throw tooLarge();
+      if (length + value.byteLength > buffer.byteLength) {
+        const grown = new Uint8Array(Math.min(maxBytes, Math.max(buffer.byteLength * 2, length + value.byteLength)));
+        grown.set(buffer.subarray(0, length));
+        buffer = grown;
+      }
+      buffer.set(value, length);
+      length += value.byteLength;
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  }
+  return buffer.subarray(0, length);
 }
 
 async function loadExpectation(admin: any, nodeId: string | null | undefined): Promise<FinishExpectation | null> {
@@ -67,7 +95,10 @@ export async function applySourceEditFinishing(admin: any, args: {
     const sourceRef = String(args.inputPayload?.video_url ?? "");
     if (!sourceRef) throw new Mp4FinishError("missing_source", "No source clip reference recorded on this step");
     const [signed] = await resolveRequiredVideoUrls(admin, [sourceRef]);
-    const source = await fetchBounded(signed, FINISH_MAX_INPUT_BYTES, "source clip");
+    // Output ≤ generated + source, so both inputs plus output stay inside the budget.
+    const sourceMax = Math.min(FINISH_MAX_INPUT_BYTES, Math.floor(FINISH_MEMORY_BUDGET_BYTES / 2) - args.generated.byteLength);
+    if (sourceMax < 1) throw new Mp4FinishError("too_large", "Generated video leaves no memory budget for the source clip");
+    const source = await fetchBounded(signed, sourceMax, "source clip");
     const expected = await loadExpectation(admin, args.nodeId);
     const { bytes, report } = finishSourceEditMp4({ generated: args.generated, source, expected });
     return {
