@@ -1,113 +1,34 @@
+# Jerry / Pass the Fit — read-only findings (no changes made)
 
+Scope: investigation only. No code, auth/RLS, billing, review gates, graph, generation or provider calls touched. Code read is this repo; the deployed ykrr… bundles were not re-read here.
 
-# FUSE — One-Click Creative Engine for Clothing Brands
+## 1. Kling O3 source-edit completion/storage
 
-## Vision
-FUSE is a premium SaaS platform where clothing brands upload a product photo and logo, select a template, click RUN, and receive full campaign-ready assets — no workflow complexity exposed.
+- `supabase/functions/fal-webhook/index.ts` (lines 126–177): takes `payload.video.url`, passes it to `uploadRemoteAsset` (`_shared/executor.ts`), marks the step complete. It stores the provider file byte-for-byte. There's no probe, trim, pad or audio step, so the 12.396s container, 12.375s video and the AAC offset of 0.042993s are Fal's output, stored unchanged.
+- `_shared/executor.ts` ~1518–1540: sends `keepAudio` from `keep_source_audio`. After the output comes back, nothing compares it with `prompt_config.source_video.duration`.
 
----
+## 2. Is there a deterministic remux/finishing facility? No exact one.
 
-## Phase 1: Homepage & Design System
+| Facility | Path | Can it restore source audio and timeline exactly? |
+|---|---|---|
+| Upload normalization | `normalize-video/index.ts`, `normalize-callback/index.ts`, `service_config.normalize_worker_url` | No. It takes one input only (`sourcePath` → `normalized/<base>.h264.mp4`), for playback transcoding. It has no second audio source and no target duration. It's also keyed to the uploaded source path, not to run outputs. |
+| Campaign editor export | `export-campaign` (deployed, not in repo); dispatch mirrored in `fuse-mcp/core/exports.ts` 54–90; render worker `app_config/service_config.render_worker_url` | Partly, but not exactly. It accepts segments (trim, volume, muted) plus one `music` track (path, volume, fades), so you could mute the generated clip and add the source file's soundtrack as music. But it re-encodes: fps defaults to 30 (there is an fps setting), CRF 20. It can't stretch or pad 12.375s of video to 12.4167s. Whether `music` accepts an MP4 as an audio source isn't verifiable here, because the worker is external. It's normally billed/free under the existing editor rules and is non-generative. |
+| In-browser export | `src/services/videoExport/*` (audioMixer, exportClient) | Same limits: client re-encode, no frame-exact padding. |
 
-**Design System**
-- Deep navy background with electric blue/cyan gradient accents
-- Glassmorphism cards with subtle blur and borders
-- No red anywhere — electric blue gradient as primary action color
-- Subtle grain texture overlay, soft vignette for depth
-- Professional micro-animations: button glow on hover, card lift, slow gradient movement
+Conclusion: FUSE has no path that remuxes the generated video with the original AAC stream at the source's exact 12.535918s timeline. The closest supported option is an editor export with the generated clip muted and source audio as music. It's approximate: about 42 ms of audio offset is fixable only if the worker honours an offset, which is unconfirmed, and about 41 ms of video stays short. Getting an exact result would need new work: a finishing step that copies the source audio stream and pads or retimes the video. That's out of scope for this message.
 
-**Homepage Structure**
-- **Nav bar**: Translucent dark glass, FUSE logo (left), nav links center (Features, Templates, Pricing, Enterprise), Login + Get Started pills (right)
-- **Hero left**: "Create Full Campaign Content. One Click." headline, subheadline in muted gray, Start Creating + View Templates buttons
-- **Hero right**: Clean upload card (Product + Logo drag-and-drop zones + RUN button only — no credits, no runs counter) alongside a single 9:16 example output preview with play button overlay
-- **Template carousel**: "Select Your Template" section with horizontal scroll, true-color vertical thumbnails using the uploaded sample images, hover glow + lift effect, no image cropping
+## 3. Does a full start-template-run regenerate inspected guides? Yes.
 
----
+- `start-template-run/index.ts` 544 / 813: every run creates new `execution_steps` as `pending`. `runGraphJob` then runs every pending generative step. It never reads `node_runs`, so the canvas-inspected phone guide (node run 4c3b12ba…) and full-body guide are generated again, with new randomness and new charges.
+- Fork runs (`action: "run_fork"`, lines 447–474) reuse only the source job's uploaded inputs, not generated outputs.
 
-## Phase 2: Marketing Pages
+## 4. Existing supported ways to reuse inspected guides
 
-**Features Page**
-- Hero explaining the one-click concept
-- "What It Generates" section with visual examples
-- Before vs After workflow comparison (complex AI tools vs one RUN button)
-- Security and CTA sections
+1. **Canvas single-step preview of the final node** (`run-node/index.ts` 185–206). For upstream generative nodes it uses the newest completed `node_runs` output (`latestByNode`). So previewing node 36a614dc… feeds it the guides you already inspected, plus the hidden source and your test-panel uploads. No graph change is needed, it's billed per step as normal, and it's the only exact-guide path. Caveat: the result is a node_run preview, not a campaign job, so it has no editor project or export.
+2. **Per-output regeneration on a finished job** (`action: "regenerate_output"`, `_shared/regeneration.ts` 160–234, `_shared/regeneration-run.ts`). It re-runs only the target and reuses completed ancestors ("completed_output"), charged as `rerun_step`. It reuses guides from **that job**, not canvas node_runs. After one full run whose guides pass inspection, regenerating the final video keeps those guides exactly.
+3. `rerun-step` (legacy `project_steps`) and `resume-template-job` (admin/runner only) don't apply.
 
-**Templates Page**
-- Grid of vertical template previews with filter categories: Street, Studio, Editorial, Product Closeup, Drop Announcement
-- Each template shows preview, short description, and select button
+## Recommended next step (for your decision, nothing executed)
 
-**Pricing Page**
-- Three clean tiers: Starter, Growth, Scale
-- Monthly subscription model — no credit/per-run costs shown publicly
-- Included renders per month + add-on pricing
-- CTA to get started
-
----
-
-## Phase 3: Authentication & Backend
-
-**Lovable Cloud Setup**
-- User authentication with email/password
-- Email verification and password reset flows
-- User profiles and secure session management
-- Database tables for users, campaigns, templates, and generated assets
-- Storage buckets for uploaded products, logos, and generated outputs
-
-**Auth Pages**
-- Login page (clean, minimal, matching brand)
-- Sign up page
-- Password reset flow
-
----
-
-## Phase 4: Dashboard & Campaign Creation
-
-**Dashboard**
-- Left sidebar: Dashboard, Create Campaign, Templates, Assets, Billing, Settings
-- Campaign history list showing product thumbnail, date, status, and view assets button
-- Loading skeletons while data loads
-
-**Create Campaign Page**
-- Expanded version of the homepage upload UI
-- Step flow: Upload product → Upload logo → Choose template → Click RUN
-- All workflow complexity hidden — user just sees progress and final results
-- Results view: 6–12 generated assets (images + vertical video), download all button, regenerate option
-
----
-
-## Phase 5: Stripe Payments & Billing
-
-**Stripe Integration**
-- Subscription billing for Starter/Growth/Scale tiers
-- Card storage and management
-- Upgrade/downgrade plans
-- Billing history with downloadable invoices
-- Webhook validation for payment events
-- Cancel anytime functionality
-
-**Billing Settings Page**
-- Current plan display
-- Payment method management
-- Invoice history and downloads
-- Usage tracking (internal, not exposed as credits)
-
----
-
-## Phase 6: Polish & Mobile
-
-**Mobile Optimization**
-- Stacked layout: hero text → buttons → upload card → example output → templates
-- Large tap targets, responsive spacing
-- Mobile-friendly sidebar (hamburger menu)
-
-**Performance**
-- Lazy loading for template thumbnails
-- Optimized video previews
-- Loading skeletons throughout
-- Smooth gradient animations that don't impact performance
-
-**Final Polish**
-- Consistent electric blue theme across all pages
-- No image cropping anywhere (contain scaling)
-- Premium whitespace and visual hierarchy throughout
-
+- For guide-exact final video tests: use option 1 (canvas preview of the final node), or option 2 after a full run whose guides pass.
+- For exact source duration and soundtrack: either accept the approximate editor-export mute + music route, or approve a separate build task for a deterministic finishing step (copy the source audio, pad or trim to the source duration, no generative call).
