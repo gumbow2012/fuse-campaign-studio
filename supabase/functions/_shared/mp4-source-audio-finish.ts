@@ -14,7 +14,10 @@
  * Pure (no Deno / network) so it can be executed locally against real files.
  */
 
-export const FINISH_MAX_INPUT_BYTES = 64_000_000;
+export const FINISH_MAX_INPUT_BYTES = 48_000_000;
+/** generated + source + finished output must fit well below the 256 MB Edge limit. */
+export const FINISH_MEMORY_BUDGET_BYTES = 128_000_000;
+const UNIT_RATE = 0x10000;
 /** Largest allowed video timeline difference, in source video frames. */
 export const FINISH_MAX_FRAME_DIFFERENCE = 2;
 
@@ -198,7 +201,7 @@ function writeStts(entries: Array<[number, number]>) {
 }
 
 /** Byte ranges of every chunk of a track, validated against the file. */
-function chunkRanges(stbl: Node, file: Uint8Array, what: string) {
+function chunkRanges(stbl: Node, file: Uint8Array, what: string, mdats: Array<[number, number]>) {
   const stsz = view(payloadOf(need(stbl, ["stsz"], `${what} stsz`), "stsz"));
   checkLen(new Uint8Array(stsz.buffer, stsz.byteOffset, stsz.byteLength), 12, "stsz");
   const fixed = stsz.getUint32(4);
@@ -221,6 +224,7 @@ function chunkRanges(stbl: Node, file: Uint8Array, what: string) {
   const wide = co!.type === "co64";
   checkLen(coP, 8 + chunkCount * (wide ? 8 : 4), co!.type);
 
+  if (sampleCount < 1) fail("invalid_table", `${what} has no samples`);
   const ranges: Array<{ start: number; size: number }> = [];
   let sample = 0;
   for (let e = 0; e < stscN; e++) {
@@ -228,6 +232,8 @@ function chunkRanges(stbl: Node, file: Uint8Array, what: string) {
     const per = stsc.getUint32(12 + e * 12);
     const next = e + 1 < stscN ? stsc.getUint32(8 + (e + 1) * 12) : chunkCount + 1;
     if (first < 1 || next <= first || next > chunkCount + 1) fail("invalid_box", `${what} stsc is inconsistent`);
+    if (per < 1) fail("invalid_table", `${what} stsc has zero samples per chunk`);
+    if (stsc.getUint32(16 + e * 12) < 1) fail("invalid_table", `${what} stsc has a zero sample description index`);
     for (let c = first; c < next; c++) {
       const start = wide ? Number(cov.getBigUint64(8 + (c - 1) * 8)) : cov.getUint32(8 + (c - 1) * 4);
       let size = 0;
@@ -235,7 +241,12 @@ function chunkRanges(stbl: Node, file: Uint8Array, what: string) {
         if (sample >= sampleCount) fail("invalid_box", `${what} chunk table exceeds its samples`);
         size += sizeOf(sample++);
       }
-      if (start + size > file.byteLength) fail("invalid_box", `${what} chunk points outside the file`);
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(size) || start + size > file.byteLength) {
+        fail("invalid_box", `${what} chunk points outside the file`);
+      }
+      if (!mdats.some(([a, b]) => start >= a && start + size <= b)) {
+        fail("chunk_outside_mdat", `${what} chunk at ${start} is not inside an mdat payload`);
+      }
       ranges.push({ start, size });
     }
   }
@@ -259,7 +270,60 @@ function sampleEntryType(trak: Node) {
 
 /* ------------------------------- file level ------------------------------- */
 
-type ParsedFile = { bytes: Uint8Array; ftyp: Uint8Array; moov: Node; traks: Node[] };
+/** stts/ctts must agree with stsz sample count and mdhd duration; no zero/overflow values. */
+function validateSampleTables(trak: Node, what: string) {
+  const stbl = need(trak, ["mdia", "minf", "stbl"], "stbl");
+  const stts = readStts(payloadOf(need(stbl, ["stts"], "stts"), "stts"));
+  const stszP = payloadOf(need(stbl, ["stsz"], "stsz"), "stsz");
+  checkLen(stszP, 12, "stsz");
+  const sampleCount = view(stszP).getUint32(8);
+  let samples = 0;
+  let duration = 0;
+  for (const [count, delta] of stts) {
+    if (count < 1 || delta < 1) fail("invalid_table", `${what} stts has a zero count or duration`);
+    samples += count;
+    duration += count * delta;
+    if (!Number.isSafeInteger(duration)) fail("invalid_table", `${what} stts duration overflows`);
+  }
+  if (samples !== sampleCount) fail("invalid_table", `${what} stts covers ${samples} samples but stsz has ${sampleCount}`);
+  const md = readTimescaleDuration(payloadOf(need(trak, ["mdia", "mdhd"], "mdhd"), "mdhd"), "mdhd");
+  if (!md.timescale || !Number.isSafeInteger(md.duration)) fail("invalid_table", `${what} mdhd is invalid`);
+  if (duration !== md.duration) fail("invalid_table", `${what} stts duration ${duration} ≠ mdhd ${md.duration}`);
+  const ctts = child(stbl, "ctts");
+  if (ctts) {
+    const p = payloadOf(ctts, "ctts");
+    checkLen(p, 8, "ctts");
+    const n = view(p).getUint32(4);
+    checkLen(p, 8 + n * 8, "ctts");
+    let covered = 0;
+    for (let i = 0; i < n; i++) {
+      const c = view(p).getUint32(8 + i * 8);
+      if (c < 1) fail("invalid_table", `${what} ctts has a zero count`);
+      covered += c;
+    }
+    if (covered !== sampleCount) fail("invalid_table", `${what} ctts covers ${covered} samples but stsz has ${sampleCount}`);
+  }
+}
+
+/** Only unit-rate edits; video: exactly one media edit; audio: leading empty edits then one media edit. */
+function validateEdits(elst: { entries: Edit[] } | null, what: string, kind: "video" | "audio") {
+  if (!elst) return;
+  const e = elst.entries;
+  if (!e.length) fail("unsupported_edit", `${what} has an empty edit list`);
+  for (const x of e) {
+    if (x.rate !== UNIT_RATE) fail("unsupported_edit", `${what} edit list uses a non-unit rate`);
+    if (!Number.isSafeInteger(x.segment) || x.segment < 1) fail("unsupported_edit", `${what} edit segment is invalid`);
+    if (x.mediaTime < -1) fail("unsupported_edit", `${what} edit media_time is invalid`);
+  }
+  if (kind === "video") {
+    if (e.length !== 1 || e[0].mediaTime < 0) fail("unsupported_edit", `${what} edit list must be one media edit`);
+    return;
+  }
+  const media = e.filter((x) => x.mediaTime >= 0);
+  if (media.length !== 1 || e[e.length - 1] !== media[0]) fail("unsupported_edit", `${what} edit list must end in exactly one media edit`);
+}
+
+type ParsedFile = { bytes: Uint8Array; ftyp: Uint8Array; moov: Node; traks: Node[]; mdats: Array<[number, number]> };
 
 function parseFile(bytes: Uint8Array, label: string): ParsedFile {
   if (bytes.byteLength > FINISH_MAX_INPUT_BYTES) fail("too_large", `${label} exceeds ${FINISH_MAX_INPUT_BYTES} bytes`);
@@ -282,7 +346,9 @@ function parseFile(bytes: Uint8Array, label: string): ParsedFile {
     }
   }
   const ftypBox = top[0];
-  return { bytes, ftyp: bytes.subarray(ftypBox.start, ftypBox.end), moov, traks };
+  const mdats = top.filter((b) => b.type === "mdat").map((b) => [b.contentStart, b.end] as [number, number]);
+  for (const t of traks) validateSampleTables(t, `${label} ${handlerOf(t)}`);
+  return { bytes, ftyp: bytes.subarray(ftypBox.start, ftypBox.end), moov, traks, mdats };
 }
 
 function mvhd(moov: Node) {
@@ -379,6 +445,8 @@ export function finishSourceEditMp4(args: {
   const sv = srcVideo[0];
   const gTimes = trackTimes(gv);
   const sTimes = trackTimes(sv);
+  validateEdits(gTimes.elst, "Generated video", "video");
+  validateEdits(sTimes.elst, "Source video", "video");
   const srcMv = mvhd(src.moov);
   const genMv = mvhd(gen.moov);
   if (!gTimes.md.timescale || !sTimes.md.timescale || !srcMv.timescale || !genMv.timescale) {
@@ -428,6 +496,7 @@ export function finishSourceEditMp4(args: {
   const sa = srcAudio[0];
   if (child(sa, "tref")) fail("unsupported", "Source audio track has track references");
   const aTimes = trackTimes(sa);
+  validateEdits(aTimes.elst, "Source audio", "audio");
   const movieTs = genMv.timescale;
   const toMovie = (v: number, fromTs: number) => Math.round((v * movieTs) / fromTs);
 
@@ -484,9 +553,9 @@ export function finishSourceEditMp4(args: {
   audio.children = audio.children!.map((c) => c.type === "tkhd" ? { type: "tkhd", payload: aTkhdP } : c);
 
   // ---- chunk relocation ----
-  const vChunks = chunkRanges(vStbl, gen.bytes, "Generated video");
+  const vChunks = chunkRanges(vStbl, gen.bytes, "Generated video", gen.mdats);
   const aStbl = need(audio, ["mdia", "minf", "stbl"], "stbl");
-  const aChunks = chunkRanges(aStbl, src.bytes, "Source audio");
+  const aChunks = chunkRanges(aStbl, src.bytes, "Source audio", src.mdats);
   const vBytes = vChunks.reduce((n, c) => n + c.size, 0);
   const aBytes = aChunks.reduce((n, c) => n + c.size, 0);
   const stco = (n: number) => ({ type: "stco", payload: new Uint8Array(8 + n * 4) });
@@ -506,6 +575,10 @@ export function finishSourceEditMp4(args: {
   const moov: Node = { type: "moov", children: [{ type: "mvhd", payload: mvP }, video, audio, ...others] };
 
   const mdatPayload = vBytes + aBytes;
+  const peak = gen.bytes.byteLength + src.bytes.byteLength + mdatPayload + 1_000_000;
+  if (peak > FINISH_MEMORY_BUDGET_BYTES) {
+    fail("too_large", `Finishing would need about ${peak} bytes, over the ${FINISH_MEMORY_BUDGET_BYTES} byte budget`);
+  }
   const mdatHeader = mdatPayload + 8 > 0xffffffff ? 16 : 8;
   const moovSize = serialize(moov).byteLength; // sizes are final; offsets filled next
   const dataStart = gen.ftyp.byteLength + moovSize + mdatHeader;

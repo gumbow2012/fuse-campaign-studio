@@ -23,7 +23,7 @@ function u32(...vals) {
 }
 const mvhd = (ts, dur, next) => box("mvhd", u32(0, 0, 0, ts, dur, 0x10000), new Uint8Array(76), u32(next));
 const tkhd = (id, dur, w, h) => box("tkhd", u32(3, 0, 0, id, 0, dur, 0, 0, 0), new Uint8Array(36), u32(w * 65536, h * 65536));
-const elst = (entries) => box("edts", box("elst", u32(0, entries.length), ...entries.map(([seg, mt]) => u32(seg, mt, 0x10000))));
+const elst = (entries) => box("edts", box("elst", u32(0, entries.length), ...entries.map(([seg, mt, rate = 0x10000]) => u32(seg, mt, rate))));
 const mdhd = (ts, dur) => box("mdhd", u32(0, 0, 0, ts, dur, 0));
 const hdlr = (h) => box("hdlr", u32(0, 0), enc(h), new Uint8Array(12), [0]);
 const stsd = (entry) => box("stsd", u32(0, 1), box(entry, new Uint8Array(8)));
@@ -38,10 +38,11 @@ function trak(t, movieDur, offsets) {
   return box("trak",
     tkhd(t.id, t.edit ? t.edit.reduce((n, e) => n + e[0], 0) : movieDur, t.w ?? 0, t.h ?? 0),
     ...(t.edit ? [elst(t.edit)] : []),
-    box("mdia", mdhd(t.ts, mediaDur), hdlr(t.handler), box("minf", box("stbl",
+    box("mdia", mdhd(t.ts, t.mdhdDur ?? mediaDur), hdlr(t.handler), box("minf", box("stbl",
       stsd(t.entry),
       box("stts", u32(0, t.stts.length), ...t.stts.map(([c, d]) => u32(c, d))),
-      box("stsc", ...(() => {
+      ...(t.ctts ? [box("ctts", u32(0, t.ctts.length), ...t.ctts.map(([c, o]) => u32(c, o)))] : []),
+      t.stscRows ? box("stsc", u32(0, t.stscRows.length), ...t.stscRows.map((r) => u32(...r))) : box("stsc", ...(() => {
         const rem = t.sizes.length % t.perChunk;
         const full = Math.floor(t.sizes.length / t.perChunk);
         const rows = [];
@@ -50,7 +51,7 @@ function trak(t, movieDur, offsets) {
         return [u32(0, rows.length), ...rows.map((r) => u32(...r))];
       })()),
       box("stsz", u32(0, 0, t.sizes.length, ...t.sizes)),
-      box("stco", u32(0, chunks, ...offsets)),
+      box("stco", u32(0, chunks, ...offsets.map((o) => o + (t.offsetDelta ?? 0)))),
     ))));
 }
 
@@ -60,7 +61,7 @@ export function buildMp4({ movieTs = 1000, movieDur, tracks, extraTop = [] }) {
   const layout = (offsets) => box("moov", mvhd(movieTs, movieDur, Math.max(...tracks.map((t) => t.id)) + 1),
     ...tracks.map((t, i) => trak(t, movieDur, offsets[i])));
   const zero = tracks.map((t) => new Array(Math.ceil(t.sizes.length / t.perChunk)).fill(0));
-  const moovSize = layout(zero).length;
+  const moovSize = layout(zero).length; // offsets use fixed-width stco, so size is stable
   let at = ftyp.length + moovSize + 8;
   const data = [];
   const offsets = tracks.map((t) => {

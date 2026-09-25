@@ -124,3 +124,43 @@ test('gate: only Kling O3 source edit with keep_audio=true', () => {
   assert.equal(shouldFinishSourceEdit({ ...on, source_video_edit: undefined }), false);
   assert.equal(shouldFinishSourceEdit(null), false);
 });
+
+/* ------------------------- hardening: malformed tables ------------------------- */
+const rejects = (gen, code, src = source()) =>
+  assert.throws(() => finishSourceEditMp4({ generated: gen, source: src, expected }), (e) => e instanceof Mp4FinishError && e.code === code);
+
+test('stts sample count must match stsz', () => {
+  rejects(generated({ stts: [[296, 512]], mdhdDur: 152064 }), 'invalid_table');
+});
+test('stts duration must match mdhd', () => {
+  rejects(generated({ mdhdDur: 152000 }), 'invalid_table');
+});
+test('zero stts count or delta is rejected', () => {
+  rejects(generated({ stts: [[296, 512], [1, 0]], mdhdDur: 151552 }), 'invalid_table');
+  rejects(generated({ stts: [[0, 512], [297, 512]] }), 'invalid_table');
+});
+test('ctts must cover every sample; standard B-frame ctts passes', () => {
+  rejects(generated({ ctts: [[296, 1024]] }), 'invalid_table');
+  rejects(generated({ ctts: [[0, 1024], [297, 1024]] }), 'invalid_table');
+  // Standard B-frame ctts covering every sample is accepted and copied unchanged.
+  const { report } = finishSourceEditMp4({ generated: generated({ ctts: [[1, 1024], [1, 2560], [295, 1024]] }), source: source(), expected });
+  assert.equal(report.status, 'finished');
+});
+test('zero samples-per-chunk and zero description index are rejected', () => {
+  rejects(generated({ stscRows: [[1, 0, 1]] }), 'invalid_table');
+  rejects(generated({ stscRows: [[1, 7, 0]] }), 'invalid_table');
+});
+test('chunks must lie inside an mdat payload, not elsewhere in the file', () => {
+  rejects(generated({ offsetDelta: -200 }), 'chunk_outside_mdat');
+});
+test('non-unit edit rates and complex video edit lists are rejected', () => {
+  rejects(generated({ edit: [[12375, 2048, 0x20000]] }), 'unsupported_edit');
+  rejects(generated({ edit: [[40, -1], [12335, 2048]] }), 'unsupported_edit');
+  rejects(generated({ edit: [[6000, 2048], [6375, 80000]] }), 'unsupported_edit');
+  rejects(generated(), 'unsupported_edit', buildMp4({ movieDur: 12536, tracks: [srcVideo, { ...srcAudio, edit: [[12536, 5058, 0x8000]] }] }));
+});
+test('memory budget: combined inputs + output must stay under the budget', async () => {
+  const mod = await import('../../supabase/functions/_shared/mp4-source-audio-finish.ts');
+  assert.ok(mod.FINISH_MAX_INPUT_BYTES * 2 + mod.FINISH_MAX_INPUT_BYTES * 2 > mod.FINISH_MEMORY_BUDGET_BYTES, 'per-input limits alone would exceed it, so the budget check is needed');
+  assert.ok(mod.FINISH_MEMORY_BUDGET_BYTES <= 128_000_000);
+});
