@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { resolveExecutionUrl, resolveExecutionUrls, resolveRequiredVideoUrls } from "../_shared/asset-access.ts";
+import { resolveExecutionUrl, resolveExecutionUrls, resolveRequiredVideoUrls, signDeepDisplayUrls } from "../_shared/asset-access.ts";
+import { applySourceEditFinishing, fetchBounded, shouldFinishSourceEdit } from "../_shared/source-edit-finishing.ts";
+import { FINISH_MAX_INPUT_BYTES } from "../_shared/mp4-source-audio-finish.ts";
 import { assertVideoReferenceRoute, referenceMediaType } from "../_shared/video-reference.ts";
 
 import {
@@ -513,6 +515,32 @@ async function startRun(admin: AdminClient, args: {
   }
 }
 
+/**
+ * Terminal-output fields for a node run. Source-edit previews with
+ * keep_audio get the same deterministic finishing as full jobs; the finished
+ * file is stored privately and the provider URL is kept in input_payload.
+ */
+async function nodeRunCompletion(admin: AdminClient, run: any, output: { url: string; type: string }) {
+  const base = { status: "complete", output_url: output.url, output_type: output.type, completed_at: new Date().toISOString() };
+  if (output.type !== "video" || !shouldFinishSourceEdit(run.input_payload)) return base;
+  const generated = await fetchBounded(output.url, FINISH_MAX_INPUT_BYTES, "generated video");
+  const { bytes, finishing } = await applySourceEditFinishing(admin, {
+    inputPayload: run.input_payload, nodeId: run.node_id, providerUrl: output.url, generated,
+  });
+  const inputPayload = { ...(run.input_payload ?? {}), source_edit_finishing: finishing, provider_output_url: output.url };
+  if (finishing?.status !== "finished") return { ...base, input_payload: inputPayload };
+  const storagePath = `system/node-runs/${run.id}.mp4`;
+  const { error } = await admin.storage.from("fuse-assets").upload(storagePath, bytes, { upsert: true, contentType: "video/mp4" });
+  if (error) {
+    return { ...base, input_payload: { ...inputPayload, source_edit_finishing: { ...finishing, status: "error", code: "store_failed", reason: error.message } } };
+  }
+  return {
+    ...base,
+    output_url: `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/fuse-assets/${storagePath}`,
+    input_payload: inputPayload,
+  };
+}
+
 /** Poll fal for a run that is still in flight and persist any terminal result. */
 async function syncRun(admin: AdminClient, run: any) {
   if (run.status !== "running" && run.status !== "queued") return serializeRun(run);
@@ -529,12 +557,7 @@ async function syncRun(admin: AdminClient, run: any) {
 
     const { data: updated } = await admin
       .from("node_runs")
-      .update({
-        status: "complete",
-        output_url: output.url,
-        output_type: output.type,
-        completed_at: new Date().toISOString(),
-      })
+      .update(await nodeRunCompletion(admin, run, output))
       .eq("id", run.id)
       .select("*")
       .single();
@@ -605,12 +628,7 @@ Deno.serve(async (req) => {
 
       await admin
         .from("node_runs")
-        .update({
-          status: "complete",
-          output_url: output.url,
-          output_type: output.type,
-          completed_at: new Date().toISOString(),
-        })
+        .update(await nodeRunCompletion(admin, run, output))
         .eq("id", run.id);
 
       return json({ ok: true });
@@ -643,7 +661,7 @@ Deno.serve(async (req) => {
           .maybeSingle();
         if (error) throw new Error(error.message);
         if (!run) return json({ error: "Run not found" }, 404);
-        return json({ run: await syncRun(admin, run) });
+        return json({ run: await signDeepDisplayUrls(admin, await syncRun(admin, run)) });
       }
 
       if (!body.versionId) throw new Error("versionId is required");
@@ -662,7 +680,7 @@ Deno.serve(async (req) => {
         if (!latest.has(run.node_id)) latest.set(run.node_id, run);
       }
       const synced = await Promise.all([...latest.values()].map((run) => syncRun(admin, run)));
-      return json({ runs: synced });
+      return json({ runs: await signDeepDisplayUrls(admin, synced) });
     }
 
     if (action !== "start") throw new Error(`Unsupported action: ${action}`);

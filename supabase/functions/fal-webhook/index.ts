@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
 
     let { data: step, error: stepError } = await admin
       .from("execution_steps")
-      .select("id, job_id, node_id, status, provider_model, provider_request_id, started_at, output_payload, nodes!execution_steps_node_id_fkey(name, node_type)")
+      .select("id, job_id, node_id, status, provider_model, provider_request_id, started_at, input_payload, output_payload, nodes!execution_steps_node_id_fkey(name, node_type)")
       .eq("provider_request_id", requestId)
       .single();
 
@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
       const jobId = url.searchParams.get("jobId");
       const fallback = await admin
         .from("execution_steps")
-        .select("id, job_id, node_id, status, provider_model, provider_request_id, started_at, output_payload, nodes!execution_steps_node_id_fkey(name, node_type)")
+        .select("id, job_id, node_id, status, provider_model, provider_request_id, started_at, input_payload, output_payload, nodes!execution_steps_node_id_fkey(name, node_type)")
         .eq("id", stepId)
         .maybeSingle();
       if (fallback.error) throw new Error(fallback.error.message);
@@ -147,6 +147,7 @@ Deno.serve(async (req) => {
         nodeName: (step as any).nodes?.name ?? "Output",
         falRequestId: requestId,
       },
+      finish: { inputPayload: (step as any).input_payload ?? null, nodeId: step.node_id },
     });
 
     await admin
@@ -162,6 +163,7 @@ Deno.serve(async (req) => {
           requestId,
           sourceUrl: outputUrl,
           outputUrl: asset.supabase_storage_url,
+          ...(asset.finishing ? { providerOutputUrl: outputUrl, sourceEditFinishing: asset.finishing } : {}),
           telemetry: {
             ...((step.output_payload as any)?.telemetry ?? {}),
             executionTimeMs,

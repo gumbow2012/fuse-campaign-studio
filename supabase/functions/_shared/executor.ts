@@ -1,6 +1,7 @@
 import { createAdminClient, logAuditEvent } from "./supabase-admin.ts";
 import { resolveExecutionUrl, resolveExecutionUrls, resolveRequiredVideoUrls } from "./asset-access.ts";
 import { assertVideoReferenceRoute, referenceMediaType } from "./video-reference.ts";
+import { applySourceEditFinishing, shouldFinishSourceEdit, type SourceEditFinishing } from "./source-edit-finishing.ts";
 import {
   getFalPricing,
   getFalQueueResult,
@@ -633,12 +634,28 @@ export async function uploadRemoteAsset(admin: AdminClient, args: {
   kind: "image" | "video";
   sourceUrl: string;
   metadata?: Record<string, unknown>;
-}) {
+  /** Source-edit finishing context (gated inside; other routes pass through). */
+  finish?: { inputPayload?: Record<string, unknown> | null; nodeId?: string | null };
+}): Promise<AssetRow & { finishing?: SourceEditFinishing | null }> {
+  const gated = args.kind === "video" && !!args.finish && shouldFinishSourceEdit(args.finish.inputPayload);
   const response = await fetch(args.sourceUrl);
   if (!response.ok) throw new Error(`Failed to fetch generated ${args.kind}: ${response.status}`);
 
-  const contentType = response.headers.get("content-type") ??
+  let contentType = response.headers.get("content-type") ??
     (args.kind === "video" ? "video/mp4" : "image/png");
+  let bytes = new Uint8Array(await response.arrayBuffer());
+  let finishing: SourceEditFinishing | null = null;
+  if (gated) {
+    const result = await applySourceEditFinishing(admin, {
+      inputPayload: args.finish!.inputPayload,
+      nodeId: args.finish!.nodeId,
+      providerUrl: args.sourceUrl,
+      generated: bytes,
+    });
+    bytes = result.bytes;
+    finishing = result.finishing;
+    if (finishing?.status === "finished") contentType = "video/mp4";
+  }
   const extension = contentType.includes("mp4")
     ? "mp4"
     : contentType.includes("webm")
@@ -647,7 +664,6 @@ export async function uploadRemoteAsset(admin: AdminClient, args: {
     ? "jpg"
     : "png";
   const storagePath = `system/jobs/${args.jobId}/${args.stepId}.${extension}`;
-  const bytes = new Uint8Array(await response.arrayBuffer());
 
   const { error: uploadError } = await admin.storage
     .from("fuse-assets")
@@ -665,13 +681,13 @@ export async function uploadRemoteAsset(admin: AdminClient, args: {
     .insert({
       supabase_storage_url: publicUrl,
       asset_type: args.kind === "video" ? "generated_video" : "generated_image",
-      metadata: args.metadata ?? {},
+      metadata: finishing ? { ...(args.metadata ?? {}), source_edit_finishing: finishing } : args.metadata ?? {},
     })
     .select()
     .single();
   if (assetError || !asset) throw new Error(assetError?.message ?? "Failed to insert asset row");
 
-  return asset as AssetRow;
+  return { ...(asset as AssetRow), finishing };
 }
 
 export async function refreshJobProgress(admin: AdminClient, jobId: string) {
@@ -930,6 +946,7 @@ export async function completeAsyncStep(
       nodeName: step.nodes?.name ?? "Output",
       falRequestId: requestId,
     },
+    finish: { inputPayload: step.input_payload ?? null, nodeId: step.node_id },
   });
 
   await admin
@@ -945,6 +962,7 @@ export async function completeAsyncStep(
         requestId,
         sourceUrl: args.outputUrl,
         outputUrl: asset.supabase_storage_url,
+        ...(asset.finishing ? { providerOutputUrl: args.outputUrl, sourceEditFinishing: asset.finishing } : {}),
         telemetry: {
           ...((step.output_payload as any)?.telemetry ?? {}),
           executionTimeMs,
@@ -961,7 +979,7 @@ export async function completeAsyncStep(
 export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
   const { data: runningSteps, error } = await admin
     .from("execution_steps")
-    .select("id, job_id, node_id, status, provider_model, provider_request_id, started_at, output_payload, nodes!execution_steps_node_id_fkey(name, node_type)")
+    .select("id, job_id, node_id, status, provider_model, provider_request_id, started_at, input_payload, output_payload, nodes!execution_steps_node_id_fkey(name, node_type)")
     .eq("job_id", jobId)
     .eq("status", "running");
   if (error) return;
