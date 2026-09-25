@@ -41,6 +41,7 @@ function trak(t, movieDur, offsets) {
     box("mdia", mdhd(t.ts, t.mdhdDur ?? mediaDur), hdlr(t.handler), box("minf", box("stbl",
       stsd(t.entry),
       box("stts", u32(0, t.stts.length), ...t.stts.map(([c, d]) => u32(c, d))),
+      ...(t.ctts ? [box("ctts", u32(0, t.ctts.length), ...t.ctts.map(([c, o]) => u32(c, o)))] : []),
       t.stscRows ? box("stsc", u32(0, t.stscRows.length), ...t.stscRows.map((r) => u32(...r))) : box("stsc", ...(() => {
         const rem = t.sizes.length % t.perChunk;
         const full = Math.floor(t.sizes.length / t.perChunk);

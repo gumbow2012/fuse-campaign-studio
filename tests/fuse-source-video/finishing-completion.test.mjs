@@ -40,3 +40,28 @@ test('unsupported media keeps provider bytes and records the rejection', async (
   assert.equal(r.finishing.status, 'rejected');
   assert.equal(r.finishing.code, 'invalid_box');
 });
+
+import { fetchBounded } from '../../supabase/functions/_shared/source-edit-finishing.ts';
+const streamOf = (chunks, onPull) => new ReadableStream({
+  pull(c) { onPull?.(); const next = chunks.shift(); next ? c.enqueue(next) : c.close(); },
+});
+
+test('fetchBounded stops at the limit without content-length and never reads the rest', async () => {
+  let pulls = 0;
+  const chunks = Array.from({ length: 100 }, () => new Uint8Array(1000));
+  globalThis.fetch = async () => new Response(streamOf(chunks, () => pulls++));
+  await assert.rejects(fetchBounded('https://x.test', 2500, 'clip'), (e) => e.code === 'too_large');
+  assert.ok(pulls <= 4, `read ${pulls} chunks`);
+});
+
+test('fetchBounded rejects a lying (too small) content-length', async () => {
+  globalThis.fetch = async () => new Response(streamOf([new Uint8Array(3000), new Uint8Array(3000)]), { headers: { 'content-length': '10' } });
+  await assert.rejects(fetchBounded('https://x.test', 5000, 'clip'), (e) => e.code === 'too_large');
+});
+
+test('fetchBounded rejects a declared oversize length before reading, and returns exact bytes otherwise', async () => {
+  globalThis.fetch = async () => new Response(new Uint8Array(10), { headers: { 'content-length': '999999' } });
+  await assert.rejects(fetchBounded('https://x.test', 5000, 'clip'), (e) => e.code === 'too_large');
+  globalThis.fetch = async () => new Response(streamOf([new Uint8Array([1, 2]), new Uint8Array([3])]));
+  assert.deepEqual([...await fetchBounded('https://x.test', 5000, 'clip')], [1, 2, 3]);
+});
