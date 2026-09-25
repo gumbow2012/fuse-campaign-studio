@@ -1,0 +1,1 @@
+- [x] Jerry: deterministic source-audio/timeline finishing for Kling O3 source edit
