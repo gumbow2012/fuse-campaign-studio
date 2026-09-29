@@ -20,7 +20,7 @@ import { campaignName, requireOwnedJob } from "./outputs.ts";
 const SITE = "https://fuse-us.com";
 export type OutputMode = "images_only" | "video_only" | "full_campaign";
 
-async function signingSecret(admin: Admin): Promise<string> {
+export async function signingSecret(admin: Admin): Promise<string> {
   const { data } = await admin.from("service_config").select("value").eq("key", "mcp_signing_secret").maybeSingle();
   const v = (data as any)?.value;
   if (!v) throw new FuseError("INTERNAL", "mcp_signing_secret missing");

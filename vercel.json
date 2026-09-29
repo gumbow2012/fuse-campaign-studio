@@ -5,6 +5,7 @@
     { "source": "/api/(.*)", "destination": "https://ykrrwgkxgidoavtzcumk.supabase.co/functions/v1/fuse-mcp/api/$1" },
     { "source": "/openapi.json", "destination": "https://ykrrwgkxgidoavtzcumk.supabase.co/functions/v1/fuse-mcp/openapi.json" },
     { "source": "/health", "destination": "https://ykrrwgkxgidoavtzcumk.supabase.co/functions/v1/fuse-mcp/health" },
+    { "source": "/.well-known/openai-apps-challenge", "destination": "https://ykrrwgkxgidoavtzcumk.supabase.co/functions/v1/fuse-mcp/.well-known/openai-apps-challenge" },
     { "source": "/.well-known/oauth-protected-resource", "destination": "https://ykrrwgkxgidoavtzcumk.supabase.co/functions/v1/fuse-mcp/.well-known/oauth-protected-resource" },
     { "source": "/.well-known/oauth-protected-resource/(.*)", "destination": "https://ykrrwgkxgidoavtzcumk.supabase.co/functions/v1/fuse-mcp/.well-known/oauth-protected-resource/$1" },
     {
