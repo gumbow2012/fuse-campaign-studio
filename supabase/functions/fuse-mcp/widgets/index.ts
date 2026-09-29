@@ -175,6 +175,7 @@ render(); window.addEventListener("openai:set_globals", render);`);
 const PRICING = page("FUSE pricing", `<div id="root"></div>`, `
 function render(){
   const d = out(); const root = $("root");
+  if(!(d.plans||[]).length&&!(d.packs||[]).length){ root.innerHTML='<h1>Your account</h1>'+(d.credit_balance!=null?'<p class="name">'+d.credit_balance+' credits</p>':'')+'<p class="muted">'+esc(d.message||"FUSE runs on your existing account credits.")+'</p><a class="btn" href="'+esc(d.account_url||'https://fuse-us.com/account')+'" target="_blank" rel="noopener">Manage account</a>'; return; }
   root.innerHTML = '<h1>Plans</h1><div class="grid">'+(d.plans||[]).map(p=>'<div class="card"><div class="body"><div class="name">'+esc(p.name)+'</div><div class="orb" style="font-size:20px;color:#fff">$'+p.monthly_price_usd+'<span class="muted" style="font-size:12px">/mo</span></div><div class="muted">About '+p.approximate_campaigns_per_month+' campaigns a month</div>'+(p.key==="starter"&&d.promo_note?'<span class="pill">20% off first month</span>':'')+'</div></div>').join("")+'</div>'+
     (d.selected_template?'<p class="muted" style="margin-top:10px">'+esc(d.selected_template.slug)+': '+esc(d.selected_template.approximate_campaign_fraction)+' · '+(d.selected_template.included_in_starter?'included in Starter':'needs a bigger plan')+'</p>':'')+
     '<p class="muted">'+esc(d.billing_note||"")+'</p><a class="btn" href="'+esc(d.pricing_url||'https://fuse-us.com/pricing')+'" target="_blank" rel="noopener">See pricing</a>';
@@ -186,7 +187,7 @@ function render(){
   const d = out(); const root = $("root");
   root.innerHTML = '<h1>Your plan</h1><div class="list"><div class="slot"><span class="muted">Plan</span><br><span class="name">'+esc(d.plan||"free")+'</span></div><div class="slot"><span class="muted">Credits</span><br><span class="name">'+(d.credit_balance||0)+'</span>'+(d.approximate_campaigns_per_month?'<span class="muted"> · about '+d.approximate_campaigns_per_month+' campaigns a month</span>':'')+'</div>'+
     (d.template_slug?'<div class="slot"><span class="muted">'+esc(d.template_slug)+'</span><br><span class="'+(d.can_run?'ok':'bad')+'">'+(d.can_run?'You can run this campaign':'Short by '+d.missing_credits+' credits')+'</span></div>':'')+'</div>'+
-    (d.upgrade_required?'<a class="btn" href="https://fuse-us.com/pricing" target="_blank" rel="noopener">See plans</a>':'');
+    (d.upgrade_required?'<a class="btn" href="https://fuse-us.com/pricing" target="_blank" rel="noopener">See plans</a>':'<a class="btn" href="https://fuse-us.com/account" target="_blank" rel="noopener">Manage account</a>');
 }
 render(); window.addEventListener("openai:set_globals", render);`);
 

@@ -7,7 +7,9 @@ export type PromptDef = {
   render: (args: Record<string, string>) => string;
 };
 
-export const PROMPTS: PromptDef[] = [
+export const CHATGPT_RULE = "In ChatGPT, always call the prepare tool and get the user's explicit confirmation before starting any run or generation. Never mention plans, credit packs, prices, promotions or upgrades — report the credit balance and point users to https://fuse-us.com/account to manage their account.";
+
+const BASE_PROMPTS: PromptDef[] = [
   {
     name: "find_campaign_for_product",
     title: "Find the right campaign for a product",
@@ -57,3 +59,5 @@ Steps: 1) fuse_get_campaign_template to list the required uploads. 2) fuse_creat
     render: () => `Explain FUSE in four short sentences: you upload your real product photo; you pick a proven campaign (a real shoot style, not a prompt); FUSE generates campaign images and short clips with your graphics intact; you edit, export and download everything. Starter is $25 a month (20% off the first month) for about 3 campaigns. Never mention nodes, run ids, workflows or credit counts unless asked. Offer to find a template with fuse_search_templates.`,
   },
 ];
+
+export const PROMPTS: PromptDef[] = BASE_PROMPTS.map((p) => ({ ...p, render: (a) => `${p.render(a)}\n\n${CHATGPT_RULE}` }));

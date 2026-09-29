@@ -106,6 +106,12 @@ Deno.serve(async (req) => {
       resource_documentation: `${PUBLIC_ORIGIN}/docs/mcp`,
     }, 200, { "Cache-Control": "public, max-age=300" });
   }
+  if (path === "/.well-known/openai-apps-challenge" && req.method === "GET") {
+    const { data } = await admin.from("service_config").select("value").eq("key", "openai_apps_challenge").maybeSingle();
+    const v = (data as any)?.value;
+    if (v == null || v === "") return new Response("Not found", { status: 404, headers: { ...CORS, "Cache-Control": "no-store" } });
+    return new Response(String(v), { status: 200, headers: { ...CORS, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+  }
   if (path === "/openapi.json" && req.method === "GET") {
     return json(buildOpenApi(publicOrigin, AUTH_SERVER), 200, { "Cache-Control": "public, max-age=300" });
   }

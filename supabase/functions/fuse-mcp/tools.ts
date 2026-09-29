@@ -15,6 +15,7 @@ import { listRunOutputs, renameCampaign } from "./core/outputs.ts";
 import { getTimeline, saveCampaignEdit } from "./core/editor.ts";
 import { exportCampaign, getExportStatus } from "./core/exports.ts";
 import { getHelp } from "./core/help.ts";
+import { prepareGeneration, verifyGenerationToken } from "./core/prepare-generation.ts";
 import { getStandaloneGenerationStatus, listStandaloneGenerations, startStandaloneGeneration } from "./core/generate.ts";
 
 export type JsonSchema = Record<string, unknown>;
@@ -43,6 +44,34 @@ const arr = (items: JsonSchema, description: string): JsonSchema => ({ type: "ar
 
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+
+const ACCOUNT_URL = "https://fuse-us.com/account";
+const NEUTRAL_ACTION = `Manage your account at ${ACCOUNT_URL}.`;
+const isChatGpt = (ctx: ToolContext) => ctx.client === "chatgpt";
+/** ChatGPT: strip upsell/plan/price language, keep balance and can_run. */
+function neutralText(text: unknown): unknown {
+  if (typeof text !== "string") return text;
+  return text
+    .replace(/(Start a Starter plan|Add \d+ credits or upgrade)[\s\S]*?then run this campaign\./g, NEUTRAL_ACTION)
+    .replace(/https:\/\/fuse-us\.com\/pricing/g, ACCOUNT_URL);
+}
+function neutralize<T extends Record<string, any>>(ctx: ToolContext, r: T): T {
+  if (!isChatGpt(ctx)) return r;
+  const out: any = { ...r };
+  if ("recommended_action" in out) out.recommended_action = out.recommended_action == null ? null : NEUTRAL_ACTION;
+  if ("upgrade_required" in out) out.upgrade_required = false;
+  if (typeof out.confirmation_summary === "string") out.confirmation_summary = neutralText(out.confirmation_summary);
+  if (Array.isArray(out.issues)) out.issues = out.issues.map((i: any) => ({ ...i, message: neutralText(i?.message) }));
+  delete out.approximate_campaigns_per_month;
+  return out;
+}
+function requireChatGptConfirmation(ctx: ToolContext, args: Record<string, any>) {
+  if (isChatGpt(ctx) && !args.confirmation_token) {
+    throw new FuseError("CONFIRMATION_REQUIRED", "Confirm the campaign before generating", {
+      nextAction: "Call fuse_prepare_campaign_run, show the confirmation_summary to the user, and start only after they explicitly confirm.",
+    });
+  }
+}
 
 function needScope(ctx: ToolContext, scope: Scope | null) {
   if (scope) requireScope(ctx.auth, scope, ctx.resourceMetadataUrl);
@@ -142,6 +171,9 @@ export const TOOLS: ToolDef[] = [
     rest: { method: "GET", path: "/api/pricing", operationId: "getPricingSummary", summary: "Pricing summary" },
     widget: "ui://fuse/pricing.html",
     async handler(args, ctx) {
+      if (isChatGpt(ctx)) {
+        return { message: `FUSE runs on your existing account credits. You can manage your account at ${ACCOUNT_URL}.`, account_url: ACCOUNT_URL, plans: [], packs: [] };
+      }
       let selected: { slug: string; estimated_credits: number } | null = null;
       if (args.template_slug) {
         const t = await getTemplateDetail(ctx.admin, { slug: args.template_slug }, ctx.auth.isPrivileged);
@@ -150,7 +182,7 @@ export const TOOLS: ToolDef[] = [
       const pricing = await getPricingSummary(ctx.admin, selected);
       return { ...pricing, focus_plan: args.plan ?? null };
     },
-    summarize: (r) => `Starter $${r.starter_monthly_price_usd}/mo (${r.promo_note}) ≈ ${r.plans.find((p: any) => p.key === "starter")?.approximate_campaigns_per_month ?? 3} campaigns/mo; ${r.plans.filter((p: any) => p.key !== "starter").map((p: any) => `${p.name} $${p.monthly_price_usd}/mo ≈ ${p.approximate_campaigns_per_month} campaigns/mo`).join("; ")}${r.selected_template ? `. ${r.selected_template.slug}: ${r.selected_template.estimated_credits} credits (${r.selected_template.approximate_campaign_fraction}), ${r.selected_template.included_in_starter ? "included in Starter" : "needs a bigger plan"}` : ""}. ${r.pricing_url}`,
+    summarize: (r) => r.message ? r.message : `Starter $${r.starter_monthly_price_usd}/mo (${r.promo_note}) ≈ ${r.plans.find((p: any) => p.key === "starter")?.approximate_campaigns_per_month ?? 3} campaigns/mo; ${r.plans.filter((p: any) => p.key !== "starter").map((p: any) => `${p.name} $${p.monthly_price_usd}/mo ≈ ${p.approximate_campaigns_per_month} campaigns/mo`).join("; ")}${r.selected_template ? `. ${r.selected_template.slug}: ${r.selected_template.estimated_credits} credits (${r.selected_template.approximate_campaign_fraction}), ${r.selected_template.included_in_starter ? "included in Starter" : "needs a bigger plan"}` : ""}. ${r.pricing_url}`,
   },
   {
     name: "fuse_check_account_credits",
@@ -172,7 +204,7 @@ export const TOOLS: ToolDef[] = [
         slug = t.slug;
       }
       const verdict = cost != null ? canRun(account, cost) : null;
-      return { ...account, template_slug: slug, template_estimated_credits: cost, ...(verdict ?? { can_run: null, missing_credits: null, upgrade_required: null, recommended_action: "Pass template_slug to check a specific campaign." }) };
+      return neutralize(ctx, { ...account, template_slug: slug, template_estimated_credits: cost, ...(verdict ?? { can_run: null, missing_credits: null, upgrade_required: null, recommended_action: "Pass template_slug to check a specific campaign." }) });
     },
     summarize: (r) => `Plan ${r.plan}, ${r.credit_balance} credits${r.template_slug ? `; ${r.template_slug} needs ${r.template_estimated_credits} → ${r.can_run ? "can run" : `short by ${r.missing_credits}`}` : ""}.`,
   },
@@ -232,7 +264,7 @@ export const TOOLS: ToolDef[] = [
     widget: "ui://fuse/confirm-run.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.prepare");
-      return await prepareCampaignRun(ctx.admin, ctx.auth, args as any);
+      return neutralize(ctx, await prepareCampaignRun(ctx.admin, ctx.auth, args as any));
     },
     summarize: (r) => r.confirmation_summary + (r.ready ? " (ready — you can start the run now)" : ""),
   },
@@ -256,6 +288,7 @@ export const TOOLS: ToolDef[] = [
     widget: "ui://fuse/run-status.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
+      requireChatGptConfirmation(ctx, args);
       return await startCampaignRun(ctx.admin, ctx.auth, args as any);
     },
     summarize: (r) => `${r.idempotent_replay ? "Already running" : "Started"}: run ${r.run_id} (${r.template_slug}) — expect ${r.estimated_outputs.images_count} images + ${r.estimated_outputs.clips_count} clips. Check status in ~${r.next_poll_after_seconds}s.`,
@@ -281,6 +314,7 @@ export const TOOLS: ToolDef[] = [
     widget: "ui://fuse/run-status.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
+      requireChatGptConfirmation(ctx, args);
       const started = await startCampaignRun(ctx.admin, ctx.auth, args as any);
       return {
         ...started,
@@ -444,6 +478,27 @@ export const TOOLS: ToolDef[] = [
     summarize: (r) => r.campaigns.length ? r.campaigns.map((c: any) => `${c.campaign_name} (${c.template_slug}) — ${c.status}, ${c.outputs_count} outputs, run ${c.run_id}`).join("; ") : "No campaigns yet.",
   },
   {
+    name: "fuse_prepare_generation",
+    title: "Prepare an image or video generation (no credits used)",
+    description: "Preview an approximate credit estimate and the user's balance for a standalone image or video generation, and get a confirmation_token. Nothing is generated. In ChatGPT, call this and get explicit user confirmation before fuse_generate_image / fuse_generate_video. Requires a connected account.",
+    scope: "fuse.runs.prepare",
+    inputSchema: obj({
+      kind: str("image or video", { enum: ["image", "video"] }),
+      prompt: str("What to generate (must match the later generate call exactly)"),
+      duration: num("Optional video seconds"),
+      aspect_ratio: str("Optional, e.g. 9:16"),
+      reference_image_urls: arr(str("https URL"), "Optional reference photos"),
+      start_image_url: str("Optional https URL to animate from"),
+    }, ["kind", "prompt"]),
+    annotations: RO,
+    rest: { method: "POST", path: "/api/generate/prepare", operationId: "prepareGeneration", summary: "Prepare a standalone generation" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.prepare");
+      return neutralize(ctx, await prepareGeneration(ctx.admin, ctx.auth, { kind: args.kind, prompt: String(args.prompt ?? ""), duration: args.duration }));
+    },
+    summarize: (r) => r.confirmation_summary,
+  },
+  {
     name: "fuse_generate_image",
     title: "Generate an image",
     description: "Generate campaign-quality still image(s) from a text prompt (and optional reference product photos) using FUSE's image engine. Charges credits from the user's balance and starts immediately — poll fuse_get_generation_status. Reference images must be https URLs or assets uploaded via fuse_create_upload_session. Requires a connected account.",
@@ -453,11 +508,13 @@ export const TOOLS: ToolDef[] = [
       reference_image_urls: arr(str("https URL"), "Optional reference/product photos"),
       aspect_ratio: str("Optional, e.g. 9:16, 1:1, 16:9"),
       model: str("Optional image model override"),
+      confirmation_token: str("Token from fuse_prepare_generation (required in ChatGPT)"),
     }, ["prompt"]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     rest: { method: "POST", path: "/api/generate/image", operationId: "generateImage", summary: "Generate an image" },
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
+      if (isChatGpt(ctx)) await verifyGenerationToken(ctx.admin, ctx.auth, "image", String(args.prompt ?? ""), args.confirmation_token);
       return await startStandaloneGeneration(ctx.admin, ctx.auth, {
         kind: "image",
         prompt: String(args.prompt),
@@ -481,11 +538,13 @@ export const TOOLS: ToolDef[] = [
       aspect_ratio: str("Optional, e.g. 9:16"),
       model: str("Optional video model override"),
       generate_audio: bool("Optional native audio"),
+      confirmation_token: str("Token from fuse_prepare_generation (required in ChatGPT)"),
     }, ["prompt"]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     rest: { method: "POST", path: "/api/generate/video", operationId: "generateVideo", summary: "Generate a video" },
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
+      if (isChatGpt(ctx)) await verifyGenerationToken(ctx.admin, ctx.auth, "video", String(args.prompt ?? ""), args.confirmation_token);
       return await startStandaloneGeneration(ctx.admin, ctx.auth, {
         kind: "video",
         prompt: String(args.prompt),
