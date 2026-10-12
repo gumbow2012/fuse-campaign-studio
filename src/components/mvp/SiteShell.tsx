@@ -219,6 +219,9 @@ export default function SiteShell({ children }: { children: ReactNode }) {
               <NavLink to="/pricing" className={textNavLinkClass}>
                 Pricing
               </NavLink>
+              <NavLink to="/credits" className={textNavLinkClass}>
+                Credits
+              </NavLink>
             </nav>
             {user ? (
               /* ONE cohesive cluster: credits · notifications · account */
@@ -398,6 +401,9 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 ) : null}
                 <NavLink to="/pricing" className={textNavLinkClass}>
                   Pricing
+                </NavLink>
+                <NavLink to="/credits" className={textNavLinkClass}>
+                  Credits
                 </NavLink>
                 {user ? (
                   <NavLink to="/contact" className={iconNavLinkClass} aria-label="Contact" title="Contact">
