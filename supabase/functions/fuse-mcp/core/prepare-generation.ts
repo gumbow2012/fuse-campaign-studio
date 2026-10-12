@@ -7,22 +7,25 @@ import { FuseError } from "../errors.ts";
 import { issueConfirmationToken, sha256Hex, verifyConfirmationToken, type RunPlan } from "../confirm.ts";
 import { getAccountCredits } from "./credits.ts";
 import { signingSecret } from "./runs.ts";
+import { imageFlatUsd, imageModelLabel, videoModelLabel, videoUsdPerSecond } from "./models.ts";
 
 export type GenKind = "image" | "video";
 
-export function estimateGenerationCredits(kind: GenKind, duration?: number): number {
-  if (kind === "image") return 2;
+export function estimateGenerationCredits(kind: GenKind, duration?: number, model?: string): number {
+  if (kind === "image") return Math.max(1, Math.ceil(imageFlatUsd(model) / 0.098));
   const d = Number.isFinite(Number(duration)) && Number(duration) > 0 ? Number(duration) : 5;
-  return Math.max(1, Math.ceil((0.14 * d) / 0.098));
+  return Math.max(1, Math.ceil((videoUsdPerSecond(model) * d) / 0.098));
 }
 
-export async function prepareGeneration(admin: Admin, auth: AuthContext, args: { kind: GenKind; prompt: string; duration?: number }) {
+export async function prepareGeneration(admin: Admin, auth: AuthContext, args: { kind: GenKind; prompt: string; duration?: number; model?: string }) {
   if (!auth.userId) throw new FuseError("AUTH_REQUIRED");
   if (args.kind !== "image" && args.kind !== "video") throw new FuseError("INVALID_INPUT", "kind must be image or video");
   const prompt = String(args.prompt ?? "").trim();
   if (!prompt) throw new FuseError("MISSING_INPUT", "prompt required", { userMessage: "Describe what you want to generate." });
   const account = await getAccountCredits(admin, auth);
-  const estimated = auth.isPrivileged ? 0 : estimateGenerationCredits(args.kind, args.duration);
+  const estimated = auth.isPrivileged ? 0 : estimateGenerationCredits(args.kind, args.duration, args.model);
+  const model = args.model || undefined;
+  const modelLabel = args.kind === "image" ? imageModelLabel(model) : videoModelLabel(model);
   const can_run = account.privileged_no_charge || account.credit_balance >= estimated;
   const plan: RunPlan = {
     user_id: auth.userId,
@@ -39,10 +42,12 @@ export async function prepareGeneration(admin: Admin, auth: AuthContext, args: {
     ready: can_run,
     kind: args.kind,
     prompt,
+    model: model ?? null,
+    model_label: modelLabel,
     estimated_credits: estimated,
     credit_balance: account.credit_balance,
     can_run,
-    confirmation_summary: `Generate a ${args.kind} from your prompt for about ${estimated} credits (balance ${account.credit_balance}). Go ahead?`,
+    confirmation_summary: `Generate ${args.kind === "image" ? "an image" : "a video"} with ${modelLabel} from your prompt for about ${estimated} credits (balance ${account.credit_balance}). Go ahead?`,
     confirmation_token: token.token,
     confirmation_expires_at: token.expires_at,
   };

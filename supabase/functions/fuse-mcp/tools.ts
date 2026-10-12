@@ -16,6 +16,7 @@ import { getTimeline, saveCampaignEdit } from "./core/editor.ts";
 import { exportCampaign, getExportStatus } from "./core/exports.ts";
 import { getHelp } from "./core/help.ts";
 import { prepareGeneration, verifyGenerationToken } from "./core/prepare-generation.ts";
+import { IMAGE_KEYS, listGenerationModels, VIDEO_KEYS } from "./core/models.ts";
 import { getStandaloneGenerationStatus, listStandaloneGenerations, startStandaloneGeneration } from "./core/generate.ts";
 
 export type JsonSchema = Record<string, unknown>;
@@ -41,6 +42,15 @@ const num = (description: string, extra: JsonSchema = {}): JsonSchema => ({ type
 const bool = (description: string): JsonSchema => ({ type: "boolean", description });
 const obj = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema => ({ type: "object", properties, required, additionalProperties: false });
 const arr = (items: JsonSchema, description: string): JsonSchema => ({ type: "array", items, description });
+
+const MODEL_HELP = "Call fuse_list_generation_models to see options.";
+const imageModelSchema = () => str(`Image model. Default nano-banana-pro. ${MODEL_HELP}`, { enum: IMAGE_KEYS });
+const videoModelSchema = () => str(`Video model. Default kling-3.0-pro. ${MODEL_HELP}`, { enum: VIDEO_KEYS });
+const imageOptionSchemas = () => ({
+  resolution: str("Optional (nano-banana-pro: 1K, 2K or 4K; Seedance video: per model)"),
+  quality: str("Optional (gpt-image-2): auto, low, medium, high"),
+  image_size: str("Optional (seedream-v4): 1K, 2K or 4K"),
+});
 
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
@@ -489,12 +499,16 @@ export const TOOLS: ToolDef[] = [
       aspect_ratio: str("Optional, e.g. 9:16"),
       reference_image_urls: arr(str("https URL"), "Optional reference photos"),
       start_image_url: str("Optional https URL to animate from"),
+      model: str(`Image or video model key (default nano-banana-pro / kling-3.0-pro). ${MODEL_HELP}`, { enum: [...IMAGE_KEYS, ...VIDEO_KEYS] }),
+      ...imageOptionSchemas(),
+      generate_audio: bool("Optional video native audio"),
     }, ["kind", "prompt"]),
     annotations: RO,
     rest: { method: "POST", path: "/api/generate/prepare", operationId: "prepareGeneration", summary: "Prepare a standalone generation" },
+    widget: "ui://fuse/generation.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.prepare");
-      return neutralize(ctx, await prepareGeneration(ctx.admin, ctx.auth, { kind: args.kind, prompt: String(args.prompt ?? ""), duration: args.duration }));
+      return neutralize(ctx, await prepareGeneration(ctx.admin, ctx.auth, { kind: args.kind, prompt: String(args.prompt ?? ""), duration: args.duration, model: args.model }));
     },
     summarize: (r) => r.confirmation_summary,
   },
@@ -507,11 +521,13 @@ export const TOOLS: ToolDef[] = [
       prompt: str("What to generate"),
       reference_image_urls: arr(str("https URL"), "Optional reference/product photos"),
       aspect_ratio: str("Optional, e.g. 9:16, 1:1, 16:9"),
-      model: str("Optional image model override"),
+      model: imageModelSchema(),
+      ...imageOptionSchemas(),
       confirmation_token: str("Token from fuse_prepare_generation (required in ChatGPT)"),
     }, ["prompt"]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     rest: { method: "POST", path: "/api/generate/image", operationId: "generateImage", summary: "Generate an image" },
+    widget: "ui://fuse/generation.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
       if (isChatGpt(ctx)) await verifyGenerationToken(ctx.admin, ctx.auth, "image", String(args.prompt ?? ""), args.confirmation_token);
@@ -521,6 +537,9 @@ export const TOOLS: ToolDef[] = [
         imageUrls: args.reference_image_urls,
         aspectRatio: args.aspect_ratio,
         model: args.model,
+        resolution: args.resolution,
+        quality: args.quality,
+        imageSize: args.image_size,
       });
     },
     summarize: (r) => `Image generation ${r.generation_id} — ${r.status}${r.estimated_credits ? `, ~${r.estimated_credits} credits` : ""}. Poll fuse_get_generation_status in ~${r.next_poll_after_seconds}s.`,
@@ -536,12 +555,14 @@ export const TOOLS: ToolDef[] = [
       end_image_url: str("Optional https end frame"),
       duration: num("Optional seconds"),
       aspect_ratio: str("Optional, e.g. 9:16"),
-      model: str("Optional video model override"),
+      model: videoModelSchema(),
+      resolution: str("Optional resolution (models that support it, e.g. Seedance 720p/1080p)"),
       generate_audio: bool("Optional native audio"),
       confirmation_token: str("Token from fuse_prepare_generation (required in ChatGPT)"),
     }, ["prompt"]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     rest: { method: "POST", path: "/api/generate/video", operationId: "generateVideo", summary: "Generate a video" },
+    widget: "ui://fuse/generation.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
       if (isChatGpt(ctx)) await verifyGenerationToken(ctx.admin, ctx.auth, "video", String(args.prompt ?? ""), args.confirmation_token);
@@ -553,6 +574,7 @@ export const TOOLS: ToolDef[] = [
         duration: args.duration,
         aspectRatio: args.aspect_ratio,
         model: args.model,
+        resolution: args.resolution,
         generateAudio: args.generate_audio,
       });
     },
@@ -566,11 +588,26 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({ generation_id: str("id from fuse_generate_image/fuse_generate_video") }, ["generation_id"]),
     annotations: RO,
     rest: { method: "GET", path: "/api/generations/{generation_id}", operationId: "getGenerationStatus", summary: "Get generation status" },
+    widget: "ui://fuse/generation.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.read");
       return await getStandaloneGenerationStatus(ctx.admin, ctx.auth, String(args.generation_id));
     },
     summarize: (r) => `Generation ${r.generation_id} — ${r.status}${r.output_url ? "; output ready" : r.public_failure ? `; ${r.public_failure}` : ""}.`,
+  },
+  {
+    name: "fuse_list_generation_models",
+    title: "List generation models",
+    description: "List the image and video models available for standalone generation, with their options, defaults and approximate credits. Public.",
+    scope: null,
+    inputSchema: obj({}),
+    annotations: RO,
+    rest: { method: "GET", path: "/api/generate/models", operationId: "listGenerationModels", summary: "List generation models" },
+    widget: "ui://fuse/generation.html",
+    async handler() {
+      return listGenerationModels();
+    },
+    summarize: (r) => `Image: ${r.image_models.map((m: any) => m.label + (m.is_default ? " (default)" : "")).join(", ")}. Video: ${r.video_models.map((m: any) => m.label + (m.is_default ? " (default)" : "")).join(", ")}.`,
   },
   {
     name: "fuse_list_generations",
