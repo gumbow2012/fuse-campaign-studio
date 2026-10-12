@@ -94,7 +94,7 @@ export async function getPricingSummary(admin: Admin, selected?: { slug: string;
           : `about ${Math.max(1, Math.round((selected.estimated_credits / CREDITS_PER_CAMPAIGN) * 10)) / 10} of a campaign worth of credits`,
       }
       : null,
-    pricing_url: `${SITE}/pricing`,
+    pricing_url: `${SITE}/chatgpt/pricing`,
     billing_note: "Each campaign uses credits behind the scenes. Regenerations also use credits. Billed monthly, cancel anytime. Not happy with your first campaign? Email us and we'll make it right.",
   };
 }
