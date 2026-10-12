@@ -26,7 +26,7 @@ export default function MaddenAIShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-white/10 backdrop-blur" style={{ background: "rgba(11,11,13,0.85)" }}>
         <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-4 px-4 sm:px-6">
           <Link to="/maddenai" aria-label="MADDENAI home"><MaddenAIWordmark size={18} /></Link>
-          <nav className="flex items-center gap-1 overflow-x-auto">
+          <nav className="hidden items-center gap-1 sm:flex">
             <NavLink to="/maddenai/create" className={linkClass}>Create</NavLink>
             <NavLink to="/maddenai/outfit-swap" className={linkClass}>Outfit Swap</NavLink>
           </nav>
@@ -37,7 +37,7 @@ export default function MaddenAIShell({ children }: { children: ReactNode }) {
                 <button type="button" onClick={() => void signOut()} className="text-white/60 hover:text-white">Sign out</button>
               </>
             ) : (
-              <Link to="/auth" className="rounded-full px-4 py-1.5 font-semibold text-white" style={{ background: MADDENAI.accent }}>Sign in</Link>
+              <Link to="/auth" className="whitespace-nowrap rounded-full px-4 py-1.5 font-semibold text-white" style={{ background: MADDENAI.accent }}>Sign in</Link>
             )}
           </div>
         </div>
