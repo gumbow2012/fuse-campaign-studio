@@ -22,6 +22,8 @@ import { toast } from "sonner";
 import JSZip from "jszip";
 
 import SiteShell from "@/components/mvp/SiteShell";
+import MaddenAIShell from "@/components/maddenai/MaddenAIShell";
+import { useLocation } from "react-router-dom";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -398,7 +400,9 @@ function VideoProgress({
 
 
 export default function OutfitSwap() {
-  const { user } = useAuth();
+  const isMadden = useLocation().pathname.startsWith("/maddenai");
+  const Shell = isMadden ? MaddenAIShell : SiteShell;
+  const { user, canUseBuilder } = useAuth();
   const [sourceVideo, setSourceVideo] = useState<{
     path: string; duration: number; width: number; height: number;
   } | null>(null);
@@ -1415,16 +1419,16 @@ export default function OutfitSwap() {
 
 
   return (
-    <SiteShell>
+    <Shell>
       <PageMeta
-        title="Outfit Swap | FUSE"
+        title={isMadden ? "Outfit Swap | MADDENAI" : "Outfit Swap | FUSE"}
         description="Swap the wardrobe in any clip: extract source frames, restyle them, and rebuild the video."
-        path="/app/lab/outfit-swap"
+        path={isMadden ? "/maddenai/outfit-swap" : "/app/lab/outfit-swap"}
       />
 
       <div className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6">
         <header className="mb-6 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">FUSE Lab</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">{isMadden ? "MADDENAI" : "FUSE Lab"}</p>
           <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">Outfit Swap</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Upload a clip, restyle the frames you pick with your product references, then rebuild the
@@ -1880,6 +1884,7 @@ export default function OutfitSwap() {
                   </p>
                 )}
 
+                {canUseBuilder && (<>
                 <Button
                   variant="outline"
                   onClick={openTemplateModal}
@@ -1893,6 +1898,7 @@ export default function OutfitSwap() {
                     ? "Saves this run's structure as a real, editable template — future runs use new images and new products."
                     : "Needs source frames, at least one product and one approved swapped frame."}
                 </p>
+                </>)}
 
 
 
@@ -2722,6 +2728,6 @@ export default function OutfitSwap() {
         </DialogContent>
       </Dialog>
 
-    </SiteShell>
+    </Shell>
   );
 }

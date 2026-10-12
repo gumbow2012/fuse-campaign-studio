@@ -42,7 +42,7 @@ Steps: 1) fuse_get_campaign_template to list the required uploads. 2) fuse_creat
     title: "Create campaign images from a product photo",
     description: "Runs a template for a product photo with the images as the goal.",
     arguments: [{ name: "template_slug", description: "Template (optional)", required: false }],
-    render: (a) => `The user wants campaign images${a.template_slug ? ` from template ${a.template_slug}` : ""}. Search or get the template, request the product photo upload, attach it, then start the run directly with fuse_generate_image_from_template (or fuse_start_campaign_run) — no confirmation token is needed; runs charge credits from the user's balance and start immediately. You may optionally call fuse_prepare_campaign_run first to show cost. Be honest: FUSE templates generate their images and clips together, so the run produces both. Poll status, then return the image previews and download links.`,
+    render: (a) => `The user wants campaign images${a.template_slug ? ` from template ${a.template_slug}` : ""}. Search or get the template, request the product photo upload, attach it, then call fuse_prepare_campaign_run to show the credit cost, and after the user approves, start it with fuse_start_campaign_run passing the confirmation_code. Runs charge credits from the user's balance. Be honest: FUSE templates generate their images and clips together, so the run produces both. Poll status, then return the image previews and download links.`,
   },
   {
     name: "edit_and_export_campaign",

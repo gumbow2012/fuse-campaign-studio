@@ -58,6 +58,7 @@ import AdminTemplates from "@/pages/AdminTemplates";
 import FlowEmbed from "@/pages/FlowEmbed";
 
 import GenerationStudio from "@/pages/GenerationStudio";
+import MaddenAIHome from "@/pages/maddenai/MaddenAIHome";
 import CinemaStudio from "@/pages/app/cinema/CinemaStudio";
 import CinemaControlLab from "@/pages/app/cinema/CinemaControlLab";
 import MaddenMediaStudio from "@/pages/app/madden-media/MaddenMediaStudio";
@@ -338,6 +339,9 @@ const App = () => (
                 </BuilderRoute>
               }
             />
+            <Route path="/maddenai" element={<MaddenAIHome />} />
+            <Route path="/maddenai/create" element={<CustomerRoute><GenerationStudio /></CustomerRoute>} />
+            <Route path="/maddenai/outfit-swap" element={<CustomerRoute><OutfitSwap /></CustomerRoute>} />
             <Route
               path="/app/lab/studio"
               element={

@@ -7,8 +7,9 @@ import {
   corsHeaders,
   createAdminClient,
   errorMessage,
+  getUserRoles,
   json,
-  requireBuilderUser,
+  requireUser,
 } from "../_shared/supabase-admin.ts";
 import {
   clampSeedanceDuration,
@@ -53,6 +54,45 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 function creditsFromUsd(usd: number | null | undefined) {
   if (!usd || !Number.isFinite(usd) || usd <= 0) return null;
   return Math.max(1, Math.ceil(usd / USD_PER_CREDIT));
+}
+
+/** Charges BEFORE the provider submit (mirrors generate-studio). Admin/dev are not charged. */
+async function chargeCredits(admin: AdminClient, generationId: string, userId: string, privileged: boolean, usd: number | null, stage: string) {
+  const credits = creditsFromUsd(usd) ?? 0;
+  if (privileged || credits <= 0) return;
+  const { error } = await admin.rpc("apply_credit_transaction", {
+    p_user_id: userId,
+    p_amount: -credits,
+    p_type: "run_template",
+    p_description: `Outfit Swap ${stage}`,
+    p_template_id: null,
+    p_project_id: null,
+    p_step_id: null,
+  });
+  if (error) throw new Error("Not enough credits for this step. Add credits at fuse-us.com/account and try again.");
+  await admin.from("studio_generations").update({ charged_credits: credits }).eq("id", generationId);
+}
+
+/** Race-safe: only the caller that flips credits_refunded false->true refunds. */
+async function refundIfNeeded(admin: AdminClient, generationId: string) {
+  const { data } = await admin
+    .from("studio_generations")
+    .update({ credits_refunded: true })
+    .eq("id", generationId)
+    .eq("credits_refunded", false)
+    .gt("charged_credits", 0)
+    .select("user_id, charged_credits")
+    .maybeSingle();
+  if (!data) return;
+  await admin.rpc("apply_credit_transaction", {
+    p_user_id: data.user_id,
+    p_amount: data.charged_credits,
+    p_type: "refund",
+    p_description: `Outfit Swap refund (${generationId})`,
+    p_template_id: null,
+    p_project_id: null,
+    p_step_id: null,
+  });
 }
 
 async function estimateUsd(args: {
@@ -271,6 +311,7 @@ async function resolveSubjectModels(
 
 async function startSwapFrame(admin: AdminClient, args: {
   userId: string;
+  privileged?: boolean;
   sourceFrameUrl: string;
   garments: GarmentReference[];
   person: string;
@@ -377,6 +418,7 @@ async function startSwapFrame(admin: AdminClient, args: {
       ...(["1K", "2K", "4K"].includes(resolution) ? { resolution } : {}),
     };
 
+    await chargeCredits(admin, inserted.id, args.userId, args.privileged === true, estimatedCostUsd, "frame swap");
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
     const requestId = await submitFalJob(IMAGE_MODEL, falInput, webhookUrl);
 
@@ -420,12 +462,14 @@ async function startSwapFrame(admin: AdminClient, args: {
         completed_at: new Date().toISOString(),
       })
       .eq("id", inserted.id);
+    await refundIfNeeded(admin, inserted.id);
     throw error;
   }
 }
 
 async function startReconstruction(admin: AdminClient, args: {
   userId: string;
+  privileged?: boolean;
   sourceVideo: unknown;
   frameUrls: string[];
   garments: GarmentReference[];
@@ -514,6 +558,7 @@ async function startReconstruction(admin: AdminClient, args: {
       generateAudio,
     });
 
+    await chargeCredits(admin, inserted.id, args.userId, args.privileged === true, estimatedCostUsd, (falInput as any).video_urls ? "video" : "clip");
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
     const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
 
@@ -550,6 +595,7 @@ async function startReconstruction(admin: AdminClient, args: {
         completed_at: new Date().toISOString(),
       })
       .eq("id", inserted.id);
+    await refundIfNeeded(admin, inserted.id);
     throw error;
   }
 }
@@ -568,6 +614,7 @@ const ANIMATE_DURATION = 3;
  */
 async function startAnimateFrame(admin: AdminClient, args: {
   userId: string;
+  privileged?: boolean;
   imageUrl: string;
   frameIndex?: number;
   frameTime?: number;
@@ -608,6 +655,7 @@ async function startAnimateFrame(admin: AdminClient, args: {
       generateAudio: false,
     });
 
+    await chargeCredits(admin, inserted.id, args.userId, args.privileged === true, estimatedCostUsd, (falInput as any).video_urls ? "video" : "clip");
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
     const requestId = await submitFalJob(endpointId, falInput, webhookUrl);
 
@@ -645,6 +693,7 @@ async function startAnimateFrame(admin: AdminClient, args: {
         completed_at: new Date().toISOString(),
       })
       .eq("id", inserted.id);
+    await refundIfNeeded(admin, inserted.id);
     throw error;
   }
 }
@@ -690,6 +739,7 @@ async function syncRow(admin: AdminClient, row: any) {
       .eq("id", row.id)
       .select("*")
       .single();
+    await refundIfNeeded(admin, row.id);
 
     return serialize(updated ?? row);
   }
@@ -740,6 +790,7 @@ Deno.serve(async (req) => {
             completed_at: new Date().toISOString(),
           })
           .eq("id", row.id);
+        await refundIfNeeded(admin, row.id);
         return json({ ok: true });
       }
 
@@ -761,14 +812,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const access = await requireBuilderUser(req, admin);
-    const user = access.user;
+    // Open to ANY signed-in user; credits are the gate, not a role.
+    const user = await requireUser(req, admin);
+    const roles = await getUserRoles(user.id, admin);
+    const privileged = roles.includes("admin") || roles.includes("dev");
     const body = await req.json().catch(() => ({})) as Record<string, any>;
     const action = String(body.action ?? "swap_frame");
 
     if (action === "swap_frame") {
       const generation = await startSwapFrame(admin, {
         userId: user.id,
+        privileged,
         sourceFrameUrl: body.sourceFrameUrl,
         garments: body.garments ?? [],
         person: body.person ?? "Everyone",
@@ -789,6 +843,7 @@ Deno.serve(async (req) => {
     if (action === "reconstruct") {
       const generation = await startReconstruction(admin, {
         userId: user.id,
+        privileged,
         sourceVideo: body.sourceVideo,
         frameUrls: body.frameUrls ?? [],
         garments: body.garments ?? [],
@@ -812,6 +867,7 @@ Deno.serve(async (req) => {
     if (action === "animate_frame") {
       const generation = await startAnimateFrame(admin, {
         userId: user.id,
+        privileged,
         imageUrl: body.imageUrl ?? body.sourceFrameUrl,
         frameIndex: body.frameIndex,
         frameTime: body.frameTime,
@@ -874,8 +930,8 @@ Deno.serve(async (req) => {
         .filter(Boolean);
       if (!ids.length) throw new Error("Select at least one generation to cancel");
 
-      // The provider job may already be in flight; we simply stop tracking it.
-      const { error } = await admin
+      // The provider job may already be in flight; we stop tracking it and refund.
+      const { data: canceledRows, error } = await admin
         .from("studio_generations")
         .update({
           status: "canceled",
@@ -884,8 +940,10 @@ Deno.serve(async (req) => {
         })
         .eq("user_id", user.id)
         .in("id", ids)
-        .in("status", ["queued", "running"]);
+        .in("status", ["queued", "running"])
+        .select("id");
       if (error) throw new Error(error.message);
+      for (const r of canceledRows ?? []) await refundIfNeeded(admin, r.id);
       return json({ canceled: ids.length });
     }
 
@@ -908,7 +966,7 @@ Deno.serve(async (req) => {
     throw new Error(`Unsupported action: ${action}`);
   } catch (error) {
     const message = errorMessage(error);
-    const status = /access required|authorization|Authentication|bearer/i.test(message) ? 401 : 400;
+    const status = /Not enough credits/.test(message) ? 402 : /access required|authorization|Authentication|bearer/i.test(message) ? 401 : 400;
     return json({ error: message }, status);
   }
 });
