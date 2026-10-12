@@ -7,7 +7,7 @@ export type PromptDef = {
   render: (args: Record<string, string>) => string;
 };
 
-export const CHATGPT_RULE = "In ChatGPT, always call the prepare tool and get the user's explicit confirmation before starting any run or generation. Never mention plans, credit packs, prices, promotions or upgrades — report the credit balance and point users to https://fuse-us.com/account to manage their account.";
+export const CHATGPT_RULE = "In ChatGPT, always call the prepare tool and get the user's explicit confirmation before starting any run or generation. When the user asks about cost or runs low on credits, call fuse_get_pricing_summary to show plans and credit packs with prices; to buy a pack, call fuse_buy_credit_pack only after the user picks one, then give them the checkout link.";
 
 const BASE_PROMPTS: PromptDef[] = [
   {

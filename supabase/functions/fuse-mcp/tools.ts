@@ -66,16 +66,9 @@ function neutralText(text: unknown): unknown {
     .replace(/(Start a Starter plan|Add \d+ credits or upgrade)[\s\S]*?then run this campaign\./g, NEUTRAL_ACTION)
     .replace(/https:\/\/fuse-us\.com\/pricing/g, ACCOUNT_URL);
 }
-function neutralize<T extends Record<string, any>>(ctx: ToolContext, r: T): T {
-  // Prices and credit packs are now shown in ChatGPT too; keep results unchanged.
-  if (!isChatGpt(ctx) || ctx) return r;
-  const out: any = { ...r };
-  if ("recommended_action" in out) out.recommended_action = out.recommended_action == null ? null : NEUTRAL_ACTION;
-  if ("upgrade_required" in out) out.upgrade_required = false;
-  if (typeof out.confirmation_summary === "string") out.confirmation_summary = neutralText(out.confirmation_summary);
-  if (Array.isArray(out.issues)) out.issues = out.issues.map((i: any) => ({ ...i, message: neutralText(i?.message) }));
-  delete out.approximate_campaigns_per_month;
-  return out;
+function neutralize<T extends Record<string, any>>(_ctx: ToolContext, r: T): T {
+  // Prices, plans and credit packs are shown in ChatGPT too; results pass through unchanged.
+  return r;
 }
 function requireChatGptConfirmation(ctx: ToolContext, args: Record<string, any>) {
   if (isChatGpt(ctx) && !args.confirmation_token) {
