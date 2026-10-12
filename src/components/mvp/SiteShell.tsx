@@ -38,6 +38,7 @@ const PRIMARY_LINKS: PrimaryLink[] = [
   { label: "New Drops", href: "/#new-today" },
   { label: "Creators", to: "/creators" },
   { label: "Pricing", to: "/pricing" },
+  { label: "Credits", to: "/credits" },
   { label: "Contact", to: "/contact" },
 ];
 
