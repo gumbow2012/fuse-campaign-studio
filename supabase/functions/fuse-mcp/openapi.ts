@@ -1,6 +1,5 @@
 /** OpenAPI 3.1 document generated from the tool registry (Custom GPT Actions fallback). */
 import { TOOLS } from "./tools.ts";
-import { SCOPES } from "./auth.ts";
 
 const ERROR_SCHEMA = {
   type: "object",
@@ -81,7 +80,7 @@ export function buildOpenApi(origin: string, authServer: string) {
             authorizationCode: {
               authorizationUrl: `${authServer}/oauth/authorize`,
               tokenUrl: `${authServer}/oauth/token`,
-              scopes: Object.fromEntries(SCOPES.map((s) => [s, s])),
+              scopes: { openid: "Sign in", profile: "Basic profile", email: "Email address", offline_access: "Stay connected" },
             },
           },
         },

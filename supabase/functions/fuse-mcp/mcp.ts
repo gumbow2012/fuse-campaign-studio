@@ -21,7 +21,7 @@ const rpcError = (id: Rpc["id"], code: number, message: string, data?: unknown):
 const rpcResult = (id: Rpc["id"], result: unknown): Rpc => ({ jsonrpc: "2.0", id: id ?? null, result });
 
 function toolDescriptor(t: (typeof TOOLS)[number], resourceMetadataUrl: string) {
-  const securitySchemes = t.scope ? [{ type: "oauth2", scopes: [t.scope] }] : [{ type: "noauth" }];
+  const securitySchemes = t.scope ? [{ type: "oauth2", scopes: ["openid", "profile", "email"] }] : [{ type: "noauth" }];
   return {
     name: t.name,
     title: t.title,
