@@ -191,6 +191,61 @@ function render(){
 }
 render(); window.addEventListener("openai:set_globals", render);`);
 
+const GENERATION = page("FUSE generation", `<div id="root"></div>`, `
+let timer = null; let current = null;
+function stop(){ if (timer) { clearTimeout(timer); timer = null; } }
+function modelLine(d){ return esc(d.model_label || d.model || d.provider_model || ""); }
+function renderModels(d){
+  const card = (m, kind) => '<div class="card"><div class="body"><div class="name">'+esc(m.label)+(m.is_default?' <span class="pill">default</span>':'')+'</div><div class="muted">'+esc(m.key)+'</div>'+
+    (kind==="image" ? '<div class="muted">'+esc(m.param_kind)+': '+esc((m.options||[]).join(", "))+' · default '+esc(m.default_option)+'</div><div class="muted">≈ '+m.approx_credits_per_image+' credits / image</div>'
+      : '<div class="muted">'+(m.durations&&m.durations.length?m.durations[0]+'–'+m.durations[m.durations.length-1]+'s':'')+(m.resolutions?' · '+esc(m.resolutions.join("/")):'')+(m.fixed_aspect?' · '+esc(m.fixed_aspect):(m.aspect_ratios?' · '+esc(m.aspect_ratios.join(" ")):''))+(m.supports_audio?' · audio':'')+'</div><div class="muted">≈ '+m.approx_credits_per_5s+' credits / 5s</div>')+
+    '<button class="btn" data-label="'+esc(m.label)+'">Use this model</button></div></div>';
+  $("root").innerHTML = '<h1>Image models</h1><div class="grid">'+(d.image_models||[]).map(m=>card(m,"image")).join("")+'</div><h1 style="margin-top:14px">Video models</h1><div class="grid">'+(d.video_models||[]).map(m=>card(m,"video")).join("")+'</div>';
+  $("root").querySelectorAll("button[data-label]").forEach(b => b.onclick = () => say("Generate with "+b.dataset.label));
+}
+function renderPrepare(d){
+  $("root").innerHTML = '<h1>Ready to generate?</h1><div class="list">'+
+    '<div class="slot"><span class="muted">Prompt</span><br><span class="name">'+esc(d.prompt)+'</span></div>'+
+    '<div class="slot"><span class="muted">Model</span><br><span class="name">'+modelLine(d)+'</span> <span class="muted">· '+esc(d.kind)+'</span></div>'+
+    '<div class="slot"><span class="muted">Credits</span><br><span class="name">≈ '+(d.estimated_credits||0)+'</span> <span class="'+(d.can_run?'muted':'bad')+'">· balance '+(d.credit_balance||0)+'</span></div>'+
+    '</div><button class="btn" id="go" '+(d.can_run?'':'disabled')+'>Generate</button>';
+  $("go").onclick = () => say("Yes, generate it");
+}
+function renderGen(d){
+  const st = String(d.status||"queued"); const pending = st==="queued"||st==="running";
+  const isVideo = d.output_type==="video" || d.kind==="video";
+  let media = "";
+  if (st==="complete" || st==="completed" || st==="succeeded") {
+    const url = d.output_url || d.preview_url;
+    if (url) media = isVideo ? '<video src="'+esc(url)+'" '+(d.poster_url?'poster="'+esc(d.poster_url)+'"':'')+' controls autoplay muted loop playsinline style="width:100%;border-radius:14px;max-height:520px;background:#000"></video>' : '<img src="'+esc(url)+'" alt="" style="width:100%;border-radius:14px">';
+    media += '<div class="row" style="margin-top:10px">'+(url?'<a class="btn secondary" href="'+esc(url)+'" target="_blank" rel="noopener" download>Download</a>':'')+'<button class="btn" id="again">Generate another</button></div>';
+  } else if (st==="failed") {
+    media = '<p class="bad">'+esc(d.public_failure||"This generation failed. You were not charged.")+'</p>';
+  } else {
+    media = '<div class="empty">'+(isVideo?'Rendering your clip…':'Creating your image…')+'</div>';
+  }
+  $("root").innerHTML = '<h1>'+(isVideo?'Video':'Image')+'</h1>'+(d.prompt?'<p class="muted">'+esc(d.prompt)+'</p>':'')+
+    '<div class="row" style="margin-bottom:10px">'+(modelLine(d)?'<span class="muted">'+modelLine(d)+'</span>':'')+'<span class="pill">'+esc(st)+'</span></div>'+media;
+  const a = $("again"); if (a) a.onclick = () => say("Generate another "+(isVideo?"video":"image")+" like this");
+  stop();
+  if (pending && d.generation_id) timer = setTimeout(async () => {
+    try {
+      const r = await call("fuse_get_generation_status", { generation_id: d.generation_id });
+      const next = (r && (r.structuredContent || r)) || {};
+      current = Object.assign({}, current, next, { prompt: next.prompt || current.prompt, model_label: current.model_label });
+      renderGen(current);
+    } catch (e) { renderGen(current); }
+  }, 8000);
+}
+function render(){
+  const d = out(); current = Object.assign({}, d);
+  if (d.image_models || d.video_models) return renderModels(d);
+  if (d.confirmation_token && !d.generation_id) return renderPrepare(d);
+  if (d.generation_id) return renderGen(current);
+  $("root").innerHTML = '<div class="empty">Nothing to show yet.</div>';
+}
+render(); window.addEventListener("openai:set_globals", render);`);
+
 export const WIDGETS: Record<string, { name: string; description: string; html: string }> = {
   "ui://fuse/template-search.html": { name: "Template search", description: "Campaign template cards with previews and a Use this campaign action.", html: TEMPLATE_SEARCH },
   "ui://fuse/template-detail.html": { name: "Template detail", description: "What you upload, what you get, plan inclusion, prepare action.", html: TEMPLATE_DETAIL },
@@ -201,6 +256,7 @@ export const WIDGETS: Record<string, { name: string; description: string; html: 
   "ui://fuse/editor.html": { name: "Campaign editor", description: "Clip order, remove/restore, save and export.", html: EDITOR },
   "ui://fuse/pricing.html": { name: "Pricing", description: "Plans in campaigns per month.", html: PRICING },
   "ui://fuse/credits.html": { name: "Credits", description: "Plan, balance and affordability.", html: CREDITS },
+  "ui://fuse/generation.html": { name: "Generation", description: "Image/video generation: confirm, live status, inline result and model picker.", html: GENERATION },
 };
 
 export const WIDGET_CSP = {
