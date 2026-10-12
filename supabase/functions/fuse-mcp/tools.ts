@@ -1,3 +1,4 @@
+import { widgetUri } from "./widgets/index.ts";
 /**
  * The single tool registry. MCP `tools/list`/`tools/call`, the REST routes and
  * the OpenAPI document are all generated from these definitions, so there is
@@ -109,7 +110,7 @@ export const TOOLS: ToolDef[] = [
     }),
     annotations: RO,
     rest: { method: "GET", path: "/api/templates", operationId: "searchTemplates", summary: "Search campaign templates" },
-    widget: "ui://fuse/template-search.html",
+    widget: widgetUri("template-search"),
     async handler(args, ctx) {
       const all = await listPublicTemplates(ctx.admin, ctx.auth.isPrivileged);
       const max = Math.min(12, Math.max(1, Number(args.max_results ?? 6)));
@@ -135,7 +136,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({ template_slug: str("Template slug from search, e.g. changing-room"), template_id: str("Template UUID (alternative to slug)") }),
     annotations: RO,
     rest: { method: "GET", path: "/api/templates/{slug}", operationId: "getTemplate", summary: "Get one campaign template" },
-    widget: "ui://fuse/template-detail.html",
+    widget: widgetUri("template-detail"),
     async handler(args, ctx) {
       if (!args.template_slug && !args.template_id) throw new FuseError("INVALID_INPUT", "template_slug or template_id required");
       return { template: await getTemplateDetail(ctx.admin, { slug: args.template_slug, id: args.template_id }, ctx.auth.isPrivileged) };
@@ -183,7 +184,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({ template_slug: str("Optional template to price"), plan: str("Optional plan to focus on", { enum: ["starter", "pro", "studio"] }) }),
     annotations: RO,
     rest: { method: "GET", path: "/api/pricing", operationId: "getPricingSummary", summary: "Pricing summary" },
-    widget: "ui://fuse/pricing.html",
+    widget: widgetUri("pricing"),
     async handler(args, ctx) {
       if (isChatGpt(ctx)) return { message: `FUSE runs on your existing account credits. You can manage your account at ${ACCOUNT_URL}.`, account_url: ACCOUNT_URL, plans: [], packs: [] };
       let selected: { slug: string; estimated_credits: number } | null = null;
@@ -204,7 +205,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({ pack_key: str("Credit pack to buy", { enum: ["boost", "growth", "bulk"] }) }, ["pack_key"]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     rest: { method: "POST", path: "/api/credits/checkout", operationId: "buyCreditPack", summary: "Start credit pack checkout" },
-    widget: "ui://fuse/pricing.html",
+    widget: widgetUri("pricing"),
     hiddenForClients: ["chatgpt"],
     async handler(args, ctx) {
       if (isChatGpt(ctx)) throw new FuseError("FORBIDDEN", "Account management happens on fuse-us.com", { userMessage: `Manage your account at ${ACCOUNT_URL}.` });
@@ -220,7 +221,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({ template_slug: str("Optional template to check affordability for") }),
     annotations: RO,
     rest: { method: "GET", path: "/api/me/credits", operationId: "checkAccountCredits", summary: "Check plan and credits" },
-    widget: "ui://fuse/credits.html",
+    widget: widgetUri("credits"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.account.read");
       const account = await getAccountCredits(ctx.admin, ctx.auth);
@@ -249,7 +250,7 @@ export const TOOLS: ToolDef[] = [
     }, ["template_slug", "files_requested"]),
     annotations: WRITE,
     rest: { method: "POST", path: "/api/uploads/session", operationId: "createUploadSession", summary: "Create an upload session" },
-    widget: "ui://fuse/upload.html",
+    widget: widgetUri("upload"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.assets.write");
       return await createUploadSession(ctx.admin, ctx.auth, args as any);
@@ -267,7 +268,7 @@ export const TOOLS: ToolDef[] = [
     }, ["upload_session_id", "uploaded_files"]),
     annotations: WRITE,
     rest: { method: "POST", path: "/api/uploads/complete", operationId: "attachUploadedAssets", summary: "Attach uploaded assets" },
-    widget: "ui://fuse/upload.html",
+    widget: widgetUri("upload"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.assets.write");
       return await attachUploadedAssets(ctx.admin, ctx.auth, args as any);
@@ -289,7 +290,7 @@ export const TOOLS: ToolDef[] = [
     }, ["template_slug"]),
     annotations: RO,
     rest: { method: "POST", path: "/api/runs/prepare", operationId: "prepareCampaignRun", summary: "Prepare (dry-run) a campaign" },
-    widget: "ui://fuse/confirm-run.html",
+    widget: widgetUri("confirm-run"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.prepare");
       return neutralize(ctx, await prepareCampaignRun(ctx.admin, ctx.auth, args as any));
@@ -315,7 +316,7 @@ export const TOOLS: ToolDef[] = [
 
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     rest: { method: "POST", path: "/api/runs/start", operationId: "startCampaignRun", summary: "Start a confirmed campaign run" },
-    widget: "ui://fuse/run-status.html",
+    widget: widgetUri("run-status"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
       await applyConfirmationCode(ctx.admin, ctx.auth, "campaign", args);
@@ -344,7 +345,7 @@ export const TOOLS: ToolDef[] = [
 
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     rest: { method: "POST", path: "/api/runs/start-images", operationId: "generateImagesFromTemplate", summary: "Start an image-first campaign run" },
-    widget: "ui://fuse/run-status.html",
+    widget: widgetUri("run-status"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
       await applyConfirmationCode(ctx.admin, ctx.auth, "campaign", args);
@@ -367,7 +368,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({ run_id: str("Run id") }, ["run_id"]),
     annotations: RO,
     rest: { method: "GET", path: "/api/runs/{run_id}", operationId: "getRunStatus", summary: "Get run status" },
-    widget: "ui://fuse/run-status.html",
+    widget: widgetUri("run-status"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.read");
       return await getRunStatus(ctx.admin, ctx.auth, String(args.run_id));
@@ -382,7 +383,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({ run_id: str("Run id"), type: str("Filter", { enum: ["image", "video", "all"] }) }, ["run_id"]),
     annotations: RO,
     rest: { method: "GET", path: "/api/runs/{run_id}/outputs", operationId: "listRunOutputs", summary: "List run outputs" },
-    widget: "ui://fuse/output-gallery.html",
+    widget: widgetUri("output-gallery"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.outputs.read");
       return await listRunOutputs(ctx.admin, ctx.auth, String(args.run_id), (args.type ?? "all") as any);
@@ -428,7 +429,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({ run_id: str("Run id") }, ["run_id"]),
     annotations: RO,
     rest: { method: "GET", path: "/api/runs/{run_id}/edit", operationId: "getCampaignTimeline", summary: "Get the edit timeline" },
-    widget: "ui://fuse/editor.html",
+    widget: widgetUri("editor"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.outputs.read");
       return await getTimeline(ctx.admin, ctx.auth, String(args.run_id));
@@ -447,7 +448,7 @@ export const TOOLS: ToolDef[] = [
     }, ["run_id"]),
     annotations: WRITE,
     rest: { method: "POST", path: "/api/runs/{run_id}/edit", operationId: "saveCampaignEdit", summary: "Save clip edits" },
-    widget: "ui://fuse/editor.html",
+    widget: widgetUri("editor"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.editor.write");
       return await saveCampaignEdit(ctx.admin, ctx.auth, args as any);
@@ -504,7 +505,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({ limit: num("Default 10, max 50", { minimum: 1, maximum: 50 }), status: str("Optional filter", { enum: ["queued", "running", "complete", "failed"] }) }),
     annotations: RO,
     rest: { method: "GET", path: "/api/me/campaigns", operationId: "getCampaignHistory", summary: "List my campaigns" },
-    widget: "ui://fuse/output-gallery.html",
+    widget: widgetUri("output-gallery"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.read");
       return await getCampaignHistory(ctx.admin, ctx.auth, args as any);
@@ -529,7 +530,7 @@ export const TOOLS: ToolDef[] = [
     }, ["kind", "prompt"]),
     annotations: RO,
     rest: { method: "POST", path: "/api/generate/prepare", operationId: "prepareGeneration", summary: "Prepare a standalone generation" },
-    widget: "ui://fuse/generation.html",
+    widget: widgetUri("generation"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.prepare");
       return neutralize(ctx, await prepareGeneration(ctx.admin, ctx.auth, { kind: args.kind, prompt: String(args.prompt ?? ""), duration: args.duration, model: args.model }));
@@ -553,7 +554,7 @@ export const TOOLS: ToolDef[] = [
     }, ["prompt"]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     rest: { method: "POST", path: "/api/generate/image", operationId: "generateImage", summary: "Generate an image" },
-    widget: "ui://fuse/generation.html",
+    widget: widgetUri("generation"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
       await applyConfirmationCode(ctx.admin, ctx.auth, "generation", args);
@@ -591,7 +592,7 @@ export const TOOLS: ToolDef[] = [
     }, ["prompt"]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     rest: { method: "POST", path: "/api/generate/video", operationId: "generateVideo", summary: "Generate a video" },
-    widget: "ui://fuse/generation.html",
+    widget: widgetUri("generation"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
       await applyConfirmationCode(ctx.admin, ctx.auth, "generation", args);
@@ -618,7 +619,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({ generation_id: str("id from fuse_generate_image/fuse_generate_video") }, ["generation_id"]),
     annotations: RO,
     rest: { method: "GET", path: "/api/generations/{generation_id}", operationId: "getGenerationStatus", summary: "Get generation status" },
-    widget: "ui://fuse/generation.html",
+    widget: widgetUri("generation"),
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.read");
       return await getStandaloneGenerationStatus(ctx.admin, ctx.auth, String(args.generation_id));
@@ -633,7 +634,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: obj({}),
     annotations: RO,
     rest: { method: "GET", path: "/api/generate/models", operationId: "listGenerationModels", summary: "List generation models" },
-    widget: "ui://fuse/generation.html",
+    widget: widgetUri("generation"),
     async handler() {
       return listGenerationModels();
     },

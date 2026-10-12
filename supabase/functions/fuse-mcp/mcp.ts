@@ -6,7 +6,7 @@
 import { asFuseError, FuseError } from "./errors.ts";
 import { TOOL_BY_NAME, TOOLS, type ToolContext } from "./tools.ts";
 import { PROMPTS } from "./prompts.ts";
-import { WIDGET_CSP, WIDGETS } from "./widgets/index.ts";
+import { legacyWidgetUri, WIDGET_CSP, WIDGETS } from "./widgets/index.ts";
 import { getPricingSummary } from "./core/pricing.ts";
 import { getTemplateDetail, listPublicTemplates } from "./core/templates.ts";
 import { getCampaignHistory, getRunStatus } from "./core/runs.ts";
@@ -65,7 +65,8 @@ function resourceList(ctx: ToolContext) {
 }
 
 async function readResource(uri: string, ctx: ToolContext) {
-  const widget = WIDGETS[uri];
+  const legacy = legacyWidgetUri(uri);
+  const widget = WIDGETS[uri] ?? (legacy ? WIDGETS[legacy] : undefined);
   if (widget) {
     return { contents: [{ uri, mimeType: "text/html;profile=mcp-app", text: widget.html, _meta: { ui: { prefersBorder: true, csp: WIDGET_CSP }, "openai/widgetPrefersBorder": true, "openai/widgetCSP": { connect_domains: WIDGET_CSP.connectDomains, resource_domains: WIDGET_CSP.resourceDomains } } }] };
   }
