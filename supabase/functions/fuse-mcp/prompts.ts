@@ -58,6 +58,18 @@ Steps: 1) fuse_get_campaign_template to list the required uploads. 2) fuse_creat
     arguments: [],
     render: () => `Explain FUSE in four short sentences: you upload your real product photo; you pick a proven campaign (a real shoot style, not a prompt); FUSE generates campaign images and short clips with your graphics intact; you edit, export and download everything. Starter is $25 a month (20% off the first month) for about 3 campaigns. Never mention nodes, run ids, workflows or credit counts unless asked. Offer to find a template with fuse_search_templates.`,
   },
+  {
+    name: "generate_image_or_video",
+    title: "Generate an image or video from a prompt",
+    description: "Walks through a standalone image or video generation with model choice.",
+    arguments: [
+      { name: "kind", description: "image or video", required: true },
+      { name: "prompt", description: "What to generate", required: true },
+      { name: "model", description: "Optional model key", required: false },
+    ],
+    render: (a) => `Generate a standalone ${a.kind || "image"} for the user from this prompt: "${a.prompt || ""}"${a.model ? ` using model ${a.model}` : ""}.
+Steps: 1) If the user named a model loosely or asked for options, call fuse_list_generation_models and pick the matching key; otherwise default to nano-banana-pro (images) or kling-3.0-pro (video). 2) In ChatGPT, call fuse_prepare_generation with kind, prompt and model, show its confirmation_summary, and wait for explicit confirmation. 3) Call ${a.kind === "video" ? "fuse_generate_video" : "fuse_generate_image"} with the same prompt, model and the confirmation_token. 4) Poll fuse_get_generation_status about every 10 seconds until complete or failed. 5) Show the result (it renders in the generation widget) with its download link.`,
+  },
 ];
 
 export const PROMPTS: PromptDef[] = BASE_PROMPTS.map((p) => ({ ...p, render: (a) => `${p.render(a)}\n\n${CHATGPT_RULE}` }));

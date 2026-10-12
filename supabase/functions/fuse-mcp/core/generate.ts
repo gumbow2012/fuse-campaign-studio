@@ -19,6 +19,8 @@ export type StandaloneGenerationArgs = {
   model?: string;
   resolution?: string;
   generateAudio?: boolean;
+  quality?: string;
+  imageSize?: string;
 };
 
 async function callStudio(admin: Admin, auth: AuthContext, payload: Record<string, unknown>) {
@@ -51,6 +53,8 @@ export async function startStandaloneGeneration(admin: Admin, auth: AuthContext,
   return {
     generation_id: gen.id,
     kind: args.kind,
+    prompt: args.prompt,
+    model: args.model ?? null,
     status: gen.status,
     estimated_credits: gen.estimatedCredits ?? null,
     output_type: gen.outputType ?? null,
@@ -66,6 +70,10 @@ export async function getStandaloneGenerationStatus(admin: Admin, auth: AuthCont
   const pending = gen.status === "queued" || gen.status === "running";
   return {
     generation_id: generationId,
+    kind: gen.kind ?? null,
+    prompt: gen.prompt ?? null,
+    model: gen.model ?? gen.providerModel ?? null,
+    provider_model: gen.providerModel ?? null,
     status: gen.status,
     output_type: gen.outputType ?? null,
     output_url: gen.outputUrl ?? null,
