@@ -5,7 +5,7 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
   {
     title: "1. Who we are",
     body: [
-      "This Privacy Policy explains how Madden Media LLC, of 131 Continental Drive, Suite 305, Newark, DE 19713, the parent company that owns and operates FUSE, handles personal data in connection with the FUSE platform.",
+      "This Privacy Policy explains how Madden Media LLC, of 131 Continental Drive, Suite 305, Newark, DE 19713 (\"FUSE\", \"we\", \"us\"), collects, uses and shares information when you use fuse-us.com and the FUSE services.",
     ],
   },
   {
@@ -70,7 +70,7 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
   },
   {
     title: "10. Children",
-    body: ["The service is not intended for people under 18, and we do not knowingly collect their data."],
+    body: ["The service is not intended for people under 18, and we do not knowingly collect personal information from them."],
   },
   {
     title: "11. Changes",
