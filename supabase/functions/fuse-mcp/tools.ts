@@ -16,7 +16,7 @@ import { listRunOutputs, renameCampaign } from "./core/outputs.ts";
 import { getTimeline, saveCampaignEdit } from "./core/editor.ts";
 import { exportCampaign, getExportStatus } from "./core/exports.ts";
 import { getHelp } from "./core/help.ts";
-import { prepareGeneration, verifyGenerationToken } from "./core/prepare-generation.ts";
+import { applyConfirmationCode, prepareGeneration, verifyGenerationToken } from "./core/prepare-generation.ts";
 import { IMAGE_KEYS, listGenerationModels, VIDEO_KEYS } from "./core/models.ts";
 import { getStandaloneGenerationStatus, listStandaloneGenerations, startStandaloneGeneration } from "./core/generate.ts";
 
@@ -294,11 +294,11 @@ export const TOOLS: ToolDef[] = [
       needScope(ctx, "fuse.runs.prepare");
       return neutralize(ctx, await prepareCampaignRun(ctx.admin, ctx.auth, args as any));
     },
-    summarize: (r) => r.confirmation_summary + (r.ready ? " (ready — you can start the run now)" : ""),
+    summarize: (r) => r.confirmation_summary + (r.ready ? " (ready — you can start the run now)" : "") + (r.confirmation_code ? ` Confirmation code: ${r.confirmation_code}` : ""),
   },
   {
     name: "fuse_start_campaign_run",
-    chatgptDescription: "Starts the campaign the user just reviewed and charges its credits. Requires the confirmation_token from fuse_prepare_campaign_run (the Run button in the confirmation card passes it automatically). Returns a run_id to poll with fuse_get_run_status.",
+    chatgptDescription: "Starts the campaign the user just reviewed and charges its credits. Requires the confirmation_token from fuse_prepare_campaign_run (the Run button in the confirmation card passes it automatically). Returns a run_id to poll with fuse_get_run_status. Pass the confirmation_code from the prepare result (e.g. FUSE-7KQ2) — prefer it over the long confirmation_token.",
     title: "Start a campaign run",
     description: "Starts a campaign run immediately and charges credits from the user's balance. No confirmation token is required — pass either template_slug (+ campaign_draft_id or inputs) to auto-start, or a confirmation_token from fuse_prepare_campaign_run. Idempotent via idempotency_key. Returns a run_id to poll.",
     scope: "fuse.runs.create",
@@ -307,6 +307,7 @@ export const TOOLS: ToolDef[] = [
       campaign_draft_id: str("campaign_draft_id / upload_session_id with attached assets"),
       inputs: { type: "object", description: "Inputs {input_key: https URL of an attached asset}", additionalProperties: { type: "string" } },
       confirmation_token: str("Optional token from fuse_prepare_campaign_run"),
+      confirmation_code: str("Short code from the prepare step, e.g. FUSE-7KQ2"),
       idempotency_key: str("Client-generated unique key for this start request (recommended)"),
       campaign_name: str("Optional campaign name override"),
       output_mode: str("Default full_campaign", { enum: ["images_only", "video_only", "full_campaign"] }),
@@ -317,6 +318,7 @@ export const TOOLS: ToolDef[] = [
     widget: "ui://fuse/run-status.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
+      await applyConfirmationCode(ctx.admin, ctx.auth, "campaign", args);
       requireChatGptConfirmation(ctx, args);
       return await startCampaignRun(ctx.admin, ctx.auth, args as any);
     },
@@ -324,7 +326,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "fuse_generate_image_from_template",
-    chatgptDescription: "Generates the campaign images the user just reviewed and charges their credits. Requires the confirmation_token from fuse_prepare_campaign_run (the Run button in the confirmation card passes it automatically). Returns a run_id to poll with fuse_get_run_status.",
+    chatgptDescription: "Generates the campaign images the user just reviewed and charges their credits. Requires the confirmation_token from fuse_prepare_campaign_run (the Run button in the confirmation card passes it automatically). Returns a run_id to poll with fuse_get_run_status. Pass the confirmation_code from the prepare result (e.g. FUSE-7KQ2) — prefer it over the long confirmation_token.",
     title: "Generate campaign images from a template",
     description: "Image-first entry point: runs a template for a product photo. FUSE templates render their images and clips together, so this starts the template's full campaign (the images are part of it) — the tool says so honestly. No confirmation token is required: pass template_slug with campaign_draft_id or inputs to auto-start. Charges credits from the user's balance. Requires a connected account.",
     scope: "fuse.runs.create",
@@ -333,6 +335,7 @@ export const TOOLS: ToolDef[] = [
       campaign_draft_id: str("campaign_draft_id / upload_session_id with attached assets"),
       inputs: { type: "object", description: "Inputs {input_key: https URL of an attached asset}", additionalProperties: { type: "string" } },
       confirmation_token: str("Optional token from fuse_prepare_campaign_run"),
+      confirmation_code: str("Short code from the prepare step, e.g. FUSE-7KQ2"),
       campaign_name: str("Optional"),
       idempotency_key: str("Recommended"),
       image_count: num("Ignored unless the template supports a variable count (none do today)"),
@@ -344,6 +347,7 @@ export const TOOLS: ToolDef[] = [
     widget: "ui://fuse/run-status.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
+      await applyConfirmationCode(ctx.admin, ctx.auth, "campaign", args);
       requireChatGptConfirmation(ctx, args);
       const started = await startCampaignRun(ctx.admin, ctx.auth, args as any);
       return {
@@ -530,11 +534,11 @@ export const TOOLS: ToolDef[] = [
       needScope(ctx, "fuse.runs.prepare");
       return neutralize(ctx, await prepareGeneration(ctx.admin, ctx.auth, { kind: args.kind, prompt: String(args.prompt ?? ""), duration: args.duration, model: args.model }));
     },
-    summarize: (r) => r.confirmation_summary,
+    summarize: (r) => r.confirmation_summary + (r.confirmation_code ? ` Confirmation code: ${r.confirmation_code}` : ""),
   },
   {
     name: "fuse_generate_image",
-    chatgptDescription: "Generates the image the user just reviewed and charges its credits. Requires the confirmation_token from fuse_prepare_generation (the Generate button in the confirmation card passes it automatically). Returns a generation_id to poll with fuse_get_generation_status.",
+    chatgptDescription: "Generates the image the user just reviewed and charges its credits. Requires the confirmation_token from fuse_prepare_generation (the Generate button in the confirmation card passes it automatically). Returns a generation_id to poll with fuse_get_generation_status. Pass the confirmation_code from the prepare result (e.g. FUSE-7KQ2) — prefer it over the long confirmation_token.",
     title: "Generate an image",
     description: "Generate campaign-quality still image(s) from a text prompt (and optional reference product photos) using FUSE's image engine. Charges credits from the user's balance and starts immediately — poll fuse_get_generation_status. Reference images must be https URLs or assets uploaded via fuse_create_upload_session. Requires a connected account.",
     scope: "fuse.runs.create",
@@ -545,12 +549,14 @@ export const TOOLS: ToolDef[] = [
       model: imageModelSchema(),
       ...imageOptionSchemas(),
       confirmation_token: str("Token from fuse_prepare_generation (required in ChatGPT)"),
+      confirmation_code: str("Short code from the prepare step, e.g. FUSE-7KQ2"),
     }, ["prompt"]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     rest: { method: "POST", path: "/api/generate/image", operationId: "generateImage", summary: "Generate an image" },
     widget: "ui://fuse/generation.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
+      await applyConfirmationCode(ctx.admin, ctx.auth, "generation", args);
       if (isChatGpt(ctx)) await verifyGenerationToken(ctx.admin, ctx.auth, "image", String(args.prompt ?? ""), args.confirmation_token);
       return await startStandaloneGeneration(ctx.admin, ctx.auth, {
         kind: "image",
@@ -567,7 +573,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "fuse_generate_video",
-    chatgptDescription: "Generates the video the user just reviewed and charges its credits. Requires the confirmation_token from fuse_prepare_generation (the Generate button in the confirmation card passes it automatically). Returns a generation_id to poll with fuse_get_generation_status.",
+    chatgptDescription: "Generates the video the user just reviewed and charges its credits. Requires the confirmation_token from fuse_prepare_generation (the Generate button in the confirmation card passes it automatically). Returns a generation_id to poll with fuse_get_generation_status. Pass the confirmation_code from the prepare result (e.g. FUSE-7KQ2) — prefer it over the long confirmation_token.",
     title: "Generate a video",
     description: "Generate a short campaign video from a text prompt, optionally animating a start image (image-to-video) using FUSE's video engine (Kling). Charges credits and starts immediately — poll fuse_get_generation_status. Requires a connected account.",
     scope: "fuse.runs.create",
@@ -581,12 +587,14 @@ export const TOOLS: ToolDef[] = [
       resolution: str("Optional resolution (models that support it, e.g. Seedance 720p/1080p)"),
       generate_audio: bool("Optional native audio"),
       confirmation_token: str("Token from fuse_prepare_generation (required in ChatGPT)"),
+      confirmation_code: str("Short code from the prepare step, e.g. FUSE-7KQ2"),
     }, ["prompt"]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     rest: { method: "POST", path: "/api/generate/video", operationId: "generateVideo", summary: "Generate a video" },
     widget: "ui://fuse/generation.html",
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
+      await applyConfirmationCode(ctx.admin, ctx.auth, "generation", args);
       if (isChatGpt(ctx)) await verifyGenerationToken(ctx.admin, ctx.auth, "video", String(args.prompt ?? ""), args.confirmation_token);
       return await startStandaloneGeneration(ctx.admin, ctx.auth, {
         kind: "video",
