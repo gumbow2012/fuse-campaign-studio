@@ -286,17 +286,24 @@ function render(){
 }
 render(); window.addEventListener("openai:set_globals", render);`);
 
+export const WIDGET_VERSION = "v3";
+export const widgetUri = (name: string) => `ui://fuse/${name}.${WIDGET_VERSION}.html`;
+/** Old unversioned URI (ui://fuse/<name>.html) -> current versioned URI, so old chats still resolve. */
+export const legacyWidgetUri = (uri: string): string | null => {
+  const m = uri.match(/^ui:\/\/fuse\/([a-z0-9-]+)\.html$/);
+  return m ? widgetUri(m[1]) : null;
+};
 export const WIDGETS: Record<string, { name: string; description: string; html: string }> = {
-  "ui://fuse/template-search.html": { name: "Template search", description: "Campaign template cards with previews and a Use this campaign action.", html: TEMPLATE_SEARCH },
-  "ui://fuse/template-detail.html": { name: "Template detail", description: "What you upload, what you get, plan inclusion, prepare action.", html: TEMPLATE_DETAIL },
-  "ui://fuse/upload.html": { name: "Upload", description: "Upload slots with file pickers that attach directly to the campaign draft.", html: UPLOAD },
-  "ui://fuse/confirm-run.html": { name: "Run confirmation", description: "Campaign, uploads, outputs, credits and the confirm action.", html: CONFIRM_RUN },
-  "ui://fuse/run-status.html": { name: "Run status", description: "Progress, stage, output counts and previews.", html: RUN_STATUS },
-  "ui://fuse/output-gallery.html": { name: "Output gallery", description: "Generated images and clips with download links; campaign history.", html: OUTPUT_GALLERY },
-  "ui://fuse/editor.html": { name: "Campaign editor", description: "Clip order, remove/restore, save and export.", html: EDITOR },
-  "ui://fuse/pricing.html": { name: "Pricing", description: "Plans, credit packs and pack checkout.", html: PRICING },
-  "ui://fuse/credits.html": { name: "Credits", description: "Plan, balance and affordability.", html: CREDITS },
-  "ui://fuse/generation.html": { name: "Generation", description: "Image/video generation: confirm, live status, inline result and model picker.", html: GENERATION },
+  [widgetUri("template-search")]: { name: "Template search", description: "Campaign template cards with previews and a Use this campaign action.", html: TEMPLATE_SEARCH },
+  [widgetUri("template-detail")]: { name: "Template detail", description: "What you upload, what you get, plan inclusion, prepare action.", html: TEMPLATE_DETAIL },
+  [widgetUri("upload")]: { name: "Upload", description: "Upload slots with file pickers that attach directly to the campaign draft.", html: UPLOAD },
+  [widgetUri("confirm-run")]: { name: "Run confirmation", description: "Campaign, uploads, outputs, credits and the confirm action.", html: CONFIRM_RUN },
+  [widgetUri("run-status")]: { name: "Run status", description: "Progress, stage, output counts and previews.", html: RUN_STATUS },
+  [widgetUri("output-gallery")]: { name: "Output gallery", description: "Generated images and clips with download links; campaign history.", html: OUTPUT_GALLERY },
+  [widgetUri("editor")]: { name: "Campaign editor", description: "Clip order, remove/restore, save and export.", html: EDITOR },
+  [widgetUri("pricing")]: { name: "Pricing", description: "Plans, credit packs and pack checkout.", html: PRICING },
+  [widgetUri("credits")]: { name: "Credits", description: "Plan, balance and affordability.", html: CREDITS },
+  [widgetUri("generation")]: { name: "Generation", description: "Image/video generation: confirm, live status, inline result and model picker.", html: GENERATION },
 };
 
 export const WIDGET_CSP = {
