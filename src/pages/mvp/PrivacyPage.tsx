@@ -5,7 +5,7 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
   {
     title: "1. Who we are",
     body: [
-      "This Privacy Policy explains how [PLACEHOLDER — COMPANY LEGAL NAME], of [PLACEHOLDER — REGISTERED ADDRESS], handles personal data in connection with the FUSE platform.",
+      "This Privacy Policy explains how Madden Media LLC, of [PLACEHOLDER — REGISTERED ADDRESS], handles personal data in connection with the FUSE platform.",
       "Standard SaaS placeholder language. Final wording is pending legal review.",
     ],
   },
