@@ -74,7 +74,7 @@ async function readResource(uri: string, ctx: ToolContext) {
   if (uri === "fuse://templates") return json({ templates: await listPublicTemplates(ctx.admin, ctx.auth.isPrivileged) });
   const tm = uri.match(/^fuse:\/\/templates\/([a-z0-9-]+)$/i);
   if (tm) return json({ template: await getTemplateDetail(ctx.admin, { slug: tm[1] }, ctx.auth.isPrivileged) });
-  if (uri === "fuse://pricing") return json(await getPricingSummary(ctx.admin, null));
+  if (uri === "fuse://pricing") return json(ctx.client === "chatgpt" ? { message: "FUSE runs on your existing account credits. You can manage your account at https://fuse-us.com/account.", account_url: "https://fuse-us.com/account", plans: [], packs: [] } : await getPricingSummary(ctx.admin, null));
   if (uri === "fuse://docs/getting-started") return md(["# Getting started with FUSE", "", getHelp("what is a campaign").answer, "", getHelp("how to run a template").answer, "", getHelp("what do i upload").answer].join("\n"));
   if (uri === "fuse://docs/credits") return md(["# How credits work", "", getHelp("how credits work").answer, "", getHelp("what if generation fails").answer].join("\n"));
   if (uri === "fuse://user/campaigns") {
@@ -91,9 +91,13 @@ async function readResource(uri: string, ctx: ToolContext) {
 
 export type CallLog = (entry: { tool: string; ok: boolean; error_code?: string; latency_ms: number; template_slug?: string; run_id?: string; credits?: number; idempotency_key?: string }) => void;
 
+const isHiddenFor = (t: { hiddenForClients?: string[] }, ctx: ToolContext) => !!ctx.client && !!t.hiddenForClients?.includes(ctx.client);
+const visibleTools = (ctx: ToolContext) => TOOLS.filter((t) => !isHiddenFor(t, ctx));
+const CHATGPT_INSTRUCTIONS = "FUSE turns a product photo into a campaign: search templates (public), then upload → attach → start → poll status → outputs. Speak in campaigns, images and clips. FUSE can also generate standalone images and videos from a prompt in chat via fuse_generate_image and fuse_generate_video; poll fuse_get_generation_status. In ChatGPT, always call the prepare tool and get the user's explicit confirmation before starting any run or generation. Never mention plans, credit packs, prices, promotions or upgrades — report the credit balance and point users to https://fuse-us.com/account to manage their account. To generate a standalone image or video: default to nano-banana-pro (images) and kling-3.0-pro (video); if the user names a model or asks for options, call fuse_list_generation_models and pass the chosen key as model. After starting, the result renders in the generation widget — poll fuse_get_generation_status until complete.";
+
 export async function callTool(name: string, args: Record<string, unknown>, ctx: ToolContext, log: CallLog) {
   const tool = TOOL_BY_NAME.get(name);
-  if (!tool) throw new FuseError("NOT_FOUND", `Unknown tool ${name}`, { nextAction: `Available: ${TOOLS.map((t) => t.name).join(", ")}` });
+  if (!tool || isHiddenFor(tool, ctx)) throw new FuseError("NOT_FOUND", `Unknown tool ${name}`, { nextAction: `Available: ${visibleTools(ctx).map((t) => t.name).join(", ")}` });
   const started = Date.now();
   const safeArgs = args && typeof args === "object" ? args : {};
   try {
@@ -128,7 +132,7 @@ export async function handleRpc(message: Rpc, ctx: ToolContext, log: CallLog): P
           protocolVersion: negotiated,
           capabilities: { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { subscribe: false, listChanged: false } },
           serverInfo: SERVER_INFO,
-          instructions: "FUSE turns a product photo into a campaign: search templates (public), then upload → attach → start → poll status → outputs. When the user asks for a campaign, you may start the run directly with fuse_start_campaign_run (template_slug + attached inputs). Runs charge credits from the user's balance and start immediately. You may optionally call fuse_prepare_campaign_run first to show cost. Speak in campaigns, images and clips. FUSE can also generate standalone images and videos from a prompt in chat via fuse_generate_image and fuse_generate_video — these charge credits and start immediately; poll fuse_get_generation_status. In ChatGPT, always call the prepare tool and get the user\'s explicit confirmation before starting any run or generation. When the user asks about cost or runs low on credits, call fuse_get_pricing_summary to show plans and credit packs with prices; to buy a pack, call fuse_buy_credit_pack only after the user picks one, then give them the checkout link. To generate a standalone image or video: default to nano-banana-pro (images) and kling-3.0-pro (video); if the user names a model or asks for options, call fuse_list_generation_models and pass the chosen key as model. After starting, the result renders in the generation widget — poll fuse_get_generation_status until complete.",
+          instructions: ctx.client === "chatgpt" ? CHATGPT_INSTRUCTIONS : "FUSE turns a product photo into a campaign: search templates (public), then upload → attach → start → poll status → outputs. When the user asks for a campaign, you may start the run directly with fuse_start_campaign_run (template_slug + attached inputs). Runs charge credits from the user's balance and start immediately. You may optionally call fuse_prepare_campaign_run first to show cost. Speak in campaigns, images and clips. FUSE can also generate standalone images and videos from a prompt in chat via fuse_generate_image and fuse_generate_video — these charge credits and start immediately; poll fuse_get_generation_status. In ChatGPT, always call the prepare tool and get the user\'s explicit confirmation before starting any run or generation. When the user asks about cost or runs low on credits, call fuse_get_pricing_summary to show plans and credit packs with prices; to buy a pack, call fuse_buy_credit_pack only after the user picks one, then give them the checkout link. To generate a standalone image or video: default to nano-banana-pro (images) and kling-3.0-pro (video); if the user names a model or asks for options, call fuse_list_generation_models and pass the chosen key as model. After starting, the result renders in the generation widget — poll fuse_get_generation_status until complete.",
         });
       }
       case "ping":
@@ -138,7 +142,7 @@ export async function handleRpc(message: Rpc, ctx: ToolContext, log: CallLog): P
       case "notifications/roots/list_changed":
         return null;
       case "tools/list":
-        return rpcResult(id, { tools: TOOLS.map((t) => toolDescriptor(t, ctx.resourceMetadataUrl)) });
+        return rpcResult(id, { tools: visibleTools(ctx).map((t) => toolDescriptor(t, ctx.resourceMetadataUrl)) });
       case "tools/call": {
         const name = String(params?.name ?? "");
         try {
