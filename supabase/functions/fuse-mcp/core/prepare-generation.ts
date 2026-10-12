@@ -5,6 +5,7 @@
 import type { Admin, AuthContext } from "../auth.ts";
 import { FuseError } from "../errors.ts";
 import { issueConfirmationToken, sha256Hex, verifyConfirmationToken, type RunPlan } from "../confirm.ts";
+import { newConfirmationCode, resolveCode, saveCode } from "./confirm-codes.ts";
 import { getAccountCredits } from "./credits.ts";
 import { signingSecret } from "./runs.ts";
 import { imageFlatUsd, imageModelLabel, videoModelLabel, videoUsdPerSecond } from "./models.ts";
@@ -38,6 +39,8 @@ export async function prepareGeneration(admin: Admin, auth: AuthContext, args: {
     campaign_name: null,
   };
   const token = await issueConfirmationToken(await signingSecret(admin), plan);
+  const confirmationCode = newConfirmationCode();
+  await saveCode(admin, { userId: auth.userId, kind: "generation", code: confirmationCode, token: token.token, expiresAt: token.expires_at });
   return {
     ready: can_run,
     kind: args.kind,
@@ -47,8 +50,9 @@ export async function prepareGeneration(admin: Admin, auth: AuthContext, args: {
     estimated_credits: estimated,
     credit_balance: account.credit_balance,
     can_run,
-    confirmation_summary: `Generate ${args.kind === "image" ? "an image" : "a video"} with ${modelLabel} from your prompt for about ${estimated} credits (balance ${account.credit_balance}). Go ahead?`,
+    confirmation_summary: `Generate ${args.kind === "image" ? "an image" : "a video"} with ${modelLabel} from your prompt for about ${estimated} credits (balance ${account.credit_balance}). Go ahead? Confirmation code: ${confirmationCode}.`,
     confirmation_token: token.token,
+    confirmation_code: confirmationCode,
     confirmation_expires_at: token.expires_at,
   };
 }
@@ -64,4 +68,17 @@ export async function verifyGenerationToken(admin: Admin, auth: AuthContext, kin
   if (v.plan.user_id !== auth.userId || v.plan.version_id !== kind || v.plan.inputs?.prompt_hash !== (await sha256Hex(String(prompt ?? "").trim()))) {
     throw new FuseError("CONFIRMATION_MISMATCH");
   }
+}
+
+/** Resolve a short confirmation_code into args.confirmation_token (verification stays unchanged downstream). */
+export async function applyConfirmationCode(admin: Admin, auth: AuthContext, kind: "campaign" | "generation", args: Record<string, any>) {
+  if (args.confirmation_token || !args.confirmation_code || !auth.userId) return;
+  const token = await resolveCode(admin, { userId: auth.userId, kind, code: String(args.confirmation_code) });
+  if (!token) {
+    throw new FuseError("CONFIRMATION_EXPIRED", "That confirmation code is invalid or expired", {
+      userMessage: "That confirmation code expired — let me prepare it again.",
+      nextAction: "Call the prepare tool again.",
+    });
+  }
+  args.confirmation_token = token;
 }

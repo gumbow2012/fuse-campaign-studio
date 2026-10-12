@@ -11,6 +11,7 @@ import { resolveDisplayUrl } from "../../_shared/asset-access.ts";
 import type { Admin, AuthContext } from "../auth.ts";
 import { withUserToken } from "../auth.ts";
 import { FuseError } from "../errors.ts";
+import { newConfirmationCode, saveCode } from "./confirm-codes.ts";
 import { issueConfirmationToken, planHash, verifyConfirmationToken, type RunPlan } from "../confirm.ts";
 import { inputsFor, loadTemplate } from "./templates.ts";
 import { canRun, getAccountCredits } from "./credits.ts";
@@ -105,8 +106,10 @@ export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: 
   const built = await buildRunPlan(admin, auth, args);
   const { ready, issues, plan, counts, account, estimated, template: t, required, optional, base, surcharge, affordability, name } = built;
   const confirmation = ready ? await issueConfirmationToken(await signingSecret(admin), plan) : null;
+  const confirmationCode = confirmation ? newConfirmationCode() : null;
+  if (confirmation && confirmationCode) await saveCode(admin, { userId: plan.user_id, kind: "campaign", code: confirmationCode, token: confirmation.token, expiresAt: confirmation.expires_at });
   const summary = ready
-    ? `Template: ${t.meta?.public_name ?? t.row.name}. Uploads: ${Object.keys(plan.inputs).length} attached. You get: ${counts.imageOutputs} images + ${counts.videoOutputs} clips. Credits: ${estimated === 0 ? "none (no charge on your account)" : `${estimated} (about ${estimated >= 945 ? "one campaign" : "part of a campaign"} worth)`}. Balance: ${account.credit_balance}. Run this campaign?`
+    ? `Template: ${t.meta?.public_name ?? t.row.name}. Uploads: ${Object.keys(plan.inputs).length} attached. You get: ${counts.imageOutputs} images + ${counts.videoOutputs} clips. Credits: ${estimated === 0 ? "none (no charge on your account)" : `${estimated} (about ${estimated >= 945 ? "one campaign" : "part of a campaign"} worth)`}. Balance: ${account.credit_balance}. Run this campaign? Confirmation code: ${confirmationCode}.`
     : `Not ready: ${issues.map((i) => i.message).join(" ")}`;
   return {
     ready,
@@ -123,6 +126,7 @@ export async function prepareCampaignRun(admin: Admin, auth: AuthContext, args: 
     issues,
     confirmation_summary: summary,
     confirmation_token: confirmation?.token ?? null,
+    confirmation_code: confirmationCode,
     confirmation_expires_at: confirmation?.expires_at ?? null,
     credits_will_be_consumed: ready && estimated > 0,
   };
