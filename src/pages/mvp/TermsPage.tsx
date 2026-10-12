@@ -6,7 +6,6 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
     title: "1. Agreement",
     body: [
       "These Terms of Service govern access to and use of the FUSE platform owned and operated by Madden Media LLC, the parent company of FUSE (\"we\", \"us\"). By creating an account or using the service you agree to these terms.",
-      "Standard SaaS placeholder language. Final wording is pending legal review.",
     ],
   },
   {
@@ -72,19 +71,19 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
   {
     title: "11. Disclaimers and liability",
     body: [
-      "To the maximum extent permitted by applicable law, we disclaim implied warranties and limit our aggregate liability. Specific limitation amounts are [PLACEHOLDER — TO BE SET ON LEGAL REVIEW].",
+      "To the maximum extent permitted by applicable law, we disclaim implied warranties and limit our aggregate liability. Our total liability for any claim arising from or relating to the service is limited to the greater of the amounts you paid us in the 12 months before the claim arose or US $100, and we are not liable for indirect, incidental, special, consequential or punitive damages.",
     ],
   },
   {
     title: "12. Governing law",
     body: [
-      "These terms are governed by the laws of [PLACEHOLDER — JURISDICTION], and disputes will be handled as set out in [PLACEHOLDER — DISPUTE RESOLUTION CLAUSE].",
+      "These terms are governed by the laws of the Commonwealth of Massachusetts, without regard to its conflict-of-law rules. Any dispute will be resolved exclusively in the state or federal courts located in Massachusetts, and you and we consent to their jurisdiction.",
     ],
   },
   {
     title: "13. Contact",
     body: [
-      "Notices may be sent to Madden Media LLC, [PLACEHOLDER — REGISTERED ADDRESS], or through the Contact page.",
+      "Notices may be sent to Madden Media LLC, 131 Continental Drive, Suite 305, Newark, DE 19713, or through the Contact page.",
     ],
   },
 ];
@@ -94,19 +93,15 @@ export default function TermsPage() {
     <SiteShell>
       <PageMeta
         title="Terms of Service — FUSE"
-        description="Draft Terms of Service for the FUSE campaign platform, covering accounts, memberships and credits, acceptable use, content ownership and generated outputs."
+        description="Terms of Service for the FUSE campaign platform, covering accounts, memberships and credits, acceptable use, content ownership and generated outputs."
         path="/terms"
       />
       <section className="container py-14 md:py-20">
         <div className="max-w-3xl space-y-4">
           <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-cyan-200/80">Legal</p>
           <h1 className="font-heading text-3xl font-semibold tracking-tight md:text-4xl">Terms of Service</h1>
-          <div className="rounded-xl border border-amber-300/25 bg-amber-300/[0.08] px-4 py-3 text-sm text-amber-100">
-            Draft — pending legal review. This page uses standard SaaS placeholder language and is not yet a binding
-            agreement.
-          </div>
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Last updated: [PLACEHOLDER — EFFECTIVE DATE]
+            Last updated: October 12, 2026
           </p>
         </div>
 
