@@ -93,7 +93,7 @@ export default function SiteFooter() {
 
       <div className="border-t border-white/5">
         <div className="container flex flex-col items-center gap-2 py-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:flex-row sm:justify-between">
-          <p>© {new Date().getFullYear()} FUSE</p>
+          <p>© {new Date().getFullYear()} FUSE, a Madden Media LLC company</p>
           <a
             href="https://maddenmedia.ai"
             target="_blank"
