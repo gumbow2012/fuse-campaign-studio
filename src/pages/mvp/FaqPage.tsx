@@ -5,7 +5,11 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 const FAQS: Array<{ q: string; a: string }> = [
   {
     q: "What is FUSE?",
-    a: "FUSE is a campaign engine for streetwear and fashion brands. Instead of briefing a shoot, you pick a proven campaign template and FUSE generates the finished creative — images and video — using your brand, your products, and your cast.",
+    a: "FUSE is a campaign engine for streetwear and fashion brands. Instead of briefing a shoot, you pick a proven campaign template and FUSE generates the finished creative — images and video — using your brand, your products, and your cast. FUSE is owned and operated by Madden Media LLC, its parent company.",
+  },
+  {
+    q: "Who owns FUSE?",
+    a: "FUSE is a product of Madden Media LLC, the parent company that owns and operates the platform.",
   },
   {
     q: "What is a template?",
