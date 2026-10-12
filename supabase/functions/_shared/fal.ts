@@ -371,7 +371,8 @@ export type VideoModelKey =
   | "kling-2.5"
   | "kling-o3-pro-video-edit"
   | "seedance-2.0"
-  | "seedance-2.0-fast";
+  | "seedance-2.0-fast"
+  | "seedance-2.5";
 
 export type VideoModelDefinition = {
   key: VideoModelKey;
@@ -477,7 +478,26 @@ export const VIDEO_MODELS: Record<VideoModelKey, VideoModelDefinition> = {
     aspectRatios: ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
     fallbackUsdPerSecond: 0.2419,
     supportsMultiReference: true,
+  },  /**
+   * LIVE fal OpenAPI schema: bytedance/seedance-2.5/image-to-video
+   *   → prompt, image_url, duration "4".."30" (string enum), resolution 480p|720p|1080p,
+   *     aspect_ratio, generate_audio. Also accepts end_image_url, codec,
+   *     bitrate_mode, draft — intentionally unused for now.
+   * Fallback $0.473/s = 720p with audio; getFalPricing() still fetches live pricing first.
+   */
+  "seedance-2.5": {
+    key: "seedance-2.5",
+    endpointId: "bytedance/seedance-2.5/image-to-video",
+    label: "Seedance 2.5",
+    family: "seedance",
+    supportsAudio: true,
+    durationRange: { min: 4, max: 30 },
+    resolutions: ["480p", "720p", "1080p"],
+    aspectRatios: ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
+    fallbackUsdPerSecond: 0.473,
+    supportsMultiReference: true,
   },
+
 };
 
 export function resolveVideoModelKey(value: unknown): VideoModelKey {
@@ -610,6 +630,7 @@ export async function submitFalJob(
 /** Seedance reference-to-video endpoints (multi-reference reconstruction). */
 export const SEEDANCE_REFERENCE_TO_VIDEO = "bytedance/seedance-2.0/reference-to-video";
 export const SEEDANCE_FAST_REFERENCE_TO_VIDEO = "bytedance/seedance-2.0/fast/reference-to-video";
+export const SEEDANCE_25_REFERENCE_TO_VIDEO = "bytedance/seedance-2.5/reference-to-video";
 
 /**
  * Reference-to-video resolutions per VARIANT (live fal OpenAPI schema):
@@ -632,6 +653,7 @@ export function referenceVideoResolutions(endpointId: string) {
 /** Map a Seedance model key to its reference-to-video endpoint. */
 export function referenceToVideoEndpoint(modelKey: unknown) {
   const key = typeof modelKey === "string" ? modelKey.trim() : "";
+  if (key === "seedance-2.5") return SEEDANCE_25_REFERENCE_TO_VIDEO;
   return key === "seedance-2.0-fast"
     ? SEEDANCE_FAST_REFERENCE_TO_VIDEO
     : SEEDANCE_REFERENCE_TO_VIDEO;
