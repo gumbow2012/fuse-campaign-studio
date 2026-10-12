@@ -175,10 +175,20 @@ render(); window.addEventListener("openai:set_globals", render);`);
 const PRICING = page("FUSE pricing", `<div id="root"></div>`, `
 function render(){
   const d = out(); const root = $("root");
-  if(!(d.plans||[]).length&&!(d.packs||[]).length){ root.innerHTML='<h1>Your account</h1>'+(d.credit_balance!=null?'<p class="name">'+d.credit_balance+' credits</p>':'')+'<p class="muted">'+esc(d.message||"FUSE runs on your existing account credits.")+'</p><a class="btn" href="'+esc(d.account_url||'https://fuse-us.com/account')+'" target="_blank" rel="noopener">Manage account</a>'; return; }
+  if(d.checkout_url&&d.pack){ showCheckout(d); return; }
+  if(!(d.plans||[]).length&&!(d.packs||[]).length&&!(d.credit_packs||[]).length){ root.innerHTML='<h1>Your account</h1>'+(d.credit_balance!=null?'<p class="name">'+d.credit_balance+' credits</p>':'')+'<p class="muted">'+esc(d.message||"FUSE runs on your existing account credits.")+'</p><a class="btn" href="'+esc(d.account_url||'https://fuse-us.com/account')+'" target="_blank" rel="noopener">Manage account</a>'; return; }
   root.innerHTML = '<h1>Plans</h1><div class="grid">'+(d.plans||[]).map(p=>'<div class="card"><div class="body"><div class="name">'+esc(p.name)+'</div><div class="orb" style="font-size:20px;color:#fff">$'+p.monthly_price_usd+'<span class="muted" style="font-size:12px">/mo</span></div><div class="muted">About '+p.approximate_campaigns_per_month+' campaigns a month</div>'+(p.key==="starter"&&d.promo_note?'<span class="pill">20% off first month</span>':'')+'</div></div>').join("")+'</div>'+
     (d.selected_template?'<p class="muted" style="margin-top:10px">'+esc(d.selected_template.slug)+': '+esc(d.selected_template.approximate_campaign_fraction)+' · '+(d.selected_template.included_in_starter?'included in Starter':'needs a bigger plan')+'</p>':'')+
+    ((d.credit_packs||[]).length?'<h1 style="margin-top:16px">Credit packs</h1><div class="grid">'+d.credit_packs.map(p=>'<div class="card"><div class="body"><div class="name">'+esc(p.key.charAt(0).toUpperCase()+p.key.slice(1))+'</div><div class="orb" style="font-size:20px;color:#fff">$'+p.price_usd+'</div><div class="muted">'+Number(p.credits).toLocaleString()+' credits</div><button class="btn" data-pack="'+esc(p.key)+'">Buy</button></div></div>').join("")+'</div><p class="muted" id="buymsg"></p>':'')+
     '<p class="muted">'+esc(d.billing_note||"")+'</p><a class="btn" href="'+esc(d.pricing_url||'https://fuse-us.com/pricing')+'" target="_blank" rel="noopener">See pricing</a>';
+  root.querySelectorAll("[data-pack]").forEach(b=>b.onclick=()=>buy(b.getAttribute("data-pack"), b));
+}
+function openUrl(href){ if(O.openExternal){ try{ O.openExternal({ href }); return; }catch(e){} } window.open(href, "_blank", "noopener"); }
+function showCheckout(d){ $("root").innerHTML='<h1>'+esc(d.pack.name)+' credit pack</h1><p class="name">'+Number(d.pack.credits).toLocaleString()+' credits · $'+d.pack.price_usd+'</p><p class="muted">'+esc(d.message||"")+'</p><a class="btn" href="'+esc(d.checkout_url)+'" target="_blank" rel="noopener" id="pay">Open secure checkout</a> <a class="btn" href="'+esc(d.account_url||'https://fuse-us.com/account')+'" target="_blank" rel="noopener">Your account</a>'; }
+async function buy(key, btn){
+  btn.disabled = true; const m = $("buymsg"); if(m) m.textContent = "Opening checkout…";
+  try { const r = await call("fuse_buy_credit_pack", { pack_key: key }); const d = (r && (r.structuredContent || r)) || {}; if(d.checkout_url){ showCheckout(d); openUrl(d.checkout_url); } else throw new Error("No checkout link returned"); }
+  catch(e){ btn.disabled = false; if(m) m.textContent = "Could not open checkout. Ask: buy the "+key+" credit pack."; }
 }
 render(); window.addEventListener("openai:set_globals", render);`);
 
@@ -254,7 +264,7 @@ export const WIDGETS: Record<string, { name: string; description: string; html: 
   "ui://fuse/run-status.html": { name: "Run status", description: "Progress, stage, output counts and previews.", html: RUN_STATUS },
   "ui://fuse/output-gallery.html": { name: "Output gallery", description: "Generated images and clips with download links; campaign history.", html: OUTPUT_GALLERY },
   "ui://fuse/editor.html": { name: "Campaign editor", description: "Clip order, remove/restore, save and export.", html: EDITOR },
-  "ui://fuse/pricing.html": { name: "Pricing", description: "Plans in campaigns per month.", html: PRICING },
+  "ui://fuse/pricing.html": { name: "Pricing", description: "Plans, credit packs and pack checkout.", html: PRICING },
   "ui://fuse/credits.html": { name: "Credits", description: "Plan, balance and affordability.", html: CREDITS },
   "ui://fuse/generation.html": { name: "Generation", description: "Image/video generation: confirm, live status, inline result and model picker.", html: GENERATION },
 };
