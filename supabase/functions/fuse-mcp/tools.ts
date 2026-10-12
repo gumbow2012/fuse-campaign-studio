@@ -16,7 +16,7 @@ import { listRunOutputs, renameCampaign } from "./core/outputs.ts";
 import { getTimeline, saveCampaignEdit } from "./core/editor.ts";
 import { exportCampaign, getExportStatus } from "./core/exports.ts";
 import { getHelp } from "./core/help.ts";
-import { prepareGeneration, verifyGenerationToken } from "./core/prepare-generation.ts";
+import { applyConfirmationCode, prepareGeneration, verifyGenerationToken } from "./core/prepare-generation.ts";
 import { IMAGE_KEYS, listGenerationModels, VIDEO_KEYS } from "./core/models.ts";
 import { getStandaloneGenerationStatus, listStandaloneGenerations, startStandaloneGeneration } from "./core/generate.ts";
 
