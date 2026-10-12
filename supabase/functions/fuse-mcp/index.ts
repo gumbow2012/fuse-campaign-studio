@@ -13,7 +13,8 @@ import { callTool, handleRpc, PROTOCOL_VERSIONS } from "./mcp.ts";
 import { TOOLS, type ToolContext } from "./tools.ts";
 import { buildOpenApi } from "./openapi.ts";
 import { sha256Hex } from "./confirm.ts";
-import { SCOPES } from "./auth.ts";
+
+const OAUTH_SCOPES = ["openid", "profile", "email", "offline_access"];
 
 const PUBLIC_ORIGIN = Deno.env.get("FUSE_PUBLIC_ORIGIN") ?? "https://fuse-us.com";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -66,9 +67,9 @@ function clientOf(req: Request): string {
   return "api";
 }
 
-function unauthorized(resourceMetadataUrl: string, fe: FuseError, scope?: string) {
+function unauthorized(resourceMetadataUrl: string, fe: FuseError, _scope?: string) {
   return json({ error: fe.toJSON() }, 401, {
-    "WWW-Authenticate": `Bearer resource_metadata="${resourceMetadataUrl}"${scope ? `, scope="${scope}"` : ""}, error="invalid_token", error_description="${fe.userMessage.replace(/"/g, "'")}"`,
+    "WWW-Authenticate": `Bearer resource_metadata="${resourceMetadataUrl}", error="invalid_token", error_description="${fe.userMessage.replace(/"/g, "'")}"`,
   });
 }
 
@@ -100,7 +101,7 @@ Deno.serve(async (req) => {
     return json({
       resource: `${publicOrigin}/mcp`,
       authorization_servers: [AUTH_SERVER],
-      scopes_supported: [...SCOPES],
+      scopes_supported: OAUTH_SCOPES,
       bearer_methods_supported: ["header"],
       resource_name: "FUSE Campaign Studio",
       resource_documentation: `${PUBLIC_ORIGIN}/docs/mcp`,
