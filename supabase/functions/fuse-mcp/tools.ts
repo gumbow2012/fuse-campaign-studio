@@ -185,6 +185,7 @@ export const TOOLS: ToolDef[] = [
     annotations: RO,
     rest: { method: "GET", path: "/api/pricing", operationId: "getPricingSummary", summary: "Pricing summary" },
     widget: widgetUri("pricing"),
+    hiddenForClients: ["chatgpt"],
     async handler(args, ctx) {
       if (isChatGpt(ctx)) return { message: `FUSE runs on your existing account credits. You can manage your account at ${ACCOUNT_URL}.`, account_url: ACCOUNT_URL, plans: [], packs: [] };
       let selected: { slug: string; estimated_credits: number } | null = null;
@@ -240,7 +241,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "fuse_create_upload_session",
     title: "Create upload slots for a campaign",
-    description: "Get signed upload URLs for the product photos (or other inputs) a template needs. Each slot is a PUT URL that expires. After uploading, call fuse_attach_uploaded_assets. If the user already has a public https image URL, skip this and pass source_url to fuse_attach_uploaded_assets instead. Requires a connected account.",
+    description: "Creates upload slots for the files a template needs (for example product photos). Returns one short-lived signed URL per file plus an upload card where the user picks files from their device; the card uploads them and attaches them to the campaign draft. This tool does not upload files itself. If the user already has a public https image link, skip this and call fuse_attach_uploaded_assets with source_url instead. Requires a connected FUSE account.",
     scope: "fuse.assets.write",
     inputSchema: obj({
       template_slug: str("Template slug"),
@@ -260,13 +261,13 @@ export const TOOLS: ToolDef[] = [
   {
     name: "fuse_attach_uploaded_assets",
     title: "Attach uploaded product photos",
-    description: "Confirm uploads and attach them to a campaign draft. Pass storage_key values from the upload session (after the PUT), or a public https source_url per input for FUSE to fetch. Verifies the files exist and are real images/videos. Requires a connected account.",
+    description: "Attaches files to a campaign draft. For each input, pass either the storage_key of a file already uploaded to its slot, or a public https source_url, which FUSE downloads from that external website. Checks that each file exists and is a real image or video. Requires a connected FUSE account.",
     scope: "fuse.assets.write",
     inputSchema: obj({
       upload_session_id: str("Session id from fuse_create_upload_session"),
       uploaded_files: arr(obj({ input_key: str("Input key"), storage_key: str("storage_key from the upload slot (after the file was PUT)"), source_url: str("Alternative: a public https URL of the file for FUSE to fetch"), original_file_name: str("Optional"), mime_type: str("Optional") }, ["input_key"]), "Files to attach"),
     }, ["upload_session_id", "uploaded_files"]),
-    annotations: WRITE,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     rest: { method: "POST", path: "/api/uploads/complete", operationId: "attachUploadedAssets", summary: "Attach uploaded assets" },
     widget: widgetUri("upload"),
     async handler(args, ctx) {
@@ -278,7 +279,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: "fuse_prepare_campaign_run",
     title: "Prepare a campaign run (no credits used)",
-    description: "Optional cost preview before generation. Validates inputs, computes the real credit cost server-side, checks the balance, and returns a confirmation_token. Nothing is generated and no credits are used. Confirmation is optional — runs can be started directly with fuse_start_campaign_run. Use this when the user wants to see the cost first. Requires a connected account.",
+    description: "Shows the cost of a campaign before anything is generated. Checks the template inputs, calculates the credit cost, checks the user's balance, and returns a summary with a short confirmation_code (and a confirmation_token). Show the summary to the user and wait for them to approve before calling fuse_start_campaign_run. Generates nothing and uses no credits. Requires a connected FUSE account.",
     scope: "fuse.runs.prepare",
     inputSchema: obj({
       template_slug: str("Template slug"),
@@ -299,15 +300,14 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "fuse_start_campaign_run",
-    chatgptDescription: "Starts the campaign the user just reviewed and charges its credits. Requires the confirmation_token from fuse_prepare_campaign_run (the Run button in the confirmation card passes it automatically). Returns a run_id to poll with fuse_get_run_status. Pass the confirmation_code from the prepare result (e.g. FUSE-7KQ2) — prefer it over the long confirmation_token.",
     title: "Start a campaign run",
-    description: "Starts a campaign run immediately and charges credits from the user's balance. No confirmation token is required — pass either template_slug (+ campaign_draft_id or inputs) to auto-start, or a confirmation_token from fuse_prepare_campaign_run. Idempotent via idempotency_key. Returns a run_id to poll.",
+    description: "Starts generating a campaign (images and video clips) and charges its credits to the user's FUSE balance. Call only after the user approved the cost from fuse_prepare_campaign_run, and pass that step's confirmation_code (or confirmation_token); in ChatGPT the run is refused without it. Retrying with the same idempotency_key never charges twice. Returns a run_id to check with fuse_get_run_status. Requires a connected FUSE account.",
     scope: "fuse.runs.create",
     inputSchema: obj({
       template_slug: str("Template slug (required unless a confirmation_token is passed)"),
       campaign_draft_id: str("campaign_draft_id / upload_session_id with attached assets"),
       inputs: { type: "object", description: "Inputs {input_key: https URL of an attached asset}", additionalProperties: { type: "string" } },
-      confirmation_token: str("Optional token from fuse_prepare_campaign_run"),
+      confirmation_token: str("Token from fuse_prepare_campaign_run (the confirmation card passes it automatically)"),
       confirmation_code: str("Short code from the prepare step, e.g. FUSE-7KQ2"),
       idempotency_key: str("Client-generated unique key for this start request (recommended)"),
       campaign_name: str("Optional campaign name override"),
@@ -327,25 +327,23 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "fuse_generate_image_from_template",
-    chatgptDescription: "Generates the campaign images the user just reviewed and charges their credits. Requires the confirmation_token from fuse_prepare_campaign_run (the Run button in the confirmation card passes it automatically). Returns a run_id to poll with fuse_get_run_status. Pass the confirmation_code from the prepare result (e.g. FUSE-7KQ2) — prefer it over the long confirmation_token.",
     title: "Generate campaign images from a template",
-    description: "Image-first entry point: runs a template for a product photo. FUSE templates render their images and clips together, so this starts the template's full campaign (the images are part of it) — the tool says so honestly. No confirmation token is required: pass template_slug with campaign_draft_id or inputs to auto-start. Charges credits from the user's balance. Requires a connected account.",
+    description: "Use when the user asks for campaign images from a template. Templates always render their images and video clips together, so this starts the template's full campaign and charges its full credit cost to the user's FUSE balance. Call only after the user approved the cost from fuse_prepare_campaign_run, and pass that step's confirmation_code (or confirmation_token); in ChatGPT the run is refused without it. Returns a run_id to check with fuse_get_run_status. Requires a connected FUSE account.",
     scope: "fuse.runs.create",
     inputSchema: obj({
       template_slug: str("Template slug"),
       campaign_draft_id: str("campaign_draft_id / upload_session_id with attached assets"),
       inputs: { type: "object", description: "Inputs {input_key: https URL of an attached asset}", additionalProperties: { type: "string" } },
-      confirmation_token: str("Optional token from fuse_prepare_campaign_run"),
+      confirmation_token: str("Token from fuse_prepare_campaign_run (the confirmation card passes it automatically)"),
       confirmation_code: str("Short code from the prepare step, e.g. FUSE-7KQ2"),
       campaign_name: str("Optional"),
       idempotency_key: str("Recommended"),
-      image_count: num("Ignored unless the template supports a variable count (none do today)"),
-      aspect_ratio: str("Ignored unless the template supports it (templates declare their own ratio)"),
     }, ["template_slug"]),
 
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     rest: { method: "POST", path: "/api/runs/start-images", operationId: "generateImagesFromTemplate", summary: "Start an image-first campaign run" },
     widget: widgetUri("run-status"),
+    hiddenForClients: ["chatgpt"], // duplicate of fuse_start_campaign_run; name implies image-only
     async handler(args, ctx) {
       needScope(ctx, "fuse.runs.create");
       await applyConfirmationCode(ctx.admin, ctx.auth, "campaign", args);

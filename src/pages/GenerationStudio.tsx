@@ -59,6 +59,8 @@ import { CSS } from "@dnd-kit/utilities";
 
 import { toast } from "sonner";
 import SiteShell from "@/components/mvp/SiteShell";
+import MaddenAIShell from "@/components/maddenai/MaddenAIShell";
+import { useLocation } from "react-router-dom";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -888,6 +890,8 @@ function ReferenceCard({
 }
 
 export default function GenerationStudio() {
+  const isMadden = useLocation().pathname.startsWith("/maddenai");
+  const Shell = isMadden ? MaddenAIShell : SiteShell;
   galleryPerfRender(); // GS-PERF9 dev-only render counter
 
   const [modelKey, setModelKey] = useState<StudioModelKey>("nano-banana-pro");
@@ -1880,17 +1884,17 @@ export default function GenerationStudio() {
   };
 
   return (
-    <SiteShell>
+    <Shell>
       <PageMeta
-        title="Generation Studio | FUSE"
+        title={isMadden ? "Create | MADDENAI" : "Generation Studio | FUSE"}
         description="Generate campaign images and video clips from a prompt and reference frames."
-        path="/app/lab/studio"
+        path={isMadden ? "/maddenai/create" : "/app/lab/studio"}
       />
 
       <div className="mx-auto w-full max-w-[1600px] px-4 py-10 sm:px-6">
         <header className="mb-9 space-y-3">
           <p className="font-display text-[12px] font-semibold tracking-[0.16em] text-[hsl(var(--electric-cyan))]">
-            FUSE LAB / GENERATION STUDIO
+            {isMadden ? "MADDENAI / CREATE" : "FUSE LAB / GENERATION STUDIO"}
           </p>
           <h1 className="font-display text-[36px] font-bold leading-[1.05] tracking-[0.01em] text-foreground sm:text-[44px]">
             Generation Studio
@@ -2859,7 +2863,7 @@ export default function GenerationStudio() {
           ) : null}
         </DialogContent>
       </Dialog>
-    </SiteShell>
+    </Shell>
 
   );
 }
