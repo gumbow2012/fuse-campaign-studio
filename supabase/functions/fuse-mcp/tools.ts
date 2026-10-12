@@ -57,15 +57,7 @@ const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, o
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
 const ACCOUNT_URL = "https://fuse-us.com/account";
-const NEUTRAL_ACTION = `Manage your account at ${ACCOUNT_URL}.`;
 const isChatGpt = (ctx: ToolContext) => ctx.client === "chatgpt";
-/** ChatGPT: strip upsell/plan/price language, keep balance and can_run. */
-function neutralText(text: unknown): unknown {
-  if (typeof text !== "string") return text;
-  return text
-    .replace(/(Start a Starter plan|Add \d+ credits or upgrade)[\s\S]*?then run this campaign\./g, NEUTRAL_ACTION)
-    .replace(/https:\/\/fuse-us\.com\/pricing/g, ACCOUNT_URL);
-}
 function neutralize<T extends Record<string, any>>(_ctx: ToolContext, r: T): T {
   // Prices, plans and credit packs are shown in ChatGPT too; results pass through unchanged.
   return r;
