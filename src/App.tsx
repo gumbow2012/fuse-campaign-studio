@@ -83,6 +83,7 @@ import PaymentReturnPage from "@/pages/mvp/PaymentReturnPage";
 import MembershipPage from "@/pages/mvp/MembershipPage";
 import ContactPage from "@/pages/mvp/ContactPage";
 import CreditPacksPage from "@/pages/mvp/CreditPacksPage";
+import ChatGptPricingPage from "@/pages/mvp/ChatGptPricingPage";
 import FaqPage from "@/pages/mvp/FaqPage";
 import TermsPage from "@/pages/mvp/TermsPage";
 import PrivacyPage from "@/pages/mvp/PrivacyPage";
@@ -160,6 +161,7 @@ const App = () => (
 
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/credits" element={<CreditPacksPage />} />
+            <Route path="/chatgpt/pricing" element={<ChatGptPricingPage />} />
             <Route path="/faq" element={<FaqPage />} />
             <Route path="/contests" element={<ContestsPage />} />
             <Route
