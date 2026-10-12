@@ -82,6 +82,7 @@ import PaymentReturnPage from "@/pages/mvp/PaymentReturnPage";
 
 import MembershipPage from "@/pages/mvp/MembershipPage";
 import ContactPage from "@/pages/mvp/ContactPage";
+import CreditPacksPage from "@/pages/mvp/CreditPacksPage";
 import FaqPage from "@/pages/mvp/FaqPage";
 import TermsPage from "@/pages/mvp/TermsPage";
 import PrivacyPage from "@/pages/mvp/PrivacyPage";
@@ -158,6 +159,7 @@ const App = () => (
             <Route path="/oauth/consent" element={<OAuthConsentPage />} />
 
             <Route path="/contact" element={<ContactPage />} />
+            <Route path="/credits" element={<CreditPacksPage />} />
             <Route path="/faq" element={<FaqPage />} />
             <Route path="/contests" element={<ContestsPage />} />
             <Route
