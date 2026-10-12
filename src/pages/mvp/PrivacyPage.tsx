@@ -5,8 +5,7 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
   {
     title: "1. Who we are",
     body: [
-      "This Privacy Policy explains how Madden Media LLC, of [PLACEHOLDER — REGISTERED ADDRESS], the parent company that owns and operates FUSE, handles personal data in connection with the FUSE platform.",
-      "Standard SaaS placeholder language. Final wording is pending legal review.",
+      "This Privacy Policy explains how Madden Media LLC, of 131 Continental Drive, Suite 305, Newark, DE 19713, the parent company that owns and operates FUSE, handles personal data in connection with the FUSE platform.",
     ],
   },
   {
@@ -47,13 +46,13 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
     title: "6. Legal basis and retention",
     body: [
       "Where applicable law requires a legal basis, we rely on contract performance, legitimate interests, consent (for optional cookies and marketing), and legal obligations.",
-      "We keep personal data for as long as your account is active, plus the period needed for legal, accounting, and dispute-resolution purposes. Retention periods are [PLACEHOLDER — RETENTION SCHEDULE].",
+      "We keep personal data for as long as your account is active, plus the period needed for legal, accounting, and dispute-resolution purposes. After your account is closed, we keep your account data and your uploaded and generated media for up to 1 year, then delete it, unless the law requires us to keep it longer.",
     ],
   },
   {
     title: "7. International transfers",
     body: [
-      "Data may be processed in countries other than yours. Where required, transfers rely on approved safeguards such as standard contractual clauses. Details: [PLACEHOLDER — TRANSFER MECHANISM].",
+      "Data may be processed in countries other than yours. Where required, transfers rely on approved safeguards such as standard contractual clauses. FUSE is operated from the United States. When we transfer personal data from the EEA, UK or Switzerland, we rely on the European Commission's Standard Contractual Clauses (and the UK Addendum where applicable) with our service providers.",
     ],
   },
   {
@@ -66,12 +65,12 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
     title: "9. Your rights and data requests",
     body: [
       "Subject to applicable law, you may request access to your data, correction, deletion, a portable copy, restriction of processing, or objection to certain processing, and you may withdraw consent where consent applies.",
-      "To make a request, use the Contact page or write to [PLACEHOLDER — PRIVACY CONTACT EMAIL]. We may need to verify your identity. You may also complain to your local supervisory authority: [PLACEHOLDER — SUPERVISORY AUTHORITY].",
+      "To make a request, use the Contact page or write to kade@maddenmedia.ai. We may need to verify your identity. You may also complain to the data protection authority in your country of residence or, in the United States, your state attorney general.",
     ],
   },
   {
     title: "10. Children",
-    body: ["The service is not intended for people under [PLACEHOLDER — MINIMUM AGE], and we do not knowingly collect their data."],
+    body: ["The service is not intended for people under 18, and we do not knowingly collect their data."],
   },
   {
     title: "11. Changes",
@@ -84,19 +83,15 @@ export default function PrivacyPage() {
     <SiteShell>
       <PageMeta
         title="Privacy Policy — FUSE"
-        description="Draft FUSE Privacy Policy covering the data we collect, cookies and analytics, third-party processors, retention, security and how to make a data request."
+        description="FUSE Privacy Policy covering the data we collect, cookies and analytics, third-party processors, retention, security and how to make a data request."
         path="/privacy"
       />
       <section className="container py-14 md:py-20">
         <div className="max-w-3xl space-y-4">
           <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-cyan-200/80">Legal</p>
           <h1 className="font-heading text-3xl font-semibold tracking-tight md:text-4xl">Privacy Policy</h1>
-          <div className="rounded-xl border border-amber-300/25 bg-amber-300/[0.08] px-4 py-3 text-sm text-amber-100">
-            Draft — pending legal review. This page uses standard placeholder language and does not yet make binding
-            commitments.
-          </div>
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Last updated: [PLACEHOLDER — EFFECTIVE DATE]
+            Last updated: October 12, 2026
           </p>
         </div>
 
