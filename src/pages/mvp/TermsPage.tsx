@@ -5,7 +5,7 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
   {
     title: "1. Agreement",
     body: [
-      "These Terms of Service govern access to and use of the FUSE platform owned and operated by Madden Media LLC, the parent company of FUSE (\"we\", \"us\"). By creating an account or using the service you agree to these terms.",
+      "These Terms of Service govern access to and use of the FUSE platform (fuse-us.com) operated by Madden Media LLC, a Delaware limited liability company (\"FUSE\", \"we\", \"us\").", "By creating an account or using the service you agree to these terms.",
     ],
   },
   {
@@ -77,13 +77,13 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
   {
     title: "12. Governing law",
     body: [
-      "These terms are governed by the laws of the Commonwealth of Massachusetts, without regard to its conflict-of-law rules. Any dispute will be resolved exclusively in the state or federal courts located in Massachusetts, and you and we consent to their jurisdiction.",
+      "These terms are governed by the laws of the State of Delaware, and disputes will be handled in the state or federal courts located in Delaware, unless applicable law requires otherwise.",
     ],
   },
   {
     title: "13. Contact",
     body: [
-      "Notices may be sent to Madden Media LLC, 131 Continental Drive, Suite 305, Newark, DE 19713, or through the Contact page.",
+      "Notices may be sent to Madden Media LLC, c/o United States Corporation Agents, Inc., 131 Continental Drive, Suite 305, Newark, DE 19713, or to kade@maddenmedia.ai.",
     ],
   },
 ];
