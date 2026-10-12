@@ -3,6 +3,7 @@
  * the OpenAPI document are all generated from these definitions, so there is
  * exactly one implementation of every capability.
  */
+import { startCreditPackCheckout } from "./core/credit-checkout.ts";
 import type { Admin, AuthContext, Scope } from "./auth.ts";
 import { requireScope } from "./auth.ts";
 import { FuseError } from "./errors.ts";
@@ -66,7 +67,8 @@ function neutralText(text: unknown): unknown {
     .replace(/https:\/\/fuse-us\.com\/pricing/g, ACCOUNT_URL);
 }
 function neutralize<T extends Record<string, any>>(ctx: ToolContext, r: T): T {
-  if (!isChatGpt(ctx)) return r;
+  // Prices and credit packs are now shown in ChatGPT too; keep results unchanged.
+  if (!isChatGpt(ctx) || ctx) return r;
   const out: any = { ...r };
   if ("recommended_action" in out) out.recommended_action = out.recommended_action == null ? null : NEUTRAL_ACTION;
   if ("upgrade_required" in out) out.upgrade_required = false;
@@ -181,9 +183,6 @@ export const TOOLS: ToolDef[] = [
     rest: { method: "GET", path: "/api/pricing", operationId: "getPricingSummary", summary: "Pricing summary" },
     widget: "ui://fuse/pricing.html",
     async handler(args, ctx) {
-      if (isChatGpt(ctx)) {
-        return { message: `FUSE runs on your existing account credits. You can manage your account at ${ACCOUNT_URL}.`, account_url: ACCOUNT_URL, plans: [], packs: [] };
-      }
       let selected: { slug: string; estimated_credits: number } | null = null;
       if (args.template_slug) {
         const t = await getTemplateDetail(ctx.admin, { slug: args.template_slug }, ctx.auth.isPrivileged);
@@ -193,6 +192,20 @@ export const TOOLS: ToolDef[] = [
       return { ...pricing, focus_plan: args.plan ?? null };
     },
     summarize: (r) => r.message ? r.message : `Starter $${r.starter_monthly_price_usd}/mo (${r.promo_note}) ≈ ${r.plans.find((p: any) => p.key === "starter")?.approximate_campaigns_per_month ?? 3} campaigns/mo; ${r.plans.filter((p: any) => p.key !== "starter").map((p: any) => `${p.name} $${p.monthly_price_usd}/mo ≈ ${p.approximate_campaigns_per_month} campaigns/mo`).join("; ")}${r.selected_template ? `. ${r.selected_template.slug}: ${r.selected_template.estimated_credits} credits (${r.selected_template.approximate_campaign_fraction}), ${r.selected_template.included_in_starter ? "included in Starter" : "needs a bigger plan"}` : ""}. ${r.pricing_url}`,
+  },
+  {
+    name: "fuse_buy_credit_pack",
+    title: "Buy a FUSE credit pack",
+    description: "Opens the secure FUSE checkout for a one-time credit pack (boost, growth or bulk; see fuse_get_pricing_summary for prices). Returns a checkout_url the user opens to pay; credits are added automatically after payment. Only call after the user explicitly picks a pack. Requires a connected FUSE account with an active membership.",
+    scope: "fuse.account.read",
+    inputSchema: obj({ pack_key: str("Credit pack to buy", { enum: ["boost", "growth", "bulk"] }) }, ["pack_key"]),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    rest: { method: "POST", path: "/api/credits/checkout", operationId: "buyCreditPack", summary: "Start credit pack checkout" },
+    widget: "ui://fuse/pricing.html",
+    async handler(args, ctx) {
+      return await startCreditPackCheckout(ctx.admin, ctx.auth, String(args.pack_key ?? ""));
+    },
+    summarize: (r) => `${r.pack.name}: ${r.pack.credits} credits for $${r.pack.price_usd}. Open to pay: ${r.checkout_url}`,
   },
   {
     name: "fuse_check_account_credits",
