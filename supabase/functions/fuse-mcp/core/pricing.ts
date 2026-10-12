@@ -3,6 +3,14 @@
  * account) and the shared credit tiers. Never touches Stripe.
  */
 import type { Admin } from "../auth.ts";
+import { CREDIT_PACKS } from "../../_shared/stripe-credit-packs.ts";
+
+/** Same plans the website sells; used when the live price list is empty. */
+const FALLBACK_PLANS = [
+  { key: "starter", name: "Starter", price: 25, credits: 3000 },
+  { key: "pro", name: "Pro", price: 149, credits: 18000 },
+  { key: "studio", name: "Studio", price: 399, credits: 55000 },
+];
 
 const SITE = "https://fuse-us.com";
 /** Median campaign ≈ 945 credits (the top pricing tier); plans are sold in campaigns. */
@@ -55,12 +63,20 @@ export async function getPricingSummary(admin: Admin, selected?: { slug: string;
       };
     })
     .filter(Boolean) as PricingSummary["plans"];
+  if (!plans.length) {
+    for (const p of FALLBACK_PLANS) {
+      plans.push({ key: p.key, name: p.name, monthly_price_usd: p.price, annual_price_usd: null, credits_per_month: p.credits, approximate_campaigns_per_month: campaignsPerMonth(p.key, p.credits) });
+    }
+  }
   const starter = plans.find((p) => p.key === "starter");
   const starterPrice = starter?.monthly_price_usd ?? 25;
   const packs = rows
     .filter((r: any) => r.kind === "credit_pack")
     .map((r: any) => ({ key: r.pack_key, credits: r.credits, price_usd: r.amount_cents / 100 }))
     .sort((a: any, b: any) => a.credits - b.credits);
+  if (!packs.length) {
+    for (const p of Object.values(CREDIT_PACKS)) packs.push({ key: p.key, credits: p.credits, price_usd: p.amountCents / 100 });
+  }
   return {
     currency: "usd",
     plans,
