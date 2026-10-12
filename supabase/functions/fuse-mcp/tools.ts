@@ -20,6 +20,7 @@ import { getHelp } from "./core/help.ts";
 import { applyConfirmationCode, prepareGeneration, verifyGenerationToken } from "./core/prepare-generation.ts";
 import { IMAGE_KEYS, listGenerationModels, VIDEO_KEYS } from "./core/models.ts";
 import { getStandaloneGenerationStatus, listStandaloneGenerations, startStandaloneGeneration } from "./core/generate.ts";
+import { getBatchStatus, MAX_BATCH, normalizeItems, prepareBatch, startBatch, verifyBatchToken } from "./core/batch.ts";
 
 export type JsonSchema = Record<string, unknown>;
 
@@ -57,6 +58,18 @@ const imageOptionSchemas = () => ({
   quality: str("Optional (gpt-image-2): auto, low, medium, high"),
   image_size: str("Optional (seedream-v4): 1K, 2K or 4K"),
 });
+
+const BATCH_ITEMS = () => arr(obj({
+  kind: str("image or video", { enum: ["image", "video"] }),
+  prompt: str("What to generate for this item"),
+  model: str(`Optional model key. ${MODEL_HELP}`, { enum: [...IMAGE_KEYS, ...VIDEO_KEYS] }),
+  duration: num("Optional video seconds"),
+  aspect_ratio: str("Optional, e.g. 9:16"),
+  reference_image_urls: arr(str("https URL"), "Optional reference/product photos (images)"),
+  start_image_url: str("Optional https URL to animate from (videos)"),
+  ...imageOptionSchemas(),
+  generate_audio: bool("Optional video native audio"),
+}, ["kind", "prompt"]), "The images/videos to generate, one entry each (max 10)");
 
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
@@ -608,6 +621,55 @@ export const TOOLS: ToolDef[] = [
       });
     },
     summarize: (r) => `Video generation ${r.generation_id} — ${r.status}${r.estimated_credits ? `, ~${r.estimated_credits} credits` : ""}. Poll fuse_get_generation_status in ~${r.next_poll_after_seconds}s.`,
+  },
+  {
+    name: "fuse_prepare_batch",
+    title: "Prepare several generations at once (no credits used)",
+    description: `Use when the user wants several images and/or videos at the same time (up to ${MAX_BATCH}), for example "make 5 product shots" or "3 images and 2 videos". Returns the per-item and total credit estimate, the user's balance and one short confirmation_code for the whole set. Generates nothing and uses no credits. Show the summary, wait for the user's approval, then call fuse_generate_batch with the exact same items in the same order. Requires a connected FUSE account.`,
+    scope: "fuse.runs.prepare",
+    inputSchema: obj({ items: BATCH_ITEMS() }, ["items"]),
+    annotations: RO,
+    rest: { method: "POST", path: "/api/generate/batch/prepare", operationId: "prepareBatch", summary: "Prepare a batch of generations" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.prepare");
+      return neutralize(ctx, await prepareBatch(ctx.admin, ctx.auth, args.items));
+    },
+    summarize: (r) => r.confirmation_summary,
+  },
+  {
+    name: "fuse_generate_batch",
+    title: "Generate several images and videos at once",
+    description: `Starts up to ${MAX_BATCH} image and video generations at the same time and charges each one's credits to the user's FUSE balance. Call only after the user approved the cost from fuse_prepare_batch, passing the exact same items in the same order plus that step's confirmation_code (or confirmation_token); in ChatGPT the batch is refused without it. Items that cannot start (for example when credits run out) are reported individually and not charged. Returns generation_ids to check with fuse_get_batch_status. Requires a connected FUSE account.`,
+    scope: "fuse.runs.create",
+    inputSchema: obj({
+      items: BATCH_ITEMS(),
+      confirmation_token: str("Token from fuse_prepare_batch (the short confirmation_code is easier to pass)"),
+      confirmation_code: str("Short code from fuse_prepare_batch, e.g. FUSE-7KQ2"),
+    }, ["items"]),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    rest: { method: "POST", path: "/api/generate/batch", operationId: "generateBatch", summary: "Start a batch of generations" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.create");
+      const items = normalizeItems(args.items);
+      await applyConfirmationCode(ctx.admin, ctx.auth, "generation", args);
+      if (isChatGpt(ctx)) await verifyBatchToken(ctx.admin, ctx.auth, items, args.confirmation_token);
+      return await startBatch(ctx.admin, ctx.auth, items);
+    },
+    summarize: (r) => `Started ${r.started} of ${r.results.length}${r.failed_to_start ? ` (${r.failed_to_start} could not start)` : ""}. Check all with fuse_get_batch_status in ~${r.next_poll_after_seconds}s.`,
+  },
+  {
+    name: "fuse_get_batch_status",
+    title: "Check several generations",
+    description: "Checks several image/video generations at once (for example everything started by fuse_generate_batch). Returns how many are complete, still running or failed, and a signed output URL for each finished one. Requires a connected FUSE account.",
+    scope: "fuse.runs.read",
+    inputSchema: obj({ generation_ids: arr(str("generation id"), "Ids returned by fuse_generate_batch") }, ["generation_ids"]),
+    annotations: RO,
+    rest: { method: "POST", path: "/api/generations/batch-status", operationId: "getBatchStatus", summary: "Get status of several generations" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.read");
+      return await getBatchStatus(ctx.admin, ctx.auth, args.generation_ids);
+    },
+    summarize: (r) => `${r.complete}/${r.total} ready, ${r.pending} running, ${r.failed} failed.${r.pending ? ` Check again in ~${r.next_poll_after_seconds}s.` : ""}`,
   },
   {
     name: "fuse_get_generation_status",
