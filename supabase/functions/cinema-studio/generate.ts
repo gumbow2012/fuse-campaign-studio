@@ -41,6 +41,7 @@ type Capabilities = {
 
 const KLING3_DURATIONS = Array.from({ length: 13 }, (_, i) => String(i + 3));
 const SEEDANCE_DURATIONS = ["auto", ...Array.from({ length: 12 }, (_, i) => String(i + 4))];
+const SEEDANCE_25_DURATIONS = Array.from({ length: 27 }, (_, i) => String(i + 4));
 const SEEDANCE_ASPECTS = ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"];
 
 const CAPABILITIES: Record<string, Capabilities> = {
@@ -78,6 +79,13 @@ const CAPABILITIES: Record<string, Capabilities> = {
     resolutions: ["480p", "720p"],
     aspectRatios: SEEDANCE_ASPECTS,
     durations: SEEDANCE_DURATIONS,
+    supportsAudio: true,
+  },
+  "seedance-2.5": {
+    label: "Seedance 2.5",
+    resolutions: ["480p", "720p", "1080p"],
+    aspectRatios: SEEDANCE_ASPECTS,
+    durations: SEEDANCE_25_DURATIONS,
     supportsAudio: true,
   },
 };

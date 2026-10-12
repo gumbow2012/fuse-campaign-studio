@@ -15,6 +15,8 @@
  *     native: resolution 480p|720p|1080p|4k, duration auto|4..15, aspect_ratio, generate_audio
  *   seedance-2.0-fast                   bytedance/seedance-2.0/fast/*
  *     native: resolution 480p|720p ONLY, duration auto|4..15, aspect_ratio, generate_audio
+ *   seedance-2.5                        bytedance/seedance-2.5/*
+ *     native: resolution 480p|720p|1080p, duration "4".."30", aspect_ratio, generate_audio
  *
  * Everything cinematographic (camera, lens, movement, composition, focus,
  * lighting, colour, optics, atmosphere, film setup) is PROMPT_BASED on every
@@ -44,7 +46,8 @@ export type CinemaVideoModelKey =
   | "kling-3.0-standard"
   | "kling-2.5"
   | "seedance-2.0"
-  | "seedance-2.0-fast";
+  | "seedance-2.0-fast"
+  | "seedance-2.5";
 
 export type FieldSupport = "FULL_SUPPORT" | "PROMPT_BASED" | "UNSUPPORTED";
 
@@ -71,6 +74,7 @@ export type ModelCapabilities = {
 };
 
 const KLING3_DURATIONS = Array.from({ length: 13 }, (_, i) => String(i + 3)); // "3".."15"
+const SEEDANCE_25_DURATIONS = Array.from({ length: 27 }, (_, i) => String(i + 4)); // "4".."30"
 const SEEDANCE_DURATIONS = ["auto", ...Array.from({ length: 12 }, (_, i) => String(i + 4))];
 
 export const CINEMA_MODEL_CAPABILITIES: Record<CinemaVideoModelKey, ModelCapabilities> = {
@@ -118,6 +122,15 @@ export const CINEMA_MODEL_CAPABILITIES: Record<CinemaVideoModelKey, ModelCapabil
     resolutions: ["480p", "720p"],
     aspectRatios: ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
     durations: SEEDANCE_DURATIONS,
+    supportsAudio: true,
+    promptMaxChars: 2200,
+  },
+  "seedance-2.5": {
+    label: "Seedance 2.5",
+    family: "seedance",
+    resolutions: ["480p", "720p", "1080p"],
+    aspectRatios: ["9:16", "16:9", "1:1", "4:3", "3:4", "21:9"],
+    durations: SEEDANCE_25_DURATIONS,
     supportsAudio: true,
     promptMaxChars: 2200,
   },
@@ -481,6 +494,7 @@ export const kling3StandardAdapter = createAdapter("kling-3.0-standard");
 export const kling25Adapter = createAdapter("kling-2.5");
 export const seedanceAdapter = createAdapter("seedance-2.0");
 export const seedanceFastAdapter = createAdapter("seedance-2.0-fast");
+export const seedance25Adapter = createAdapter("seedance-2.5");
 
 export const CINEMA_MODEL_ADAPTERS: Record<CinemaVideoModelKey, ModelAdapter> = {
   "kling-3.0-pro": kling3ProAdapter,
@@ -488,6 +502,7 @@ export const CINEMA_MODEL_ADAPTERS: Record<CinemaVideoModelKey, ModelAdapter> = 
   "kling-2.5": kling25Adapter,
   "seedance-2.0": seedanceAdapter,
   "seedance-2.0-fast": seedanceFastAdapter,
+  "seedance-2.5": seedance25Adapter,
 };
 
 export function getCinemaModelAdapter(model: unknown): ModelAdapter {
