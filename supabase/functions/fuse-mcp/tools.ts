@@ -38,6 +38,8 @@ export type ToolDef = {
   summarize?: (result: any) => string;
   /** Clients (ctx.client) that must not see or call this tool. */
   hiddenForClients?: string[];
+  /** Description shown instead of `description` when ctx.client === "chatgpt". */
+  chatgptDescription?: string;
 };
 
 const str = (description: string, extra: JsonSchema = {}): JsonSchema => ({ type: "string", description, ...extra });
@@ -296,6 +298,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "fuse_start_campaign_run",
+    chatgptDescription: "Starts the campaign the user just reviewed and charges its credits. Requires the confirmation_token from fuse_prepare_campaign_run (the Run button in the confirmation card passes it automatically). Returns a run_id to poll with fuse_get_run_status.",
     title: "Start a campaign run",
     description: "Starts a campaign run immediately and charges credits from the user's balance. No confirmation token is required — pass either template_slug (+ campaign_draft_id or inputs) to auto-start, or a confirmation_token from fuse_prepare_campaign_run. Idempotent via idempotency_key. Returns a run_id to poll.",
     scope: "fuse.runs.create",
@@ -321,6 +324,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "fuse_generate_image_from_template",
+    chatgptDescription: "Generates the campaign images the user just reviewed and charges their credits. Requires the confirmation_token from fuse_prepare_campaign_run (the Run button in the confirmation card passes it automatically). Returns a run_id to poll with fuse_get_run_status.",
     title: "Generate campaign images from a template",
     description: "Image-first entry point: runs a template for a product photo. FUSE templates render their images and clips together, so this starts the template's full campaign (the images are part of it) — the tool says so honestly. No confirmation token is required: pass template_slug with campaign_draft_id or inputs to auto-start. Charges credits from the user's balance. Requires a connected account.",
     scope: "fuse.runs.create",
@@ -530,6 +534,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "fuse_generate_image",
+    chatgptDescription: "Generates the image the user just reviewed and charges its credits. Requires the confirmation_token from fuse_prepare_generation (the Generate button in the confirmation card passes it automatically). Returns a generation_id to poll with fuse_get_generation_status.",
     title: "Generate an image",
     description: "Generate campaign-quality still image(s) from a text prompt (and optional reference product photos) using FUSE's image engine. Charges credits from the user's balance and starts immediately — poll fuse_get_generation_status. Reference images must be https URLs or assets uploaded via fuse_create_upload_session. Requires a connected account.",
     scope: "fuse.runs.create",
@@ -562,6 +567,7 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "fuse_generate_video",
+    chatgptDescription: "Generates the video the user just reviewed and charges its credits. Requires the confirmation_token from fuse_prepare_generation (the Generate button in the confirmation card passes it automatically). Returns a generation_id to poll with fuse_get_generation_status.",
     title: "Generate a video",
     description: "Generate a short campaign video from a text prompt, optionally animating a start image (image-to-video) using FUSE's video engine (Kling). Charges credits and starts immediately — poll fuse_get_generation_status. Requires a connected account.",
     scope: "fuse.runs.create",
