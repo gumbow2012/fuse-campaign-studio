@@ -89,6 +89,7 @@ const MODEL_LABELS: Record<CinemaVideoModelKey, string> = {
   "kling-2.5": "Kling 2.5",
   "seedance-2.0": "Seedance 2.0",
   "seedance-2.0-fast": "Seedance 2.0 Fast",
+  "seedance-2.5": "Seedance 2.5",
 };
 
 const MODEL_KEYS = CINEMA_MODEL_KEYS;

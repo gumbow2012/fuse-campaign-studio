@@ -13,6 +13,7 @@
  *   - KLING3_USD_PER_SECOND / _AUDIO           → _shared/fal.ts (0.112 / 0.168)
  *   - seedance-2.0 fallbackUsdPerSecond        → _shared/fal.ts (0.3024)
  *   - seedance-2.0-fast fallbackUsdPerSecond   → _shared/fal.ts (0.2419)
+ *   - seedance-2.5 fallbackUsdPerSecond        → _shared/fal.ts (0.473, 720p with audio)
  *   - kling-2.5                                → priced per 5s clip ($0.417),
  *       expressed here as $0.0834/s. UNCERTAIN at sub-5s granularity: the live
  *       endpoint only accepts 5s or 10s durations, so per-second math is an
@@ -51,7 +52,8 @@ export type VideoCostModelKey =
   | "kling-3.0-pro"
   | "kling-3.0-standard"
   | "seedance-2.0"
-  | "seedance-2.0-fast";
+  | "seedance-2.0-fast"
+  | "seedance-2.5";
 
 type VideoRate = {
   key: VideoCostModelKey;
@@ -105,6 +107,13 @@ export const VIDEO_COST_RATES: Record<VideoCostModelKey, VideoRate> = {
     usdPerSecond: 0.2419,
     supportsAudio: true,
     durationRange: { min: 4, max: 15 },
+  },
+  "seedance-2.5": {
+    key: "seedance-2.5",
+    label: "Seedance 2.5",
+    usdPerSecond: 0.473,
+    supportsAudio: true,
+    durationRange: { min: 4, max: 30 },
   },
 };
 
