@@ -36,6 +36,8 @@ export type ToolDef = {
   handler: (args: Record<string, any>, ctx: ToolContext) => Promise<Record<string, unknown>>;
   /** Short model-facing text summary of a result (keeps context small). */
   summarize?: (result: any) => string;
+  /** Clients (ctx.client) that must not see or call this tool. */
+  hiddenForClients?: string[];
 };
 
 const str = (description: string, extra: JsonSchema = {}): JsonSchema => ({ type: "string", description, ...extra });
@@ -58,9 +60,22 @@ const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: tru
 
 const ACCOUNT_URL = "https://fuse-us.com/account";
 const isChatGpt = (ctx: ToolContext) => ctx.client === "chatgpt";
-function neutralize<T extends Record<string, any>>(_ctx: ToolContext, r: T): T {
-  // Prices, plans and credit packs are shown in ChatGPT too; results pass through unchanged.
-  return r;
+const NEUTRAL_ACTION = `Manage your account at ${ACCOUNT_URL}.`;
+function neutralText(text: unknown): unknown {
+  if (typeof text !== "string") return text;
+  return text
+    .replace(/(Start a Starter plan|Add \d+ credits or upgrade)[\s\S]*?then run this campaign\./g, NEUTRAL_ACTION)
+    .replace(/https:\/\/fuse-us\.com\/(chatgpt\/)?pricing\b[^\s)"']*/g, ACCOUNT_URL);
+}
+function neutralize<T extends Record<string, any>>(ctx: ToolContext, r: T): T {
+  if (!isChatGpt(ctx)) return r;
+  const out: Record<string, any> = { ...r };
+  if ("recommended_action" in out) out.recommended_action = out.recommended_action == null ? null : NEUTRAL_ACTION;
+  if ("upgrade_required" in out) out.upgrade_required = false;
+  if ("confirmation_summary" in out) out.confirmation_summary = neutralText(out.confirmation_summary);
+  if (Array.isArray(out.issues)) out.issues = out.issues.map((i: any) => (i && typeof i === "object" ? { ...i, message: neutralText(i.message) } : i));
+  for (const k of ["approximate_campaigns_per_month", "pricing_url", "plans", "packs", "credit_packs"]) delete out[k];
+  return out as T;
 }
 function requireChatGptConfirmation(ctx: ToolContext, args: Record<string, any>) {
   if (isChatGpt(ctx) && !args.confirmation_token) {
@@ -168,6 +183,7 @@ export const TOOLS: ToolDef[] = [
     rest: { method: "GET", path: "/api/pricing", operationId: "getPricingSummary", summary: "Pricing summary" },
     widget: "ui://fuse/pricing.html",
     async handler(args, ctx) {
+      if (isChatGpt(ctx)) return { message: `FUSE runs on your existing account credits. You can manage your account at ${ACCOUNT_URL}.`, account_url: ACCOUNT_URL, plans: [], packs: [] };
       let selected: { slug: string; estimated_credits: number } | null = null;
       if (args.template_slug) {
         const t = await getTemplateDetail(ctx.admin, { slug: args.template_slug }, ctx.auth.isPrivileged);
@@ -187,7 +203,9 @@ export const TOOLS: ToolDef[] = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     rest: { method: "POST", path: "/api/credits/checkout", operationId: "buyCreditPack", summary: "Start credit pack checkout" },
     widget: "ui://fuse/pricing.html",
+    hiddenForClients: ["chatgpt"],
     async handler(args, ctx) {
+      if (isChatGpt(ctx)) throw new FuseError("FORBIDDEN", "Account management happens on fuse-us.com", { userMessage: `Manage your account at ${ACCOUNT_URL}.` });
       return await startCreditPackCheckout(ctx.admin, ctx.auth, String(args.pack_key ?? ""));
     },
     summarize: (r) => `${r.pack.name}: ${r.pack.credits} credits for $${r.pack.price_usd}. Open to pay: ${r.checkout_url}`,
