@@ -38,6 +38,7 @@ const PRIMARY_LINKS: PrimaryLink[] = [
   { label: "New Drops", href: "/#new-today" },
   { label: "Creators", to: "/creators" },
   { label: "Pricing", to: "/pricing" },
+  { label: "Credits", to: "/credits" },
   { label: "Contact", to: "/contact" },
 ];
 
@@ -218,6 +219,9 @@ export default function SiteShell({ children }: { children: ReactNode }) {
               <NavLink to="/pricing" className={textNavLinkClass}>
                 Pricing
               </NavLink>
+              <NavLink to="/credits" className={textNavLinkClass}>
+                Credits
+              </NavLink>
             </nav>
             {user ? (
               /* ONE cohesive cluster: credits · notifications · account */
@@ -397,6 +401,9 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 ) : null}
                 <NavLink to="/pricing" className={textNavLinkClass}>
                   Pricing
+                </NavLink>
+                <NavLink to="/credits" className={textNavLinkClass}>
+                  Credits
                 </NavLink>
                 {user ? (
                   <NavLink to="/contact" className={iconNavLinkClass} aria-label="Contact" title="Contact">

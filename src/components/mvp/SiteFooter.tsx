@@ -14,6 +14,7 @@ const COLUMNS: Array<{ title: string; links: Array<{ label: string; to: string }
       { label: "Templates", to: "/app/templates" },
       { label: "Brand Workspace", to: "/app/brand" },
       { label: "Pricing", to: "/pricing" },
+      { label: "Credits", to: "/credits" },
       { label: "New Drops", to: "/app/collections" },
     ],
   },
