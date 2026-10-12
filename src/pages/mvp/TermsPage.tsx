@@ -5,7 +5,7 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
   {
     title: "1. Agreement",
     body: [
-      "These Terms of Service govern access to and use of the FUSE platform operated by [PLACEHOLDER — COMPANY LEGAL NAME] (\"we\", \"us\"). By creating an account or using the service you agree to these terms.",
+      "These Terms of Service govern access to and use of the FUSE platform operated by Madden Media LLC (\"we\", \"us\"). By creating an account or using the service you agree to these terms.",
       "Standard SaaS placeholder language. Final wording is pending legal review.",
     ],
   },
@@ -84,7 +84,7 @@ const SECTIONS: Array<{ title: string; body: string[] }> = [
   {
     title: "13. Contact",
     body: [
-      "Notices may be sent to [PLACEHOLDER — COMPANY LEGAL NAME], [PLACEHOLDER — REGISTERED ADDRESS], or through the Contact page.",
+      "Notices may be sent to Madden Media LLC, [PLACEHOLDER — REGISTERED ADDRESS], or through the Contact page.",
     ],
   },
 ];
