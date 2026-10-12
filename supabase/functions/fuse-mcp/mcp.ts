@@ -20,25 +20,25 @@ type Rpc = { jsonrpc: "2.0"; id?: string | number | null; method?: string; param
 const rpcError = (id: Rpc["id"], code: number, message: string, data?: unknown): Rpc => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message, ...(data !== undefined ? { data } : {}) } });
 const rpcResult = (id: Rpc["id"], result: unknown): Rpc => ({ jsonrpc: "2.0", id: id ?? null, result });
 
-function toolDescriptor(t: (typeof TOOLS)[number], resourceMetadataUrl: string) {
+function toolDescriptor(t: (typeof TOOLS)[number], resourceMetadataUrl: string, client?: string | null) {
   const securitySchemes = t.scope ? [{ type: "oauth2", scopes: ["openid", "profile", "email"] }] : [{ type: "noauth" }];
   return {
     name: t.name,
     title: t.title,
-    description: t.description,
+    description: client === "chatgpt" && t.chatgptDescription ? t.chatgptDescription : t.description,
     inputSchema: t.inputSchema,
     annotations: { title: t.title, ...t.annotations },
     securitySchemes,
     _meta: {
       ...(t.widget
         ? {
-          ui: { resourceUri: t.widget },
+          ui: { resourceUri: t.widget, visibility: ["model", "app"] },
           "openai/outputTemplate": t.widget,
           "openai/toolInvocation/invoking": `${t.title}…`,
           "openai/toolInvocation/invoked": `${t.title} done`,
-          "openai/widgetAccessible": true,
         }
-        : {}),
+        : { ui: { visibility: ["model", "app"] } }),
+      "openai/widgetAccessible": true,
       "openai/securitySchemes": securitySchemes,
       "fuse/scope": t.scope,
       "fuse/resource_metadata": resourceMetadataUrl,
@@ -93,7 +93,7 @@ export type CallLog = (entry: { tool: string; ok: boolean; error_code?: string; 
 
 const isHiddenFor = (t: { hiddenForClients?: string[] }, ctx: ToolContext) => !!ctx.client && !!t.hiddenForClients?.includes(ctx.client);
 const visibleTools = (ctx: ToolContext) => TOOLS.filter((t) => !isHiddenFor(t, ctx));
-const CHATGPT_INSTRUCTIONS = "FUSE turns a product photo into a campaign: search templates (public), then upload → attach → start → poll status → outputs. Speak in campaigns, images and clips. FUSE can also generate standalone images and videos from a prompt in chat via fuse_generate_image and fuse_generate_video; poll fuse_get_generation_status. In ChatGPT, always call the prepare tool and get the user's explicit confirmation before starting any run or generation. Never mention plans, credit packs, prices, promotions or upgrades — report the credit balance and point users to https://fuse-us.com/account to manage their account. To generate a standalone image or video: default to nano-banana-pro (images) and kling-3.0-pro (video); if the user names a model or asks for options, call fuse_list_generation_models and pass the chosen key as model. After starting, the result renders in the generation widget — poll fuse_get_generation_status until complete.";
+const CHATGPT_INSTRUCTIONS = "FUSE turns a product photo into a campaign: search templates (public), then upload → attach → start → poll status → outputs. Speak in campaigns, images and clips. FUSE can also generate standalone images and videos from a prompt in chat via fuse_generate_image and fuse_generate_video; poll fuse_get_generation_status. In ChatGPT, always call the prepare tool and get the user's explicit confirmation before starting any run or generation. Never mention plans, credit packs, prices, promotions or upgrades — report the credit balance and point users to https://fuse-us.com/account to manage their account. To generate a standalone image or video: default to nano-banana-pro (images) and kling-3.0-pro (video); if the user names a model or asks for options, call fuse_list_generation_models and pass the chosen key as model. After starting, the result renders in the generation widget — poll fuse_get_generation_status until complete. After fuse_prepare_campaign_run, tell the user to press Run this campaign in the card (or pass that result's confirmation_token to fuse_start_campaign_run). Never call fuse_start_campaign_run without the confirmation_token.";
 
 export async function callTool(name: string, args: Record<string, unknown>, ctx: ToolContext, log: CallLog) {
   const tool = TOOL_BY_NAME.get(name);
@@ -142,7 +142,7 @@ export async function handleRpc(message: Rpc, ctx: ToolContext, log: CallLog): P
       case "notifications/roots/list_changed":
         return null;
       case "tools/list":
-        return rpcResult(id, { tools: visibleTools(ctx).map((t) => toolDescriptor(t, ctx.resourceMetadataUrl)) });
+        return rpcResult(id, { tools: visibleTools(ctx).map((t) => toolDescriptor(t, ctx.resourceMetadataUrl, ctx.client)) });
       case "tools/call": {
         const name = String(params?.name ?? "");
         try {

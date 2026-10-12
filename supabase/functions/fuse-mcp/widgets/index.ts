@@ -115,8 +115,22 @@ function render(){
     '<div class="slot"><span class="muted">You get</span><br><span class="name">'+(o.images_count||0)+' images + '+(o.clips_count||0)+' clips</span></div>'+
     '<div class="slot"><span class="muted">Credits</span><br><span class="name">'+(d.estimated_credits||0)+'</span> <span class="muted">· balance '+(d.credit_balance||0)+'</span></div>'+
     (d.issues&&d.issues.length?'<div class="slot bad">'+d.issues.map(i=>esc(i.message)).join("<br>")+'</div>':'')+
-    '</div><button class="btn" id="go" '+(d.ready?'':'disabled')+'>Run this campaign</button>';
-  $("go").onclick = () => say("Yes — run it now. Use confirmation token "+d.confirmation_token+" and idempotency key "+crypto.randomUUID()+".");
+    '</div>'+(d.confirmation_token?'<button class="btn" id="go" '+(d.ready?'':'disabled')+'>Run this campaign</button>':'<p class="muted">Ask me to prepare the campaign again.</p>')+'<p class="muted" id="msg"></p>';
+  const go = $("go"); if (go) go.onclick = () => startRun(d, go);
+}
+function errText(r, e){ const c = r && r.content; if (Array.isArray(c) && c.length) return c.map(x => x && x.text || "").join(" ").trim(); return (e && e.message) || "Couldn't start the campaign."; }
+async function startRun(d, btn){
+  btn.disabled = true; btn.textContent = "Starting…"; $("msg").textContent = "";
+  let r = null;
+  try {
+    r = await call("fuse_start_campaign_run", { confirmation_token: d.confirmation_token, idempotency_key: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())) });
+    if (!r || r.isError) throw null;
+    const s = r.structuredContent || r;
+    $("root").innerHTML = '<h1>Started</h1><p class="name">Run '+esc(s.run_id||"")+'</p><p class="muted">Check status in ~20s.</p>';
+    say("The campaign started. Check its status.");
+  } catch (e) {
+    btn.disabled = false; btn.textContent = "Run this campaign"; $("msg").textContent = errText(r, e);
+  }
 }
 render(); window.addEventListener("openai:set_globals", render);`);
 
@@ -219,8 +233,23 @@ function renderPrepare(d){
     '<div class="slot"><span class="muted">Prompt</span><br><span class="name">'+esc(d.prompt)+'</span></div>'+
     '<div class="slot"><span class="muted">Model</span><br><span class="name">'+modelLine(d)+'</span> <span class="muted">· '+esc(d.kind)+'</span></div>'+
     '<div class="slot"><span class="muted">Credits</span><br><span class="name">≈ '+(d.estimated_credits||0)+'</span> <span class="'+(d.can_run?'muted':'bad')+'">· balance '+(d.credit_balance||0)+'</span></div>'+
-    '</div><button class="btn" id="go" '+(d.can_run?'':'disabled')+'>Generate</button>';
-  $("go").onclick = () => say("Yes, generate it");
+    '</div><button class="btn" id="go" '+(d.can_run?'':'disabled')+'>Generate</button>'
+    + '<p class="muted" id="msg"></p>';
+  const go = $("go"); go.onclick = () => startGen(d, go);
+}
+async function startGen(d, btn){
+  btn.disabled = true; btn.textContent = "Starting…"; $("msg").textContent = "";
+  let r = null;
+  try {
+    r = await call(d.kind === "video" ? "fuse_generate_video" : "fuse_generate_image", { prompt: d.prompt, model: d.model || undefined, confirmation_token: d.confirmation_token });
+    if (!r || r.isError) throw null;
+    const g = r.structuredContent || r;
+    current = Object.assign({}, g, { prompt: g.prompt || d.prompt, kind: g.kind || d.kind, model_label: d.model_label || g.model_label });
+    renderGen(current);
+  } catch (e) {
+    const c = r && r.content; btn.disabled = false; btn.textContent = "Generate";
+    $("msg").textContent = (Array.isArray(c) && c.length) ? c.map(x => x && x.text || "").join(" ").trim() : ((e && e.message) || "Couldn't start the generation.");
+  }
 }
 function renderGen(d){
   const st = String(d.status||"queued"); const pending = st==="queued"||st==="running";
