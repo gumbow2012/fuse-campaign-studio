@@ -94,7 +94,7 @@ export async function verifyBatchToken(admin: Admin, auth: AuthContext, items: B
   }
 }
 
-async function inChunks<T, R>(list: T[], fn: (t: T, i: number) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+export async function inChunks<T, R>(list: T[], fn: (t: T, i: number) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
   const out: PromiseSettledResult<R>[] = [];
   for (let i = 0; i < list.length; i += PARALLEL) {
     out.push(...(await Promise.allSettled(list.slice(i, i + PARALLEL).map((t, j) => fn(t, i + j)))));
