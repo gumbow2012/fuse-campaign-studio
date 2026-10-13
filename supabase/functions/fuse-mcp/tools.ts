@@ -21,6 +21,7 @@ import { applyConfirmationCode, prepareGeneration, verifyGenerationToken } from 
 import { IMAGE_KEYS, listGenerationModels, VIDEO_KEYS } from "./core/models.ts";
 import { getStandaloneGenerationStatus, listStandaloneGenerations, startStandaloneGeneration } from "./core/generate.ts";
 import { getBatchStatus, MAX_BATCH, normalizeItems, prepareBatch, startBatch, verifyBatchToken } from "./core/batch.ts";
+import { createPlan, getPlanStatus, MAX_PLAN_GENERATIONS, MAX_STEPS, rerunStep, runPlan } from "./core/plans.ts";
 
 export type JsonSchema = Record<string, unknown>;
 
@@ -70,6 +71,20 @@ const BATCH_ITEMS = () => arr(obj({
   ...imageOptionSchemas(),
   generate_audio: bool("Optional video native audio"),
 }, ["kind", "prompt"]), "The images/videos to generate, one entry each (max 10)");
+
+const PLAN_STEPS = () => arr(obj({
+  id: str("Short step name, e.g. shots or clips (default s1, s2, ...)"),
+  kind: str("image or video", { enum: ["image", "video"] }),
+  prompt: str("What this step generates"),
+  count: num("How many to make in this step (1-10; a step built on another defaults to one per earlier output)"),
+  from_step: str("Optional id of an EARLIER image step to build on: an image step uses each of its images as a reference, a video step animates each of its images"),
+  model: str(`Optional model key. ${MODEL_HELP}`, { enum: [...IMAGE_KEYS, ...VIDEO_KEYS] }),
+  duration: num("Optional video seconds"),
+  aspect_ratio: str("Optional, e.g. 9:16"),
+  reference_image_urls: arr(str("https URL"), "Optional product/reference photos for image steps"),
+  ...imageOptionSchemas(),
+  generate_audio: bool("Optional video native audio"),
+}, ["kind", "prompt"]), "The steps in order (max 8)");
 
 const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
@@ -670,6 +685,76 @@ export const TOOLS: ToolDef[] = [
       return await getBatchStatus(ctx.admin, ctx.auth, args.generation_ids);
     },
     summarize: (r) => `${r.complete}/${r.total} ready, ${r.pending} running, ${r.failed} failed.${r.pending ? ` Check again in ~${r.next_poll_after_seconds}s.` : ""}`,
+  },
+  {
+    name: "fuse_create_plan",
+    title: "Plan a multi-step creative job (no credits used)",
+    description: `Use for creative jobs with more than one step, for example "4 product shots, then turn the 2 best angles into videos" or "a lookbook of 6 images plus a video of each". Saves a plan of up to ${MAX_STEPS} steps (up to ${MAX_PLAN_GENERATIONS} images and videos in total). A step can build on an earlier image step's results. Returns the per-step and total credit estimate, the user's balance, a plan_id and one confirmation_code for the whole plan. Generates nothing and uses no credits. Show the summary, wait for the user's approval, then call fuse_run_plan. Requires a connected FUSE account.`,
+    scope: "fuse.runs.prepare",
+    inputSchema: obj({ title: str("Short name for the plan"), steps: PLAN_STEPS() }, ["steps"]),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    rest: { method: "POST", path: "/api/plans", operationId: "createPlan", summary: "Create a multi-step plan" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.prepare");
+      return neutralize(ctx, await createPlan(ctx.admin, ctx.auth, { title: args.title, steps: args.steps }));
+    },
+    summarize: (r) => `${r.confirmation_summary} plan_id=${r.plan_id}`,
+  },
+  {
+    name: "fuse_run_plan",
+    title: "Run an approved plan",
+    description: "Starts a plan from fuse_create_plan after the user approved its cost, and charges each generation's credits to the user's FUSE balance as it starts. Pass plan_id and the confirmation_code from fuse_create_plan (or its confirmation_token); in ChatGPT the plan is refused without it. Steps that do not depend on each other start at the same time; steps built on an earlier step start when it finishes. Returns each step's status. Requires a connected FUSE account.",
+    scope: "fuse.runs.create",
+    inputSchema: obj({
+      plan_id: str("plan_id from fuse_create_plan"),
+      confirmation_code: str("Short code from fuse_create_plan, e.g. FUSE-7KQ2"),
+      confirmation_token: str("Token from fuse_create_plan (the short confirmation_code is easier to pass)"),
+    }, ["plan_id"]),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    rest: { method: "POST", path: "/api/plans/{plan_id}/run", operationId: "runPlan", summary: "Run a plan" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.create");
+      await applyConfirmationCode(ctx.admin, ctx.auth, "generation", args);
+      return await runPlan(ctx.admin, ctx.auth, String(args.plan_id), args.confirmation_token, isChatGpt(ctx));
+    },
+    summarize: (r) => `Plan ${r.plan_id} ${r.status}: ${r.steps.map((s: any) => `${s.id} ${s.status}`).join(", ")}. Check again with fuse_get_plan_status in ~${r.next_poll_after_seconds ?? 15}s.`,
+  },
+  {
+    name: "fuse_get_plan_status",
+    title: "Check a plan and continue it",
+    description: "Checks a running plan: each step's status, finished outputs (signed URLs) and credits used so far. When a step finishes, this also starts the steps that were waiting on it, as already approved in the plan; it never adds steps or cost beyond the approved plan. Call it about every 15 seconds until the plan is complete. Requires a connected FUSE account.",
+    scope: "fuse.runs.create",
+    inputSchema: obj({ plan_id: str("plan_id from fuse_create_plan") }, ["plan_id"]),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    rest: { method: "GET", path: "/api/plans/{plan_id}", operationId: "getPlanStatus", summary: "Get plan status" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.create");
+      return await getPlanStatus(ctx.admin, ctx.auth, String(args.plan_id));
+    },
+    summarize: (r) => `Plan ${r.status}: ${r.steps_complete}/${r.steps_total} steps done, ${r.credits_used_so_far} credits used. ${r.steps.map((s: any) => `${s.id} ${s.status}${s.outputs.length ? ` (${s.outputs.length} ready)` : ""}`).join(", ")}.`,
+  },
+  {
+    name: "fuse_rerun_plan_step",
+    title: "Re-run one step of a plan",
+    description: "Re-runs a single step of a plan, optionally with a new prompt or model, without redoing the other steps. Set include_downstream to also redo the steps built on it. Called without a confirmation_code it only returns the cost and a code (no credits used); called again with that code after the user approves, it starts the re-run and charges the credits. Requires a connected FUSE account.",
+    scope: "fuse.runs.create",
+    inputSchema: obj({
+      plan_id: str("plan_id"),
+      step_id: str("Id of the step to re-run"),
+      prompt: str("Optional new prompt for that step"),
+      model: str(`Optional new model key. ${MODEL_HELP}`, { enum: [...IMAGE_KEYS, ...VIDEO_KEYS] }),
+      include_downstream: bool("Also redo the steps built on this one"),
+      confirmation_code: str("Code from the first (no-cost) call, after the user approves"),
+      confirmation_token: str("Token from the first call (the short confirmation_code is easier to pass)"),
+    }, ["plan_id", "step_id"]),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    rest: { method: "POST", path: "/api/plans/{plan_id}/rerun", operationId: "rerunPlanStep", summary: "Re-run a plan step" },
+    async handler(args, ctx) {
+      needScope(ctx, "fuse.runs.create");
+      await applyConfirmationCode(ctx.admin, ctx.auth, "generation", args);
+      return neutralize(ctx, await rerunStep(ctx.admin, ctx.auth, args as any, isChatGpt(ctx)));
+    },
+    summarize: (r) => r.needs_confirmation ? r.confirmation_summary : `Re-running; plan ${r.status}. Check with fuse_get_plan_status.`,
   },
   {
     name: "fuse_get_generation_status",
