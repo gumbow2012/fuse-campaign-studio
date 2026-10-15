@@ -22,9 +22,6 @@ import {
   IMAGE_MODEL,
   referenceToVideoEndpoint,
   submitFalJob,
-  submitKlingVideoEditJob,
-  buildKlingVideoEditInput,
-  KLING_VIDEO_EDIT_ENDPOINT,
   videoFallbackUsdPerSecond,
 } from "../_shared/fal.ts";
 import {
@@ -40,8 +37,8 @@ import {
   type AssemblySubjectModel,
   buildReconstructionPromptV2,
   requiresFusedAssembly,
+  swapsAnyModel,
 } from "../_shared/outfit-swap-assembly.ts";
-import { type DirectSubject, planDirectSwap } from "../_shared/subject-swap.ts";
 
 /**
  * Outfit Swap: per-frame nano-banana wardrobe edits + one Seedance
@@ -335,7 +332,9 @@ async function startSwapFrame(admin: AdminClient, args: {
 
   const garments = (Array.isArray(args.garments) ? args.garments : [])
     .filter((garment) => String(garment?.url ?? "").trim());
-  if (!garments.length) throw new Error("Add at least one clothing reference");
+  // Model-only swaps (new person, same clothes) need no garment; everything else does.
+  const resolvedModels = await resolveSubjectModels(admin, args.userId, args.modelAssignment);
+  if (!garments.length && !swapsAnyModel(resolvedModels)) throw new Error("Add at least one clothing reference, or choose a replacement model");
 
   // ---- LEGACY PATH (unchanged): 1 subject, keep_original, no rear back-design.
   // REF order matters: the source frame is always image 1.
@@ -349,7 +348,6 @@ async function startSwapFrame(admin: AdminClient, args: {
 
   // ---- PHASE 5 FUSED PATH: source frame + identity refs + orientation-correct
   // garment refs → ONE nano-banana edit. Never two sequential edits.
-  const resolvedModels = await resolveSubjectModels(admin, args.userId, args.modelAssignment);
   const needsFused = requiresFusedAssembly({
     frameSubjects: args.frameSubjects ?? [],
     garments: garments as AssemblyGarment[],
@@ -703,109 +701,6 @@ async function startAnimateFrame(admin: AdminClient, args: {
 }
 
 
-/* ===================== SUBJECT SWAP — direct (one pass) ===================== */
-/**
- * Genjutsu-style direct swap: the source clip + the replacement person(s) as Kling
- * "elements" (front photo + up to 3 more angles) + optional garment photos go to
- * Kling O3 Pro video edit in ONE request. Motion, camera, timing, background and
- * the original audio come from the clip. No frame review step.
- * Limits (provider): clip 3–15 s, 720–3840 px edges, elements + images ≤ 4.
- */
-const DIRECT_SWAP_FALLBACK_USD_PER_SECOND = 0.168;
-
-async function startDirectSwap(admin: AdminClient, args: {
-  userId: string;
-  privileged?: boolean;
-  sourceVideo: unknown;
-  sourceMeta?: { duration?: number; width?: number; height?: number } | null;
-  subjects: Array<{ subjectId?: string; description?: string }>;
-  totalSubjectsInClip?: number;
-  modelAssignment?: Record<string, any>;
-  garments?: any[];
-  outfit?: string;
-  keepAudio?: boolean;
-  consent?: boolean;
-  extraPrompt?: string;
-  webhookBase: string;
-}) {
-  const resolvedModels = await resolveSubjectModels(admin, args.userId, args.modelAssignment);
-  const subjectIds = new Set([
-    ...(Array.isArray(args.subjects) ? args.subjects.map((s) => String(s?.subjectId ?? "")) : []),
-    ...Object.keys(resolvedModels),
-  ].filter(Boolean));
-  const descriptions = new Map((args.subjects ?? []).map((s) => [String(s?.subjectId ?? ""), String(s?.description ?? "").slice(0, 120)]));
-  const subjects: DirectSubject[] = [...subjectIds].map((id) => ({ subjectId: id, description: descriptions.get(id) || undefined, model: resolvedModels[id] ?? { modelSource: "keep_original" } }));
-  if (subjects.some((s) => s.model.modelSource === "upload") && args.consent !== true) {
-    throw new Error("Confirm you have the rights and the person's consent to use the uploaded photos");
-  }
-  const plan = planDirectSwap({
-    subjects,
-    totalSubjectsInClip: Math.max(Number(args.totalSubjectsInClip ?? 0) || 0, subjects.length),
-    garments: Array.isArray(args.garments) ? args.garments : [],
-    outfit: args.outfit === "garments" ? "garments" : "keep",
-    extraPrompt: args.extraPrompt,
-  });
-  const sourceVideo = await resolveOwnedSourceVideo(admin, args.userId, args.sourceVideo);
-  const meta = args.sourceMeta ?? {};
-  const imageUrls = (await resolveExecutionUrls(admin, plan.imageUrls)) as string[];
-  const elements = await Promise.all(plan.elements.map(async (el) => {
-    const [front, ...rest] = (await resolveExecutionUrls(admin, [el.frontal_image_url, ...el.reference_image_urls])) as string[];
-    return { frontal_image_url: front, reference_image_urls: rest.length ? rest : [front] };
-  }));
-  // Validate the whole provider payload BEFORE inserting a row or charging.
-  buildKlingVideoEditInput({
-    prompt: plan.prompt, videoUrl: sourceVideo.executionUrl, imageUrls, elements,
-    keepAudio: args.keepAudio !== false, sourceDurationSec: meta.duration, sourceWidth: meta.width, sourceHeight: meta.height,
-  });
-
-  const { data: inserted, error: insertError } = await admin
-    .from("studio_generations")
-    .insert({ user_id: args.userId, status: "queued", kind: "video", provider: "fal", prompt: plan.prompt })
-    .select("*")
-    .single();
-  if (insertError || !inserted) throw new Error(insertError?.message ?? "Could not start the swap");
-
-  try {
-    const seconds = Math.min(15, Math.max(3, Math.ceil(Number(meta.duration) || 15)));
-    const estimatedCostUsd = await estimateUsd({ endpointId: KLING_VIDEO_EDIT_ENDPOINT, seconds, fallbackUsdPerSecond: DIRECT_SWAP_FALLBACK_USD_PER_SECOND });
-    await chargeCredits(admin, inserted.id, args.userId, args.privileged === true, estimatedCostUsd, "subject swap");
-    const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
-    const { requestId, endpointId, input } = await submitKlingVideoEditJob({
-      prompt: plan.prompt, videoUrl: sourceVideo.executionUrl, imageUrls, elements,
-      keepAudio: args.keepAudio !== false, sourceDurationSec: meta.duration, sourceWidth: meta.width, sourceHeight: meta.height,
-      webhookUrl,
-    });
-    const { data: updated } = await admin
-      .from("studio_generations")
-      .update({
-        status: "running",
-        provider_model: endpointId,
-        provider_request_id: requestId,
-        estimated_cost_usd: estimatedCostUsd,
-        estimated_credits: creditsFromUsd(estimatedCostUsd),
-        input_payload: {
-          ...input,
-          feature: "outfit-swap",
-          stage: "direct_swap",
-          source_video: sourceVideo.source,
-          swapped_subjects: plan.swappedCount,
-          outfit_mode: args.outfit === "garments" ? "garments" : "keep",
-        },
-      })
-      .eq("id", inserted.id)
-      .select("*")
-      .single();
-    return serialize(updated ?? inserted);
-  } catch (error) {
-    await admin
-      .from("studio_generations")
-      .update({ status: "failed", error_log: errorMessage(error).slice(0, 10000), completed_at: new Date().toISOString() })
-      .eq("id", inserted.id);
-    await refundIfNeeded(admin, inserted.id);
-    throw error;
-  }
-}
-
 /** Poll fal for an in-flight row and persist any terminal result. */
 async function syncRow(admin: AdminClient, row: any) {
   if (row.status !== "running" && row.status !== "queued") return serialize(row);
@@ -970,25 +865,6 @@ Deno.serve(async (req) => {
       return json({ generation });
     }
 
-    if (action === "direct_swap") {
-      const generation = await startDirectSwap(admin, {
-        userId: user.id,
-        privileged,
-        sourceVideo: body.sourceVideo,
-        sourceMeta: body.sourceMeta ?? null,
-        subjects: Array.isArray(body.subjects) ? body.subjects : [],
-        totalSubjectsInClip: body.totalSubjectsInClip,
-        modelAssignment: body.modelAssignment ?? {},
-        garments: body.garments ?? [],
-        outfit: body.outfit,
-        keepAudio: body.keepAudio,
-        consent: body.consent === true,
-        extraPrompt: body.extraPrompt,
-        webhookBase,
-      });
-      return json({ generation });
-    }
-
     // Recent Outfit Swap video generations for the caller — powers the Library
     // and lets a refreshed page re-attach to in-flight jobs.
     if (action === "animate_frame") {
@@ -1018,7 +894,7 @@ Deno.serve(async (req) => {
         .filter((row: any) => {
           const payload = (row.input_payload ?? {}) as Record<string, unknown>;
           return payload.feature === "outfit-swap" &&
-            (payload.stage === "reconstruction" || payload.stage === "frame_animation" || payload.stage === "direct_swap");
+            (payload.stage === "reconstruction" || payload.stage === "frame_animation");
         })
         .slice(0, limit);
 

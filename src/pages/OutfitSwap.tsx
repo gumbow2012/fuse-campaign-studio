@@ -130,7 +130,7 @@ function SectionCard({
   hint,
   children,
 }: {
-  step: React.ReactNode;
+  step: number;
   title: string;
   hint?: string;
   children: React.ReactNode;
@@ -701,73 +701,6 @@ export default function OutfitSwap() {
   const soloSubjectId = useMemo(() => primarySubjectId(analysis), [analysis]);
   const soloModel = modelAssignment[soloSubjectId] ?? KEEP_ORIGINAL_MODEL;
 
-  /* ------------- Quick subject swap (one pass, no frame review) ------------- */
-  const [quickOutfit, setQuickOutfit] = useState<"keep" | "garments">("keep");
-  const [quickConsent, setQuickConsent] = useState(false);
-  const [quickSwapping, setQuickSwapping] = useState(false);
-  /** Every tracked person (or the one solo subject) — each can be kept or replaced. */
-  const quickSubjects = useMemo(
-    () =>
-      analysis?.subjectTracks?.length
-        ? analysis.subjectTracks.map((t) => ({ subjectId: t.subjectId, description: t.description }))
-        : [{ subjectId: soloSubjectId, description: "" }],
-    [analysis, soloSubjectId],
-  );
-  const quickReplaced = quickSubjects.filter(
-    (s) => (modelAssignment[s.subjectId]?.modelSource ?? "keep_original") !== "keep_original",
-  );
-  const quickUsesUpload = quickReplaced.some((s) => modelAssignment[s.subjectId]?.modelSource === "upload");
-  const quickRefCount =
-    quickReplaced.length +
-    (quickOutfit === "garments"
-      ? garments.reduce((n, g) => n + (g.url ? 1 : 0) + (g.hasBackDesign && g.backUrl ? 1 : 0), 0)
-      : 0);
-  const quickSeconds = Math.min(15, Math.max(3, Math.ceil(meta?.duration ?? 15)));
-  const quickCredits = creditsFromUsd(0.168 * quickSeconds);
-  const quickProblem = !sourceVideo
-    ? "Upload a source video first."
-    : meta && (meta.duration < 3 || meta.duration > 15)
-      ? "Quick swap needs a clip between 3 and 15 seconds."
-      : meta && Math.min(meta.width, meta.height) < 720
-        ? "Quick swap needs a clip at least 720 px on its short side."
-        : !quickReplaced.length
-          ? "Choose a replacement person below."
-          : quickOutfit === "garments" && !garments.some((g) => g.url)
-            ? "Add a clothing photo, or keep their outfit."
-            : quickRefCount > 4
-              ? `This setup needs ${quickRefCount} references; quick swap fits 4. Use fewer clothing photos or Precision mode.`
-              : quickUsesUpload && !quickConsent
-                ? "Confirm you have the person's consent."
-                : null;
-
-  const runQuickSwap = useCallback(async () => {
-    if (quickProblem) {
-      toast.error(quickProblem);
-      return;
-    }
-    setQuickSwapping(true);
-    try {
-      const data = await callOutfitSwap<{ generation: SwapGeneration }>({
-        action: "direct_swap",
-        sourceVideo,
-        sourceMeta: meta ? { duration: meta.duration, width: meta.width, height: meta.height } : null,
-        subjects: quickSubjects,
-        totalSubjectsInClip: analysis?.subjectCount ?? quickSubjects.length,
-        modelAssignment,
-        garments,
-        outfit: quickOutfit,
-        keepAudio: true,
-        consent: quickConsent,
-        extraPrompt,
-      });
-      setVideos((prev) => [data.generation, ...prev]);
-      toast.success("Subject swap started — it usually takes a few minutes");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not start the swap");
-    } finally {
-      setQuickSwapping(false);
-    }
-  }, [quickProblem, sourceVideo, meta, quickSubjects, analysis, modelAssignment, garments, quickOutfit, quickConsent, extraPrompt]);
 
 
   const setSubjectGarment = useCallback(
@@ -927,8 +860,11 @@ export default function OutfitSwap() {
 
 
   const runSelectedSwaps = useCallback(async () => {
-    if (!garments.length) {
-      toast.error("Add at least one clothing reference");
+    const swapsModel = Object.values(modelAssignment).some(
+      (model) => (model?.modelSource ?? "keep_original") !== "keep_original",
+    );
+    if (!garments.length && !swapsModel) {
+      toast.error("Add a clothing reference, or choose a replacement model");
       return;
     }
     // BACK is required once the user says the garment has a back design.
@@ -950,7 +886,7 @@ export default function OutfitSwap() {
     } finally {
       setSwapping(false);
     }
-  }, [selectedFrames, garments, swapFrame]);
+  }, [selectedFrames, garments, swapFrame, modelAssignment]);
 
   const removeSwap = useCallback(async (frameIndex: number) => {
     const swap = swaps[frameIndex];
@@ -1780,6 +1716,10 @@ export default function OutfitSwap() {
                 "Keep original" (the default) is exactly today's behaviour. */}
             {subjectTracks.length > 1 ? null : (
               <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl sm:p-5">
+                <h2 className="font-heading text-sm font-semibold text-foreground sm:text-base">Model swap (optional)</h2>
+                <p className="mb-3 mt-0.5 text-xs text-muted-foreground">
+                  Replace the person too. Pick a model and every frame gets the new person — with your clothing if you added any, or their original outfit if you didn&apos;t.
+                </p>
                 <div className="max-w-sm">
                   <SubjectModelSelector
                     userId={user?.id ?? null}
@@ -1846,83 +1786,6 @@ export default function OutfitSwap() {
             ) : null}
 
 
-
-            <SectionCard
-              step="⚡"
-              title="Quick subject swap"
-              hint="Put a different person into your clip in one pass — same motion, camera and sound. No frame review. 3–15 s clips."
-            >
-              <div className="space-y-3">
-                {quickSubjects.map((subject, index) => (
-                  <div key={subject.subjectId} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <p className="mb-2 text-xs font-medium text-foreground">
-                      {quickSubjects.length > 1
-                        ? `Person ${index + 1}${subject.description ? ` — ${subject.description}` : ""}`
-                        : "The person in your clip"}
-                    </p>
-                    <SubjectModelSelector
-                      userId={user?.id}
-                      model={modelAssignment[subject.subjectId] ?? KEEP_ORIGINAL_MODEL}
-                      onChange={(next) => setSubjectModel(subject.subjectId, next)}
-                      compact
-                    />
-                  </div>
-                ))}
-
-                <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Outfit">
-                  {([
-                    ["keep", "Keep their outfit"],
-                    ["garments", `Use my clothing${garments.length ? ` (${garments.length})` : ""}`],
-                  ] as const).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      role="radio"
-                      aria-checked={quickOutfit === value}
-                      onClick={() => setQuickOutfit(value)}
-                      className={cn(
-                        "rounded-xl border px-3 py-2 text-xs font-medium transition-colors",
-                        quickOutfit === value
-                          ? "border-cyan-200/60 bg-cyan-400/15 text-cyan-100"
-                          : "border-white/12 bg-white/[0.03] text-foreground/70 hover:border-cyan-200/40",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {quickUsesUpload ? (
-                  <label className="flex items-start gap-2 text-[11px] text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={quickConsent}
-                      onChange={(event) => setQuickConsent(event.target.checked)}
-                      className="mt-0.5"
-                    />
-                    I have the rights to these photos and the person&apos;s consent to put them in this video.
-                  </label>
-                ) : null}
-
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span>Original audio kept · {quickSeconds}s</span>
-                  <span>{costPreview(quickCredits, 0.168 * quickSeconds)}</span>
-                </div>
-
-                <Button
-                  onClick={runQuickSwap}
-                  disabled={quickSwapping || Boolean(quickProblem)}
-                  className="w-full rounded-xl text-xs font-semibold"
-                >
-                  {quickSwapping ? <Loader2 size={14} className="animate-spin" /> : null}
-                  Swap subject
-                </Button>
-                {quickProblem ? <p className="text-[11px] text-muted-foreground">{quickProblem}</p> : null}
-                <p className="text-[11px] text-muted-foreground">
-                  Need several people with their own outfits, or frame-by-frame control? Use the steps below (Precision).
-                </p>
-              </div>
-            </SectionCard>
 
             <SectionCard step={5} title="Video generation" hint="Your clip, rebuilt in the new wardrobe.">
               <div className="space-y-3">

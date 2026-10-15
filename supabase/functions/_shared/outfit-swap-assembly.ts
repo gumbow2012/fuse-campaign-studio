@@ -186,6 +186,40 @@ export function requiresFusedAssembly(args: {
   });
 }
 
+
+const BOTTOM_TYPE = /pant|jean|short|skirt|trouser|legging|jogger|bottom/i;
+
+/**
+ * Fills the two gaps that made model swap unreliable in the proven pipeline:
+ *  - no tracked subject in this frame (analysis not run / person not detected) but a
+ *    model IS assigned → treat each swapped subject as present with unknown orientation;
+ *  - exactly one subject and no explicit cast slots → that one person wears EVERY
+ *    supplied garment (the simple single-subject flow never shows the cast picker).
+ */
+export function effectiveSubjects(args: {
+  frameSubjects?: AssemblyFrameSubject[] | null;
+  garments?: AssemblyGarment[] | null;
+  castAssignment?: Record<string, AssemblySubjectWardrobe> | null;
+  modelAssignment?: Record<string, AssemblySubjectModel> | null;
+}): { subjects: AssemblyFrameSubject[]; soloGarments: AssemblyGarment[] | null } {
+  let subjects = (args.frameSubjects ?? []).filter((subject) => trimmed(subject?.subjectId));
+  if (!subjects.length) {
+    subjects = Object.entries(args.modelAssignment ?? {})
+      .filter(([, model]) => normalizeModelSource(model?.modelSource) !== "keep_original")
+      .map(([subjectId]) => ({ subjectId, garmentOrientation: "UNCERTAIN" }));
+  }
+  const garments = (args.garments ?? []).filter((garment) => garmentFrontUrl(garment) || garmentBackUrl(garment));
+  if (subjects.length !== 1 || !garments.length) return { subjects, soloGarments: null };
+  const wardrobe = (args.castAssignment ?? {})[trimmed(subjects[0].subjectId)] ?? {};
+  const hasSlots = Boolean(trimmed(wardrobe.topGarmentId) || trimmed(wardrobe.bottomGarmentId));
+  return { subjects, soloGarments: hasSlots ? null : garments };
+}
+
+/** Pure: does any subject get a replacement person? */
+export function swapsAnyModel(models: Record<string, AssemblySubjectModel> | null | undefined) {
+  return Object.values(models ?? {}).some((model) => normalizeModelSource(model?.modelSource) !== "keep_original");
+}
+
 /** Angle-appropriate identity references (max 2), master first. */
 function pickIdentityRefs(model: AssemblySubjectModel, orientation: SwapOrientation): string[] {
   const source = normalizeModelSource(model.modelSource);
@@ -250,9 +284,14 @@ export function assembleFrameEdit(args: {
     if (id) garmentById.set(id, garment);
   }
 
-  const subjects = (args.frameSubjects ?? []).filter((subject) => trimmed(subject?.subjectId));
   const cast = args.castAssignment ?? {};
   const models = args.modelAssignment ?? {};
+  const { subjects, soloGarments } = effectiveSubjects({
+    frameSubjects: args.frameSubjects,
+    garments: args.garments,
+    castAssignment: cast,
+    modelAssignment: models,
+  });
 
   const references: AssembledReference[] = [
     { url: sourceFrameUrl, index: 1, role: "source_frame", note: "authority for pose/motion/framing/environment/camera/lighting" },
@@ -309,10 +348,12 @@ export function assembleFrameEdit(args: {
 
     // 2. WARDROBE — orientation-correct garment references.
     const wardrobe = cast[subjectId] ?? {};
-    const slots: { slot: "top" | "bottom"; garment: AssemblyGarment | undefined }[] = [
-      { slot: "top", garment: garmentById.get(trimmed(wardrobe.topGarmentId)) },
-      { slot: "bottom", garment: garmentById.get(trimmed(wardrobe.bottomGarmentId)) },
-    ];
+    const slots: { slot: "top" | "bottom"; garment: AssemblyGarment | undefined }[] = soloGarments
+      ? soloGarments.map((garment) => ({ slot: BOTTOM_TYPE.test(trimmed(garment.type)) ? "bottom" : "top", garment }))
+      : [
+        { slot: "top", garment: garmentById.get(trimmed(wardrobe.topGarmentId)) },
+        { slot: "bottom", garment: garmentById.get(trimmed(wardrobe.bottomGarmentId)) },
+      ];
 
     const garmentPlan: AssembledFrameEdit["plan"]["subjects"][number]["garmentRefs"] = [];
 
@@ -350,6 +391,12 @@ export function assembleFrameEdit(args: {
           `For ${subjectLabel}: replace the ${type}${label ? ` (${label})` : ""} with the ${side} view shown in reference image ${entry.index}; this subject's ${type} is currently seen ${orientation.toLowerCase().replace(/_/g, " ")}.${authority}`,
         );
       }
+    }
+
+    if (!garmentPlan.length && modelSource !== "keep_original" && identityIndexes.length) {
+      subjectInstructions.push(
+        `For ${subjectLabel}: keep exactly the clothing, shoes and accessories this person wears in image 1 — only the person changes.`,
+      );
     }
 
     planSubjects.push({
@@ -444,10 +491,10 @@ export function buildReconstructionPromptV2(args: {
   modelAssignment?: Record<string, AssemblySubjectModel> | null;
   extraPrompt?: string | null;
 }): ReconstructionPromptResult {
-  const subjects = (args.frameSubjects ?? []).filter((subject) => trimmed(subject?.subjectId));
   const garments = args.garments ?? [];
   const cast = args.castAssignment ?? {};
   const models = args.modelAssignment ?? {};
+  const { subjects, soloGarments } = effectiveSubjects({ frameSubjects: args.frameSubjects, garments, castAssignment: cast, modelAssignment: models });
 
   const needsEnrichment = requiresFusedAssembly({
     frameSubjects: subjects,
@@ -465,6 +512,16 @@ export function buildReconstructionPromptV2(args: {
   const planSubjects: ReconstructionPromptResult["plan"]["subjects"] = subjects.map((subject) => {
     const subjectId = trimmed(subject.subjectId);
     const wardrobe = cast[subjectId] ?? {};
+    if (soloGarments) {
+      const describe = (list: AssemblyGarment[]) => list.map((g) => garmentDescriptor(g)).filter(Boolean).join(" and ") || null;
+      return {
+        subjectId,
+        modelSource: normalizeModelSource(models[subjectId]?.modelSource),
+        top: describe(soloGarments.filter((g) => !BOTTOM_TYPE.test(trimmed(g.type)))),
+        bottom: describe(soloGarments.filter((g) => BOTTOM_TYPE.test(trimmed(g.type)))),
+        hasBackDesign: soloGarments.some((g) => g.hasBackDesign === true),
+      };
+    }
     const top = garmentById.get(trimmed(wardrobe.topGarmentId));
     const bottom = garmentById.get(trimmed(wardrobe.bottomGarmentId));
     return {
@@ -515,7 +572,9 @@ export function buildReconstructionPromptV2(args: {
   lines.push(
     "Keep every logo, colorway, graphic placement, text, material and garment construction identical across the whole clip.",
     "Do not change the environment, background, lighting, or any clothing, jewelry, shoes or accessories that were not replaced.",
-    "Same video, same people, new wardrobe.",
+    swapsAnyModel(models)
+      ? (planSubjects.some((subject) => subject.top || subject.bottom) ? "Same video, new person, new wardrobe." : "Same video, same clothing, new person.")
+      : "Same video, same people, new wardrobe.",
     trimmed(args.extraPrompt),
   );
 
@@ -524,4 +583,23 @@ export function buildReconstructionPromptV2(args: {
     enriched: true,
     plan: { subjectCount: count, subjects: planSubjects },
   };
+}
+
+/** Self-check: deno run supabase/functions/_shared/outfit-swap-assembly.ts */
+if ((import.meta as { main?: boolean }).main) {
+  const model = { modelSource: "upload", identityRefs: ["https://m/face.jpg"] };
+  const hoodie = { id: "g1", url: "https://g/hoodie.png", type: "hoodie" };
+  // 1) no tracked subject + model assigned → identity still attached
+  const noTrack = assembleFrameEdit({ sourceFrameUrl: "https://f/1.png", frameSubjects: [], garments: [], modelAssignment: { subject_1: model }, maxReferenceImages: 14 });
+  console.assert(noTrack.imageUrls.includes("https://m/face.jpg") && /REPLACE the person/.test(noTrack.prompt) && /keep exactly the clothing/.test(noTrack.prompt), "model-only, no analysis");
+  // 2) one subject, model + garment, no cast slots → garment still applied
+  const solo = assembleFrameEdit({ sourceFrameUrl: "https://f/1.png", frameSubjects: [{ subjectId: "subject_1", garmentOrientation: "FRONT" }], garments: [hoodie], modelAssignment: { subject_1: model }, maxReferenceImages: 14 });
+  console.assert(solo.imageUrls.includes("https://g/hoodie.png") && solo.imageUrls.includes("https://m/face.jpg") && solo.plan.editCount === 1, "solo model + outfit in one edit");
+  // 3) multi-subject keeps explicit cast behaviour (no auto-dressing)
+  const multi = effectiveSubjects({ frameSubjects: [{ subjectId: "a" }, { subjectId: "b" }], garments: [hoodie], castAssignment: {}, modelAssignment: {} });
+  console.assert(multi.soloGarments === null, "multi-subject not auto-dressed");
+  // 4) reconstruction wording
+  const rec = buildReconstructionPromptV2({ legacyPrompt: "x", frameSubjects: [], garments: [], modelAssignment: { subject_1: model } });
+  console.assert(rec.enriched && /same clothing, new person/.test(rec.prompt), "reconstruction model-only");
+  console.log("outfit-swap-assembly self-check ok");
 }
