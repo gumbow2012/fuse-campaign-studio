@@ -142,3 +142,64 @@ test('missing optional detail never invents a reference', () => {
   const ctx = compileHatFilmRun(ok(base));
   assert.equal(ctx.shots.flatMap((s) => s.references).filter((r) => r.slot.startsWith('detail')).length, 0);
 });
+
+import { judgeStill, decideAfterCheck, applyCheck, emptyShotQa, normalizeReferenceProfile, brimConflicts, colorFamily, qaCallCount } from '../../supabase/functions/_shared/hat-film-qa.ts';
+const shot = (n) => HAT_FILM_SHOTS[n - 1];
+const profile = { top_brim_color: 'black', under_brim_color: 'light gray', front_text: 'THE WORKING GENTLEMEN', back_text: 'Paper Chaser',
+  right_side_identity: 'embroidered skull wearing yellow construction helmet', left_side_identity: 'white text NOBODY CARES WORK HARDER', confidence: 0.9 };
+const good = { hat_present: true, hat_count: 1, side_shown: 'front', top_brim_color: 'black', under_brim_visible: false, under_brim_color: null,
+  visible_text: 'THE WORKING GENTLEMEN', text_legible: true, side_identity: '', any_text_or_logo: true, confidence: 0.9 };
+
+test('QA: correct front still passes', () => assert.equal(judgeStill(shot(1), profile, good).verdict, 'pass'));
+test('QA: wrong top brim fails (gray underside recolored the top)', () => {
+  const v = judgeStill(shot(1), profile, { ...good, top_brim_color: 'light gray' });
+  assert.equal(v.verdict, 'fail'); assert.match(v.issues.join(), /top of the brim/);
+});
+test('QA: three-hat shot with a gray upper bill fails', () => {
+  assert.equal(judgeStill(shot(11), profile, { ...good, hat_count: 3, side_shown: 'multiple', top_brim_color: 'gray' }).verdict, 'fail');
+});
+test('QA: reversed sides fail', () => {
+  const v = judgeStill(shot(4), profile, { ...good, side_shown: 'wearer_left', visible_text: '', side_identity: 'white text NOBODY CARES WORK HARDER' });
+  assert.equal(v.verdict, 'fail'); assert.match(v.issues.join(), /reversed/);
+  const mirrored = judgeStill(shot(4), profile, { ...good, side_shown: 'wearer_right', side_identity: 'NOBODY CARES WORK HARDER white text' });
+  assert.match(mirrored.issues.join(), /opposite side/);
+});
+test('QA: correct right side passes', () => {
+  assert.equal(judgeStill(shot(4), profile, { ...good, side_shown: 'wearer_right', visible_text: '', side_identity: 'skull with a yellow construction helmet, embroidered' }).verdict, 'pass');
+});
+test('QA: unreadable lettering fails', () => {
+  assert.match(judgeStill(shot(1), profile, { ...good, text_legible: false }).issues.join(), /unreadable/);
+  assert.equal(judgeStill(shot(1), profile, { ...good, visible_text: 'THE WROKNG GENTELMN' }).verdict, 'fail');
+});
+test('QA: environment shot with a generated logo fails', () => {
+  assert.equal(judgeStill(shot(6), profile, { ...good, hat_present: false, any_text_or_logo: true }).verdict, 'fail');
+});
+test('QA: low confidence is uncertain, never pass', () => {
+  assert.equal(judgeStill(shot(1), profile, { ...good, confidence: 0.4 }).verdict, 'uncertain');
+  assert.equal(judgeStill(shot(1), profile, null).verdict, 'uncertain');
+});
+test('QA: missing analyzer goes to review, never animates', () => {
+  assert.equal(decideAfterCheck(null, emptyShotQa(), false), 'needs_review');
+  assert.equal(decideAfterCheck({ verdict: 'pass', issues: [] }, emptyShotQa(), false), 'needs_review');
+});
+test('QA: one corrective retry, then needs review', () => {
+  const fail = { verdict: 'fail', issues: ['x'] };
+  let s = emptyShotQa();
+  const d1 = decideAfterCheck(fail, s, true); assert.equal(d1, 'retry');
+  s = applyCheck(s, fail, d1, 't'); assert.equal(s.retries, 1); assert.match(s.correction, /CORRECTION/);
+  const d2 = decideAfterCheck(fail, s, true); assert.equal(d2, 'needs_review');
+  assert.equal(decideAfterCheck({ verdict: 'uncertain', issues: [] }, s, true), 'needs_review');
+  s = applyCheck(s, fail, d2, 't'); assert.equal(s.status, 'needs_review'); assert.equal(s.retries, 1);
+});
+test('QA: top and underside colors recorded independently; uncertain analysis unusable', () => {
+  const n = normalizeReferenceProfile(profile); assert.ok(n.ok);
+  assert.equal(colorFamily(n.profile.top_brim_color), 'black'); assert.equal(colorFamily(n.profile.under_brim_color), 'gray');
+  assert.equal(normalizeReferenceProfile({ ...profile, confidence: 0.5 }).ok, false);
+  assert.equal(normalizeReferenceProfile({ ...profile, under_brim_color: '' }).ok, false);
+  assert.match(brimConflicts(profile, { top_brim_color: 'gray' })[0], /top brim/);
+});
+test('QA: analyzer call count is in the estimate (no invented price)', () => {
+  const e = estimateHatFilm({ imageUsd: 0.04, videoUsdPerSecond: 0.136, usdPerCredit: 0.098 });
+  assert.deepEqual({ base: e.analysis_calls.base, max: e.analysis_calls.max, usd: e.analysis_calls.usd }, { base: 12, max: 23, usd: null });
+  assert.deepEqual(qaCallCount(), { base: 12, max: 23 });
+});

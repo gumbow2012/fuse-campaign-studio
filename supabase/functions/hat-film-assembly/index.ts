@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
 
     const { job, context } = await loadJob(admin, jobId, user.id);
     const assembly = parseAssembly(job.result_payload?.[HAT_FILM_ASSEMBLY_KEY]);
-    const shots = await loadShots(admin, jobId);
+    const shots = await loadShots(admin, jobId, parseQa((job as any).result_payload?.[HAT_FILM_QA_KEY]));
     const phase = job.status === "failed" && phaseFor(shots, assembly) !== "ready" ? "needs_review" : phaseFor(shots, assembly);
 
     if (action === "state") {

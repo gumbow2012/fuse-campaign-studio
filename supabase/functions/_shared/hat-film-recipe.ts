@@ -257,5 +257,8 @@ export function estimateHatFilm(p: { imageUsd: number; videoUsdPerSecond: number
     stills, clips,
     base_usd: +baseUsd.toFixed(2), max_usd: +maxUsd.toFixed(2),
     base_credits: Math.ceil(baseUsd / p.usdPerCredit), max_credits: Math.ceil(maxUsd / p.usdPerCredit),
+    // Product-check calls (Gemini, billed to FUSE's analysis key, not in credits above;
+    // no verified price, so none is invented): 1 reference analysis + 1 per animated still, x2 with retries.
+    analysis_calls: { base: 1 + clips, max: 1 + clips * (1 + HAT_FILM_MAX_AUTO_RETRIES), usd: null as number | null },
   };
 }
