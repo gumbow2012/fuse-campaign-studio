@@ -184,11 +184,11 @@ export function hatFilmRawInputs(
  */
 export function detailArea(label: string): HatAngleSlot | null {
   const l = label.toLowerCase();
-  if (/left/.test(l)) return "left";
-  if (/right/.test(l)) return "right";
-  if (/(back|rear|closure|strap|snap\w*|buckle)/.test(l)) return "back";
-  if (/(inside|interior|lining|liner|under\w*|sweat\w*|tag|label)/.test(l)) return "inside";
-  if (/front/.test(l)) return "front";
+  if (/\bleft\b/.test(l)) return "left";
+  if (/\bright\b/.test(l)) return "right";
+  if (/\b(back|rear|closure|strap|snap\w*|buckle)\b/.test(l)) return "back";
+  if (/\b(inside|interior|lining|liner|under\w*|sweat\w*|tag|label)\b/.test(l)) return "inside";
+  if (/\bfront\b/.test(l)) return "front";
   return null;
 }
 
