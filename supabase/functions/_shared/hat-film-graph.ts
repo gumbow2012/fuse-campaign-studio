@@ -9,6 +9,15 @@ import { HAT_FILM_CLIP_SECONDS, HAT_FILM_FIELDS, HAT_FILM_RECIPE_ID, HAT_FILM_SH
 export const HAT_FILM_TEMPLATE_ID = "6a7f2c10-4b1e-4c3a-9d55-1f0e8a2b7c01";
 export const HAT_FILM_VERSION_ID = "6a7f2c10-4b1e-4c3a-9d55-1f0e8a2b7c02";
 export const HAT_FILM_VIDEO_MODEL = "kling-3.0-pro";
+/** Production nodes.name column is character varying(100). */
+export const NODE_NAME_MAX = 100;
+/** Shortens at a word boundary with an ellipsis so names stay readable within `max`. */
+export function fitName(text: string, max: number) {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s;,·-]+$/, "")}…`;
+}
 
 /** Deterministic UUIDv4-shaped id from a stable label. */
 function stableId(label: string): string {
@@ -47,11 +56,12 @@ export function buildHatFilmGraph(versionId = HAT_FILM_VERSION_ID) {
   });
 
   for (const shot of HAT_FILM_SHOTS) {
-    const label = `${String(shot.index).padStart(2, "0")} · ${shot.content}`.slice(0, 120);
+    // nodes.name is varchar(100) in production; keep every name inside it.
+    const label = fitName(`${String(shot.index).padStart(2, "0")} · ${shot.content}`, NODE_NAME_MAX);
     const stillKey = `still:${shot.id}`;
     nodes.push({
       id: hatFilmNodeId(stillKey), version_id: versionId, node_type: "image_gen", model_id: null, default_asset_id: null,
-      name: `${label} (still)`.slice(0, 120),
+      name: `${fitName(label, NODE_NAME_MAX - 8)} (still)`,
       prompt_config: {
         prompt: `Hat Brand Film ${shot.id} still — compiled at run time.`, aspect_ratio: "9:16", resolution: "2K",
         output_exposed: shot.kind === "logo_hold", hat_film_shot: shot.id, hat_film_stage: "still", recipe: HAT_FILM_RECIPE_ID,

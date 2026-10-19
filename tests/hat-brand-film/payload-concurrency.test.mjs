@@ -28,8 +28,15 @@ test("executor finalize merges outputs for hat runs and seeds assembly only if a
 });
 
 test("migration defines every guard op the writers use", () => {
-  const sql = src("supabase/migrations/20261019120000_patch_job_result_payload.sql");
+  const sql = src("docs/hat-brand-film/patch_job_result_payload.sql");
   for (const op of ["eq", "null_or_eq", "is_null", "not_eq_or_null", "lt", "key_absent"]) assert.match(sql, new RegExp(`'${op}'`));
   assert.match(sql, /for update/);
   assert.match(sql, /cur \|\| coalesce\(p_patch/);
+});
+
+test("every seeded node name fits the production nodes.name varchar(100)", async () => {
+  const { buildHatFilmGraph } = await import("../../supabase/functions/_shared/hat-film-graph.ts");
+  const g = buildHatFilmGraph();
+  for (const n of g.nodes) assert.ok(n.name.length <= 100, `${n.name.length}: ${n.name}`);
+  assert.ok(g.nodes.some((n) => n.name.endsWith(" (still)")));
 });
