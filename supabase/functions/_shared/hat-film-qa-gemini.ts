@@ -64,23 +64,25 @@ const refUrls = (ctx: HatFilmRunContext) => {
 };
 
 function jobStore(admin: Admin, jobId: string): QaStore {
-  let result: Record<string, unknown> = {};
   return {
     async read() {
       const { data, error } = await admin.from("execution_jobs").select("result_payload").eq("id", jobId).maybeSingle();
       if (error) throw new Error(`QA state read failed: ${error.message}`);
       if (!data) throw new Error("QA state read failed: run not found");
-      result = (data.result_payload ?? {}) as Record<string, unknown>;
-      const qa = parseQa(result[HAT_FILM_QA_KEY]);
+      const qa = parseQa(((data.result_payload ?? {}) as Record<string, unknown>)[HAT_FILM_QA_KEY]);
       return { qa, rev: qa.rev ?? 0 };
     },
     async write(qa, expectedRev) {
-      const path = `result_payload->${HAT_FILM_QA_KEY}->>rev`;
-      let q = admin.from("execution_jobs").update({ result_payload: { ...result, [HAT_FILM_QA_KEY]: qa } }).eq("id", jobId);
-      q = expectedRev === 0 ? q.or(`${path}.is.null,${path}.eq.0`) : q.eq(path, String(expectedRev));
-      const { data, error } = await q.select("id");
+      // Atomic, key-scoped: merges ONLY the QA key into the current payload under the
+      // revision guard, so concurrent outputs/assembly writes are never overwritten.
+      const { data, error } = await admin.rpc("patch_job_result_payload", {
+        p_job_id: jobId,
+        p_patch: { [HAT_FILM_QA_KEY]: qa },
+        p_guard_key: HAT_FILM_QA_KEY,
+        p_guards: [{ field: "rev", op: expectedRev === 0 ? "null_or_eq" : "eq", value: String(expectedRev) }],
+      });
       if (error) throw new Error(`QA state write failed: ${error.message}`);
-      return (data ?? []).length === 1;
+      return data === true;
     },
   };
 }

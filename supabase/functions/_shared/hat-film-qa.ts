@@ -39,6 +39,8 @@ export interface StillReport {
   /** Upper surface of the bill visible in frame. Older reports: inferred from top_brim_color. */
   top_brim_visible?: boolean;
   top_brim_color: string | null;
+  /** Multi-hat shots: the UPPER bill color of EACH visible hat, left to right (null = not visible). */
+  top_brim_colors_per_hat?: (string | null)[] | null;
   under_brim_visible: boolean;
   under_brim_color: string | null;
   visible_text: string;
@@ -62,6 +64,8 @@ export interface ShotQa {
   claim?: { id: string; expires_at: string } | null;
   /** Provider request ids of rejected stills; their late callbacks must be ignored. */
   superseded_requests?: string[];
+  /** Set once when a worker is told to animate; every later gate returns "skip" (no double clip charge). */
+  clip_submitted_by?: string | null;
 }
 
 export interface HatFilmQaState {
@@ -198,6 +202,14 @@ export function judgeStill(shot: HatFilmShot, profile: ReferenceProfile, report:
 
   if (!report.hat_present) return { verdict: "fail", issues: ["the hat is missing"] };
   if (exp.count === 3 && report.hat_count !== 3) issues.push(`expected three copies of the hat, saw ${report.hat_count}`);
+  if (exp.count > 1) {
+    // Every hat is checked on its own; one aggregate color must never hide a wrong bill.
+    const perHat = Array.isArray(report.top_brim_colors_per_hat) ? report.top_brim_colors_per_hat : [];
+    if (perHat.length < exp.count) issues.push(`upper bill color not reported for each of the ${exp.count} hats`);
+    perHat.slice(0, exp.count).forEach((color, i) => {
+      if (exp.top === "required") checkBrim(issues, `top of the brim on hat ${i + 1}`, "required", color != null, color, profile.top_brim_color);
+    });
+  }
 
   const topVisible = typeof report.top_brim_visible === "boolean" ? report.top_brim_visible : !!report.top_brim_color;
   checkBrim(issues, "top of the brim", exp.top, topVisible, report.top_brim_color, profile.top_brim_color);
@@ -260,7 +272,7 @@ export const REFERENCE_PROMPT = `You are inspecting product photos of ONE baseba
 Report: top_brim_color (the UPPER surface of the bill, from the front photo), under_brim_color (the UNDERSIDE of the bill, from the inside photo) — these are independent; front_text (exact lettering on the front); back_text (exact lettering on the back); right_side_identity (short description of the wearer's right side design, including any text); left_side_identity (same for the wearer's left); inside_identity (short description of the interior from the inside photo: underside color, lining, seam tape, labels); confidence 0–1 for the whole analysis. Do not guess; lower confidence instead.`;
 
 export const STILL_PROMPT = `Image 1 is a generated product still. The remaining images are reference photos of the real hat (front, wearer's right, wearer's left, back, inside).
-Describe ONLY what Image 1 shows: hat_present, hat_count, side_shown (front | wearer_right | wearer_left | back | inside | none | multiple; wearer's right appears on image-left when the hat faces the camera), top_brim_visible (is the UPPER surface of the bill visible at all), top_brim_color (null if not visible), under_brim_visible, under_brim_color, visible_text (exact lettering you can read on the hat), text_legible, side_identity (short description of the visible side design, or of the interior/lining when the inside is shown), any_text_or_logo (any text, sign lettering or logo anywhere in the image), confidence 0–1. Do not assume it matches the references.`;
+Describe ONLY what Image 1 shows: hat_present, hat_count, side_shown (front | wearer_right | wearer_left | back | inside | none | multiple; wearer's right appears on image-left when the hat faces the camera), top_brim_visible (is the UPPER surface of the bill visible at all), top_brim_color (null if not visible), top_brim_colors_per_hat (when more than one hat is shown: the UPPER bill color of EACH hat separately, left to right, null for a hat whose upper bill is hidden; empty list for a single hat), under_brim_visible, under_brim_color, visible_text (exact lettering you can read on the hat), text_legible, side_identity (short description of the visible side design, or of the interior/lining when the inside is shown), any_text_or_logo (any text, sign lettering or logo anywhere in the image), confidence 0–1. Do not assume it matches the references.`;
 
 export const REFERENCE_SCHEMA = {
   type: "OBJECT",
@@ -278,11 +290,13 @@ export const STILL_SCHEMA = {
   properties: {
     hat_present: { type: "BOOLEAN" }, hat_count: { type: "INTEGER" },
     side_shown: { type: "STRING", enum: ["front", "wearer_right", "wearer_left", "back", "inside", "none", "multiple"] },
-    top_brim_visible: { type: "BOOLEAN" }, top_brim_color: { type: "STRING", nullable: true }, under_brim_visible: { type: "BOOLEAN" }, under_brim_color: { type: "STRING", nullable: true },
+    top_brim_visible: { type: "BOOLEAN" }, top_brim_color: { type: "STRING", nullable: true },
+    top_brim_colors_per_hat: { type: "ARRAY", items: { type: "STRING", nullable: true } },
+    under_brim_visible: { type: "BOOLEAN" }, under_brim_color: { type: "STRING", nullable: true },
     visible_text: { type: "STRING" }, text_legible: { type: "BOOLEAN" }, side_identity: { type: "STRING" },
     any_text_or_logo: { type: "BOOLEAN" }, confidence: { type: "NUMBER" },
   },
-  required: ["hat_present", "hat_count", "side_shown", "top_brim_visible", "under_brim_visible", "visible_text", "text_legible", "side_identity", "any_text_or_logo", "confidence"],
+  required: ["hat_present", "hat_count", "side_shown", "top_brim_visible", "top_brim_colors_per_hat", "under_brim_visible", "visible_text", "text_legible", "side_identity", "any_text_or_logo", "confidence"],
 };
 
 /* ------------------------- serialized state + gate ------------------------- */
@@ -323,8 +337,10 @@ export type GateResult =
   | { action: "animate" }
   | { action: "retry"; correction: string }
   | { action: "needs_review"; reason: string }
-  /** Another worker holds this shot's (or the reference's) check; do nothing now. */
-  | { action: "wait" };
+  /** Another worker holds this shot's (or the reference's) check until `until` (ISO). */
+  | { action: "wait"; until?: string }
+  /** This shot's clip was already handed to another worker; do not submit it again. */
+  | { action: "skip" };
 
 const live = (c: { expires_at: string } | null | undefined, now: number) => !!c && Date.parse(c.expires_at) > now;
 const unavailable = (e: unknown) => !!(e as { unavailable?: boolean })?.unavailable;
@@ -343,9 +359,13 @@ export async function runHatFilmGate(deps: GateDeps, args: { shot: HatFilmShot; 
 
   const start = await updateQa<GateResult | "claimed">(store, (qa) => {
     const cur = qa.shots[id] ?? emptyShotQa();
-    if (cur.status === "passed") return { next: null, out: { action: "animate" } };
+    if (cur.status === "passed") {
+      if (cur.clip_submitted_by) return { next: null, out: { action: "skip" } };
+      qa.shots[id] = { ...cur, clip_submitted_by: claimId };
+      return { next: qa, out: { action: "animate" } };
+    }
     if (cur.status === "needs_review") return { next: null, out: { action: "needs_review", reason: cur.last?.issues.join("; ") || "needs review" } };
-    if (live(cur.claim, now())) return { next: null, out: { action: "wait" } };
+    if (live(cur.claim, now())) return { next: null, out: { action: "wait", until: cur.claim!.expires_at } };
     if (!args.stillUrl) {
       qa.shots[id] = { ...cur, status: "needs_review", last: { verdict: "uncertain", issues: ["still missing"] }, claim: null };
       return { next: qa, out: { action: "needs_review", reason: "still missing" } };
@@ -364,15 +384,15 @@ export async function runHatFilmGate(deps: GateDeps, args: { shot: HatFilmShot; 
 
   // Reference analysis: once per run, serialized.
   const refClaim = deps.newId();
-  const ref = await updateQa<{ kind: "ok" | "claimed" | "wait" | "bad"; profile?: ReferenceProfile; reason?: string }>(store, (qa) => {
+  const ref = await updateQa<{ kind: "ok" | "claimed" | "wait" | "bad"; profile?: ReferenceProfile; reason?: string; until?: string }>(store, (qa) => {
     const r = qa.reference;
     if (r?.status === "ok" && r.profile) return { next: null, out: { kind: "ok", profile: r.profile } };
     if (r?.status === "invalid") return { next: null, out: { kind: "bad", reason: `reference analysis invalid: ${r.error ?? ""}` } };
-    if (r?.status === "analyzing" && live(r.claim, now())) return { next: null, out: { kind: "wait" } };
+    if (r?.status === "analyzing" && live(r.claim, now())) return { next: null, out: { kind: "wait", until: r.claim!.expires_at } };
     qa.reference = { status: "analyzing", profile: null, error: null, analyzed_at: null, claim: { id: refClaim, expires_at: expires() } };
     return { next: qa, out: { kind: "claimed" } };
   });
-  if (ref.kind === "wait") { await release(); return { action: "wait" }; }
+  if (ref.kind === "wait") { await release(); return { action: "wait", until: ref.until }; }
 
   let profile = ref.profile ?? null;
   let refReason = ref.reason ?? null;
@@ -417,7 +437,7 @@ export async function runHatFilmGate(deps: GateDeps, args: { shot: HatFilmShot; 
     if (cur.claim?.id !== claimId) return { next: null, out: { action: "wait" } }; // claim expired and was taken over
     const decision = decideAfterCheck(verdict, cur, analyzer);
     const applied = applyCheck(cur, verdict ?? { verdict: "uncertain", issues: [refReason ?? "product check unavailable"] }, decision, new Date(now()).toISOString());
-    const next: ShotQa = { ...applied, claim: null };
+    const next: ShotQa = { ...applied, claim: null, ...(decision === "animate" ? { clip_submitted_by: claimId } : {}) };
     if (decision === "retry" && args.stillRequestId) next.superseded_requests = [...new Set([...(cur.superseded_requests ?? []), args.stillRequestId])];
     qa.shots[id] = next;
     const out: GateResult = decision === "animate" ? { action: "animate" }
