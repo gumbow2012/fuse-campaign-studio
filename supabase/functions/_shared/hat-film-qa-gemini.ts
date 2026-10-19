@@ -39,10 +39,10 @@ async function inline(url: string) {
   } finally { clearTimeout(t); }
 }
 
-async function ask(prompt: string, schema: unknown, urls: string[]): Promise<unknown> {
+async function ask(admin: Admin, prompt: string, schema: unknown, urls: string[]): Promise<unknown> {
   const apiKey = Deno.env.get("GEMINI_API_KEY")?.trim();
   if (!apiKey) throw Object.assign(new Error("analysis key not configured"), { unavailable: true });
-  const signed = (await resolveExecutionUrls(null as never, urls).catch(() => urls)) as string[];
+  const signed = (await resolveExecutionUrls(admin, urls)) as string[];
   const parts = await Promise.all(signed.map(inline));
   const ai = new GoogleGenAI({ apiKey });
   const res = await ai.models.generateContent({
@@ -79,7 +79,7 @@ async function ensureReference(admin: Admin, jobId: string, ctx: HatFilmRunConte
   if (qa.reference?.status === "ok") return qa;
   const now = new Date().toISOString();
   try {
-    const raw = await ask(REFERENCE_PROMPT, REFERENCE_SCHEMA, refUrls(ctx));
+    const raw = await ask(admin, REFERENCE_PROMPT, REFERENCE_SCHEMA, refUrls(ctx));
     const n = normalizeReferenceProfile(raw);
     if (!n.ok) qa.reference = { status: "invalid", profile: null, error: n.reason, analyzed_at: now };
     else {
@@ -114,7 +114,7 @@ export async function hatFilmGateBeforeClip(admin: Admin, args: { jobId: string;
   let analyzer = ref?.status === "ok";
   if (analyzer && ref?.profile) {
     try {
-      const report = (await ask(STILL_PROMPT, STILL_SCHEMA, [args.stillUrl, ...refUrls(args.ctx)])) as StillReport;
+      const report = (await ask(admin, STILL_PROMPT, STILL_SCHEMA, [args.stillUrl, ...refUrls(args.ctx)])) as StillReport;
       verdict = judgeStill(shot, ref.profile, report);
     } catch (e) {
       if ((e as { unavailable?: boolean }).unavailable) analyzer = false;

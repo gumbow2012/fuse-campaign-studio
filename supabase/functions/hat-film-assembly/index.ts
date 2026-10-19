@@ -6,6 +6,7 @@
 // issues an authenticated upload URL, and accepts the final file only after
 // verifying it exists and its reported probe matches 1080x1920 / 645 frames /
 // audio. No provider calls, no credit changes. Owner (or admin) only.
+import { emptyQa, HAT_FILM_QA_KEY, parseQa, type HatFilmQaState } from "../_shared/hat-film-qa.ts";
 import { probeMp4 } from "../_shared/mp4-source-audio-finish.ts";
 import { corsHeaders, createAdminClient, errorMessage, getUserRoles, json, requireUser } from "../_shared/supabase-admin.ts";
 import { resolveDisplayUrl } from "../_shared/asset-access.ts";
@@ -33,7 +34,7 @@ async function loadJob(admin: Admin, jobId: string, userId: string) {
   return { job: job as any, context };
 }
 
-async function loadShots(admin: Admin, jobId: string): Promise<ShotState[]> {
+async function loadShots(admin: Admin, jobId: string, qa: HatFilmQaState = emptyQa()): Promise<ShotState[]> {
   const { data: steps, error } = await admin.from("execution_steps")
     .select("status, nodes!execution_steps_node_id_fkey(prompt_config), assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
     .eq("job_id", jobId);
@@ -55,8 +56,8 @@ async function loadShots(admin: Admin, jobId: string): Promise<ShotState[]> {
     const done = shot.kind === "logo_hold" ? !!stillUrl : !!clipUrl;
     return {
       shot_id: shot.id,
-      status: failed ? "failed" : done ? "ready" : stillUrl ? "animating" : "pending",
-      still_url: stillUrl, clip_url: clipUrl, clip_duration_ms: null, retries: 0,
+      status: qa.shots[shot.id]?.status === "needs_review" ? "needs_review" : failed ? "failed" : done ? "ready" : stillUrl ? "animating" : "pending",
+      still_url: stillUrl, clip_url: clipUrl, clip_duration_ms: null, retries: qa.shots[shot.id]?.retries ?? 0,
     } as ShotState;
   });
 }
