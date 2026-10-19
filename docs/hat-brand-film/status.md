@@ -27,3 +27,9 @@ Draft only. Not published, not deployed, no paid generation run.
 - The browser assembler has not run on real clips; WebCodecs needs desktop Chrome or Edge.
 - Shot 06 composites the logo at a fixed sign area. It doesn't track a generated sign.
 - Automated product-fidelity scoring is not implemented. Shots fail review only when a check flags them.
+
+## Backend environments (verified 2026-10-19, read-only)
+- Production fuse-us.com bundle calls backend `ykrrwgkxgidoavtzcumk` (also hardcoded in client fallback and supabase/config.toml). Code pushed to main deploys edge functions there via GitHub Actions. This is the graph engine backend (fuse_templates, template_versions, nodes, edges, execution_jobs); the agent has no SQL access to it.
+- This workspace's SQL tools and .env point at `sdmwcjfksoqbplcqqmhg`, which has only the legacy `templates` table and no graph tables.
+- Row `72dc1b6b-9732-4684-956c-edfab5632134` lives in sdmw `templates` (inactive). It is NOT a Hat Brand Film template; leave it inactive, ignore it.
+- The real draft must be created on ykrr by an admin calling `hat-film-seed` {"action":"seed"} after the functions deploy there. Fixed IDs make preview and production refer to the same draft.
