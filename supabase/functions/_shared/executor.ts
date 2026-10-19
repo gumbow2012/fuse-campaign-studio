@@ -31,6 +31,8 @@ import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 
 import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
 import { ensureHatFilmContext, hatFilmPrompt, hatFilmStillInputs } from "./hat-film-runtime.ts";
+import { hatFilmCorrection, hatFilmGateBeforeClip } from "./hat-film-qa-gemini.ts";
+import { HAT_FILM_QA_KEY } from "./hat-film-qa.ts";
 import { HAT_FILM_ASSEMBLY_KEY, emptyAssembly } from "./hat-film-assembly.ts";
 import { HAT_FILM_CONTEXT_KEY } from "./hat-film-recipe.ts";
 import { buildIdentityLockedPrompt } from "./identity-lock.ts";
@@ -1144,7 +1146,10 @@ export async function finalizeJobIfTerminal(admin: AdminClient, jobId: string) {
     .eq("id", jobId)
     .maybeSingle();
   const hatFilmExtra = (jobRow as any)?.input_payload?.[HAT_FILM_CONTEXT_KEY]
-    ? { [HAT_FILM_ASSEMBLY_KEY]: (jobRow as any)?.result_payload?.[HAT_FILM_ASSEMBLY_KEY] ?? emptyAssembly() }
+    ? {
+      [HAT_FILM_ASSEMBLY_KEY]: (jobRow as any)?.result_payload?.[HAT_FILM_ASSEMBLY_KEY] ?? emptyAssembly(),
+      ...((jobRow as any)?.result_payload?.[HAT_FILM_QA_KEY] ? { [HAT_FILM_QA_KEY]: (jobRow as any).result_payload[HAT_FILM_QA_KEY] } : {}),
+    }
     : {};
 
   await admin
@@ -1406,7 +1411,9 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
       if (node.node_type === "image_gen") {
         try {
-          const prompt = hatFilmPrompt(hatFilm, node as any) ??
+          const hatStill = hatFilmPrompt(hatFilm, node as any);
+          const hatCorrection = hatStill ? await hatFilmCorrection(admin, job.id, (node as any).prompt_config?.hat_film_shot) : null;
+          const prompt = (hatStill ? (hatCorrection ? `${hatStill} ${hatCorrection}` : hatStill) : null) ??
             lockPrompt(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap));
           const referenceAsset = getNodeReferenceAsset(node, assetMap);
           if (referenceAsset?.type === "video" || orderedParamEntries.some(([, value]) => value.type === "video")) {
@@ -1517,6 +1524,28 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             params.get("start_frame_image")?.url ??
             [...params.values()][0]?.url;
           const endFrameUrl = params.get("end_frame_image")?.url;
+
+          // Hat Brand Film: automatic product check of the still BEFORE animation.
+          if (hatFilm && (node as any).prompt_config?.hat_film_stage === "clip") {
+            const shotId = String((node as any).prompt_config.hat_film_shot);
+            const gate = await hatFilmGateBeforeClip(admin, { jobId: job.id, ctx: hatFilm, shotId, stillUrl: initImageUrl });
+            if (gate.action === "retry") {
+              const stillNode = nodes.find((n: any) => n.prompt_config?.hat_film_shot === shotId && n.prompt_config?.hat_film_stage === "still");
+              const stillStep = stillNode ? mutableSteps.find((s) => s.node_id === stillNode.id) : undefined;
+              if (!stillNode || !stillStep) throw new Error(`NEEDS_REVIEW: ${shotId} still step missing for retry`);
+              await admin.from("execution_steps").update({
+                status: "pending", provider_request_id: null, output_asset_id: null, completed_at: null, error_log: null,
+                output_payload: { hat_film_qa_retry: true },
+              }).eq("id", stillStep.id);
+              stillStep.status = "pending";
+              stillStep.provider_request_id = null;
+              resolved.delete(stillNode.id);
+              await admin.from("execution_steps").update({ status: "pending" }).eq("id", step.id);
+              step.status = "pending";
+              continue;
+            }
+            if (gate.action === "needs_review") throw new Error(`NEEDS_REVIEW: ${shotId} — ${gate.reason}`);
+          }
 
           if (!prompt) {
             const passthrough = await completeBlankPromptStep(admin, {

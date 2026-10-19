@@ -18,8 +18,16 @@ Draft only. Not published, not deployed, no paid generation run.
 - Ready only after the server downloads the uploaded file and re-probes it (1 video track, 645 samples, 1080×1920, AAC ≈21.5 s). Browser-reported numbers are ignored.
 - Upload names include the field key for Hat runs only; other templates keep their old file names.
 
+## Automatic product checks (code complete; never run against a real provider)
+- `_shared/hat-film-qa.ts` (pure, tested) + `_shared/hat-film-qa-gemini.ts` (GEMINI_API_KEY, same pattern as analyze-campaign-photography; jewelry untouched).
+- Once per run: the five required photos are analyzed; top brim and underside colors stored separately, plus front/back lettering and each side's identity. Low confidence, missing colors/sides, or a conflict with entered brim colors = unusable.
+- Before every clip: the generated still is inspected and judged (brim colors, side shown, reversed/mirrored side, lettering legible and matching, three copies in shot 11, no hat/logo in environment shots). Only a pass submits the clip.
+- Fail or uncertain: the still is regenerated once with a correction note; a second failure, a missing key or an analyzer error = Needs review. The clip is never started. State persists in the run under `hat_film_qa`.
+- These checks catch obvious drift. They do not prove exact fidelity.
+- Known limit: a Needs-review shot ends that executor pass. Other shots already submitted keep going.
+
 ## Tests
-- `node --experimental-strip-types --test tests/hat-brand-film/hat-film.test.mjs`: 21 pass, 0 fail (includes explicit left/right/back/inside detail routing).
+- `node --experimental-strip-types --test tests/hat-brand-film/hat-film.test.mjs`: 33 pass, 0 fail (detail routing, product checks: wrong top brim, reversed/mirrored sides, unreadable lettering, missing analyzer, uncertain results, one retry then review).
 - Real-browser assembly on synthetic clips (tests/hat-brand-film/browser): output h264 1080x1920 30/1, 645 frames, 21.500 s; AAC 21.504 s; server probeMp4 agrees. Logo visible at shot 06 and the shot 12 hold. 24 fps source retimed. 1 s clip in the 75-frame shot 08 slot fails with an error, not a padded film.
 - Soundtrack AAC frames are copied (no audio encoder needed). Bundled headless Chromium has no H.264 encoder, so browsers without one get a clear error.
 
@@ -28,7 +36,7 @@ Draft only. Not published, not deployed, no paid generation run.
 - `FAL_API_KEY` is missing, so live prices and generation are unverified. Fallback estimate: 12 stills + 11 five-second clips ≈ $7.96 / 82 credits; worst case with one retry per shot ≈ $15.92 / 163 credits.
 - The browser assembler has not run on real clips; WebCodecs needs desktop Chrome or Edge.
 - Shot 06 composites the logo at a fixed sign area. It doesn't track a generated sign.
-- No automatic visual QA exists. Prompts carry fidelity rules, but nothing inspects stills or clips. The one-retry/Needs-review rule is a tested pure function that nothing triggers yet.
+- Product checks: up to 12 analyzer calls per run (23 with retries), billed to FUSE's analysis key, not customer credits; no verified price.
 - Whether the run price covers the retry allowance hasn't been checked; the Hat template has no entry in the credit-cost table yet.
 
 ## Backend environments (verified 2026-10-19, read-only)
