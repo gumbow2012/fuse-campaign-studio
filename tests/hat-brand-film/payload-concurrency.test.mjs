@@ -68,3 +68,17 @@ test("provider submits keep hat retry bookkeeping (counter + superseded ids) in 
   assert.equal((s.match(/\.\.\.hatRetryState\(step\)/g) ?? []).length, 2);
   assert.match(s, /hat_provider_retries: p\.hat_provider_retries/);
 });
+
+test("executor re-checks readiness per step and stops paid submits once a Hat run has stopped", () => {
+  const s = src("supabase/functions/_shared/executor.ts");
+  assert.match(s, /if \(step\.status !== "pending" \|\| !isStepReady\(step, incomingByTarget\.get\(step\.node_id\) \?\? \[\], resolved\)\) continue;/);
+  assert.match(s, /await hatJobStopped\(admin, job\.id\)\) return;/);
+});
+
+test("a Hat clip is only submitted when its current still passed the product check", () => {
+  const s = src("supabase/functions/_shared/executor.ts");
+  const i = s.indexOf("Hat Brand Film hard rule"), j = s.indexOf("const requestId = await submitVideoJob(");
+  assert.ok(i > 0 && i < j, "hard rule sits right before the video submit");
+  assert.match(s.slice(i, j), /shotQa\?\.status !== "passed"/);
+  assert.match(s.slice(i, j), /superseded_requests \?\? \[\]\)\.includes\(stillId\)/);
+});

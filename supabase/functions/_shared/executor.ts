@@ -31,7 +31,7 @@ import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 
 import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
 import { ensureHatFilmContext, hatFilmPrompt, hatFilmStillInputs } from "./hat-film-runtime.ts";
-import { hatFilmCorrection, hatFilmGateBeforeClip } from "./hat-film-qa-gemini.ts";
+import { hatFilmCorrection, hatFilmGateBeforeClip, loadQa } from "./hat-film-qa-gemini.ts";
 import { QA_CLAIM_MS } from "./hat-film-qa.ts";
 import { HAT_FILM_ASSEMBLY_KEY, emptyAssembly } from "./hat-film-assembly.ts";
 import { HAT_FILM_CONTEXT_KEY } from "./hat-film-recipe.ts";
@@ -1190,6 +1190,12 @@ function hatRetryState(step: { output_payload?: Record<string, unknown> | null }
     ...(Array.isArray(p.superseded_request_ids) ? { superseded_request_ids: p.superseded_request_ids } : {}),
   };
 }
+/** Hat Brand Film: a failed/canceled run must never submit more paid work. */
+async function hatJobStopped(admin: AdminClient, jobId: string) {
+  const { data } = await admin.from("execution_jobs").select("status").eq("id", jobId).maybeSingle();
+  return !data || ["failed", "canceled", "cancelled", "complete"].includes(String((data as any).status));
+}
+
 
 /** Max time one invocation sleeps waiting on another worker's QA claim (edge wall-clock safety). */
 const HAT_WAIT_BUDGET_MS = 120_000;
@@ -1422,6 +1428,9 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
     for (const step of readySteps) {
       const node = nodeMap.get(step.node_id);
       if (!node) throw new Error(`Node missing for step ${step.id}`);
+      // An earlier step in this pass can reset an input (Hat still retry); re-check, don't crash.
+      if (step.status !== "pending" || !isStepReady(step, incomingByTarget.get(step.node_id) ?? [], resolved)) continue;
+      if (hatFilm && (node.node_type === "image_gen" || node.node_type === "video_gen") && await hatJobStopped(admin, job.id)) return;
 
       const incoming = sortEdgesByExecutionOrder(incomingByTarget.get(step.node_id) ?? []);
 
@@ -1795,6 +1804,24 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           const providerEndFrameUrl = endFrameUrl
             ? ((await resolveExecutionUrl(admin, endFrameUrl)) as string)
             : endFrameUrl;
+
+          // Hat Brand Film hard rule, whatever path got here: only a passed, current still is animated.
+          if (hatFilm && (node as any).prompt_config?.hat_film_stage === "clip") {
+            const shotId = String((node as any).prompt_config.hat_film_shot);
+            const stillNode = nodes.find((n: any) => n.prompt_config?.hat_film_shot === shotId && n.prompt_config?.hat_film_stage === "still");
+            const { data: stillRow } = stillNode
+              ? await admin.from("execution_steps").select("status, provider_request_id").eq("job_id", job.id).eq("node_id", stillNode.id).maybeSingle()
+              : { data: null };
+            const { qa } = await loadQa(admin, job.id);
+            const shotQa = qa.shots[shotId];
+            const stillId = (stillRow as any)?.provider_request_id ?? null;
+            if (shotQa?.status !== "passed" || (stillRow as any)?.status !== "complete" ||
+                (stillId && (shotQa.superseded_requests ?? []).includes(stillId))) {
+              await admin.from("execution_steps").update({ status: "pending" }).eq("id", step.id).is("provider_request_id", null);
+              step.status = "pending";
+              return; // stale view of this shot; the worker that owns it carries on
+            }
+          }
 
           const requestId = await submitVideoJob({
             prompt,
