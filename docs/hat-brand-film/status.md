@@ -14,3 +14,10 @@ Spec: `spec.md` · Plan: `plan.md` (both as approved by the owner).
 - **No template row created yet:** no template or version ID exists. The draft is created once assets arrive.
 - **Assets:** reference film, soundtrack and test hat photos have not been supplied. No paid generation has run.
 - **World resolution** is deterministic text parsing; an AI-expanded world can replace `resolveWorld` with the same contract.
+
+## Update 2026-10-19 21:30 UTC — assets received
+- Reference film checked: H.264 1080×1920, 30 fps, 645 frames, 21.5 s, plus an AAC track. Soundtrack: AAC, 21.59 s.
+- Stored in the private `fuse-assets` bucket: `system/templates/hat-brand-film/v1/{reference-film.mp4,soundtrack.m4a}`. Fixtures (test only, never defaults) are under `system/fixtures/hat-brand-film/trade-culture/{front,right,left,back,inside,logo}.webp`. Right = Side-skull, left = Side-slogan. Brim colors: top black, underside light gray.
+- Draft template row: `templates.id = 72dc1b6b-9732-4684-956c-edfab5632134`, `is_active=false`, recipe/version `hat_brand_film@1`. It has no graph nodes yet. There is no separate versions table in this backend.
+- Estimate (fallback prices: nano-banana-pro $0.15/still, Kling 3.0 Pro $0.112/s, audio off): 12 stills + 11 five-second clips = $7.96 (82 credits). With one retry per shot, worst case is $15.92 (163 credits). Live fal pricing has not been verified because `FAL_API_KEY` isn't set in this backend.
+- Render gap: no render worker setting and no editing/export tables in this backend.
