@@ -30,6 +30,9 @@ import {
 import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 
 import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
+import { ensureHatFilmContext, hatFilmPrompt, hatFilmStillInputs } from "./hat-film-runtime.ts";
+import { HAT_FILM_ASSEMBLY_KEY, emptyAssembly } from "./hat-film-assembly.ts";
+import { HAT_FILM_CONTEXT_KEY } from "./hat-film-recipe.ts";
 import { buildIdentityLockedPrompt } from "./identity-lock.ts";
 import {
   CAST_RUNTIME_KEY,
@@ -1134,13 +1137,23 @@ export async function finalizeJobIfTerminal(admin: AdminClient, jobId: string) {
     return acc;
   }, {});
 
+  // Hat Brand Film: keep (never overwrite) the browser-assembly state on repeat finalizes.
+  const { data: jobRow } = await admin
+    .from("execution_jobs")
+    .select("input_payload, result_payload")
+    .eq("id", jobId)
+    .maybeSingle();
+  const hatFilmExtra = (jobRow as any)?.input_payload?.[HAT_FILM_CONTEXT_KEY]
+    ? { [HAT_FILM_ASSEMBLY_KEY]: (jobRow as any)?.result_payload?.[HAT_FILM_ASSEMBLY_KEY] ?? emptyAssembly() }
+    : {};
+
   await admin
     .from("execution_jobs")
     .update({
       status: "complete",
       progress: 100,
       completed_at: new Date().toISOString(),
-      result_payload: { outputs, telemetry },
+      result_payload: { outputs, telemetry, ...hatFilmExtra },
       error_log: null,
     })
     .eq("id", jobId);
@@ -1210,6 +1223,8 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
   const resolved = new Map<string, ResolvedOutput>();
   const jobInputs = (job.input_payload ?? {}) as Record<string, string>;
+  // Hat Brand Film (opt-in by node metadata): one immutable compiled context per run.
+  const hatFilm = await ensureHatFilmContext(admin, job as any, nodes as any);
 
   /**
    * FT10 — cast is OFF unless the run persisted a cast runtime. Legacy jobs skip
@@ -1391,7 +1406,8 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
       if (node.node_type === "image_gen") {
         try {
-          const prompt = lockPrompt(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap));
+          const prompt = hatFilmPrompt(hatFilm, node as any) ??
+            lockPrompt(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap));
           const referenceAsset = getNodeReferenceAsset(node, assetMap);
           if (referenceAsset?.type === "video" || orderedParamEntries.some(([, value]) => value.type === "video")) {
             throw new Error(`${node.name} accepts images only; connect the source video to the Seedance step`);
@@ -1399,9 +1415,8 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           const orderedInputs = orderedParamEntries
             .map(([, value]) => value.url)
             .filter(Boolean);
-          const effectiveInputs = referenceAsset
-            ? [referenceAsset.url, ...orderedInputs]
-            : orderedInputs;
+          const effectiveInputs = hatFilmStillInputs(hatFilm, node as any, nodes as any, (id) => resolved.get(id)?.url) ??
+            (referenceAsset ? [referenceAsset.url, ...orderedInputs] : orderedInputs);
 
           if (!prompt) {
             const passthrough = await completeBlankPromptStep(admin, {
@@ -1496,7 +1511,8 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
         }
       } else if (node.node_type === "video_gen") {
         try {
-          const prompt = lockPrompt(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap));
+          const prompt = hatFilmPrompt(hatFilm, node as any) ??
+            lockPrompt(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap));
           const initImageUrl = params.get("init_image")?.url ??
             params.get("start_frame_image")?.url ??
             [...params.values()][0]?.url;
