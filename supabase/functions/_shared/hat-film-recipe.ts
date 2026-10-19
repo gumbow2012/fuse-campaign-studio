@@ -80,6 +80,8 @@ export interface HatFilmShot {
   primary: ShotRef[];
   detailMatch?: RegExp;
   usesWorldAnchor?: boolean;
+  /** Environment reference: the generated still of this earlier shot (keeps one coherent world). */
+  worldFrom?: number;
 }
 
 const s = (i: number, kind: ShotKind, content: string, motion: string, primary: ShotRef[], extra: Partial<HatFilmShot> = {}): HatFilmShot => ({
@@ -94,16 +96,16 @@ const s = (i: number, kind: ShotKind, content: string, motion: string, primary: 
 export const HAT_FILM_SHOTS: HatFilmShot[] = [
   s(1, "generated", "Front hero of the hat in the chosen world", "gentle slow push-in", ["front"]),
   s(2, "generated", "Macro over the front embroidery and fabric texture", "slow macro glide left to right", ["front"], { detailMatch: /front|embroider|stitch|fabric|crown/i }),
-  s(3, "generated", "Wide environment and action anchor shot", "steady wide shot with subtle drift", ["world"], { usesWorldAnchor: true }),
+  s(3, "generated", "Wide environment and action anchor shot", "steady wide shot with subtle drift", ["world"], { usesWorldAnchor: true, worldFrom: 1 }),
   s(4, "generated", "Wearer's right side product reveal", "short lateral move", ["right"], { detailMatch: /right/i }),
   s(5, "generated", "Wearer's left side embroidery / patch macro", "slow macro slide", ["left"], { detailMatch: /left|patch|side/i }),
-  s(6, "logo_composite", "Environmental brand presence: a flat, blank sign or banner in the world, framed for the brand logo", "restrained, near-locked camera", ["world"], { usesWorldAnchor: true }),
+  s(6, "logo_composite", "Environmental brand presence: a flat, blank sign or banner in the world, framed for the brand logo", "restrained, near-locked camera", ["world"], { usesWorldAnchor: true, worldFrom: 3 }),
   s(7, "generated", "Back and closure detail", "slow tilt across the closure", ["back"], { detailMatch: /back|closure|strap|snap|rear/i }),
   s(8, "generated", "Interior and underside reveal", "slow push", ["inside"]),
-  s(9, "generated", "Overhead environment insert", "top-down, minimal motion", ["world"], { usesWorldAnchor: true }),
+  s(9, "generated", "Overhead environment insert", "top-down, minimal motion", ["world"], { usesWorldAnchor: true, worldFrom: 3 }),
   s(10, "generated", "Lining or detail macro", "slow macro glide", ["inside"], { detailMatch: /lining|inside|label|sweat|under|tag/i }),
   s(11, "generated", "Three copies of the SAME hat arranged within the world", "slow arc, no spin", ["front", "right", "left", "inside"]),
-  s(12, "logo_hold", "Clean, softly lit backdrop from the world for the final logo reveal; no text", "none (deterministic hold)", ["world"]),
+  s(12, "logo_hold", "Clean, softly lit backdrop from the world for the final logo reveal; no text", "none (deterministic hold)", ["world"], { worldFrom: 3 }),
 ];
 
 export const HAT_FILM_SHOT_IDS = HAT_FILM_SHOTS.map((shot) => shot.id);

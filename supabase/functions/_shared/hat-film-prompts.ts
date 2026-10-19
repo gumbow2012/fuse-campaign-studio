@@ -88,6 +88,8 @@ export interface CompiledShot {
   still_prompt: string;
   motion_prompt: string | null;
   references: Array<{ slot: string; url: string; role: string }>;
+  /** Shot id whose generated still is prepended as the environment reference. */
+  world_from: string | null;
   frames: number;
 }
 
@@ -108,7 +110,11 @@ export function compileHatFilmRun(inputs: HatFilmInputs, opts: { soundtrackPath?
   const used = new Set<string>();
   const shots = HAT_FILM_SHOTS.map((shot): CompiledShot => {
     const refs = resolveShotReferences(shot, inputs, used);
-    const refText = refs.map((r, i) => `Image ${i + 1} = ${r.role}`).join("; ");
+    const roles = [
+      ...(shot.worldFrom ? [`environment reference (generated still of shot ${String(shot.worldFrom).padStart(2, "0")}): keep the exact same location, ${world.anchor}, lighting and palette; remove any hat`] : []),
+      ...refs.map((r) => r.role),
+    ];
+    const refText = roles.map((r, i) => `Image ${i + 1} = ${r}`).join("; ");
     const hasHat = refs.length > 0;
     const subject = shot.index === 11
       ? "Three identical copies of the SAME hat from the reference photos, arranged naturally in the setting. Every upper bill matches the front photo."
@@ -131,6 +137,7 @@ export function compileHatFilmRun(inputs: HatFilmInputs, opts: { soundtrackPath?
         ? null
         : `${shot.motion}. Keep every object rigid and unchanged${hasHat ? ", especially the hat" : ""}; animate only the camera and the ${world.background_action}. No spin, no morphing, no text.`,
       references: refs,
+      world_from: shot.worldFrom ? `shot_${String(shot.worldFrom).padStart(2, "0")}` : null,
       frames: shot.frames,
     };
   });
