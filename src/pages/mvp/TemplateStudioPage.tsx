@@ -55,6 +55,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import HatOrientationGuide from "@/components/hatFilm/HatOrientationGuide";
 import { toast } from "@/hooks/use-toast";
 import { useTemplateFavorites } from "@/hooks/useTemplateFavorites";
 import FavoriteTemplateButton from "@/components/templates/FavoriteTemplateButton";
@@ -3542,6 +3543,7 @@ export default function TemplateStudioPage() {
                     />
                   ) : null}
 
+                  {inputFields.some((field) => field.recipe === "hat_brand_film@1") ? <HatOrientationGuide /> : null}
                   <div className="grid gap-3 md:grid-cols-2">
 
                     {inputGroups.map((group) => (
