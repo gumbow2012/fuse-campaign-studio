@@ -178,9 +178,29 @@ export function hatFilmRawInputs(
   return raw;
 }
 
+/**
+ * Explicit area named in a detail label. Side/back/inside words win over
+ * generic words like "embroidery", so "left side embroidery" is a LEFT detail.
+ */
+export function detailArea(label: string): HatAngleSlot | null {
+  const l = label.toLowerCase();
+  if (/\bleft\b/.test(l)) return "left";
+  if (/\bright\b/.test(l)) return "right";
+  if (/\b(back|rear|closure|strap|snap\w*|buckle)\b/.test(l)) return "back";
+  if (/\b(inside|interior|lining|liner|under\w*|sweat\w*|tag|label)\b/.test(l)) return "inside";
+  if (/\bfront\b/.test(l)) return "front";
+  return null;
+}
+
 export function matchDetail(shot: HatFilmShot, details: HatFilmInputs["details"], used: Set<string>) {
   if (!shot.detailMatch) return null;
-  return details.find((d) => !used.has(d.slot) && shot.detailMatch!.test(d.label)) ?? null;
+  const shotArea = shot.primary.find((p) => p !== "world" && p !== "logo") as HatAngleSlot | undefined;
+  return details.find((d) => {
+    if (used.has(d.slot)) return false;
+    const area = detailArea(d.label);
+    if (area) return area === shotArea; // explicit area: only that angle's shot
+    return shot.detailMatch!.test(d.label);
+  }) ?? null;
 }
 
 /** Ordered reference URLs for a shot. Never invents or mirrors a missing angle. */

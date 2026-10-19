@@ -19,14 +19,17 @@ Draft only. Not published, not deployed, no paid generation run.
 - Upload names include the field key for Hat runs only; other templates keep their old file names.
 
 ## Tests
-- `node --experimental-strip-types --test tests/hat-brand-film/hat-film.test.mjs`: 17 pass, 0 fail.
+- `node --experimental-strip-types --test tests/hat-brand-film/hat-film.test.mjs`: 21 pass, 0 fail (includes explicit left/right/back/inside detail routing).
+- Real-browser assembly on synthetic clips (tests/hat-brand-film/browser): output h264 1080x1920 30/1, 645 frames, 21.500 s; AAC 21.504 s; server probeMp4 agrees. Logo visible at shot 06 and the shot 12 hold. 24 fps source retimed. 1 s clip in the 75-frame shot 08 slot fails with an error, not a padded film.
+- Soundtrack AAC frames are copied (no audio encoder needed). Bundled headless Chromium has no H.264 encoder, so browsers without one get a clear error.
 
 ## Not verified / blockers
 - This backend has no graph tables (`nodes`, `edges`, `template_versions`, `execution_jobs`), so the seed and a real run can't execute here.
 - `FAL_API_KEY` is missing, so live prices and generation are unverified. Fallback estimate: 12 stills + 11 five-second clips ≈ $7.96 / 82 credits; worst case with one retry per shot ≈ $15.92 / 163 credits.
 - The browser assembler has not run on real clips; WebCodecs needs desktop Chrome or Edge.
 - Shot 06 composites the logo at a fixed sign area. It doesn't track a generated sign.
-- Automated product-fidelity scoring is not implemented. Shots fail review only when a check flags them.
+- No automatic visual QA exists. Prompts carry fidelity rules, but nothing inspects stills or clips. The one-retry/Needs-review rule is a tested pure function that nothing triggers yet.
+- Whether the run price covers the retry allowance hasn't been checked; the Hat template has no entry in the credit-cost table yet.
 
 ## Backend environments (verified 2026-10-19, read-only)
 - Production fuse-us.com bundle calls backend `ykrrwgkxgidoavtzcumk` (also hardcoded in client fallback and supabase/config.toml). Code pushed to main deploys edge functions there via GitHub Actions. This is the graph engine backend (fuse_templates, template_versions, nodes, edges, execution_jobs); the agent has no SQL access to it.

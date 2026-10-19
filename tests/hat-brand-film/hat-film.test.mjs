@@ -118,3 +118,27 @@ test('estimate: 12 stills + 11 clips', () => {
   const e = estimateHatFilm({ imageUsd: 0.04, videoUsdPerSecond: 0.136, usdPerCredit: 0.098 });
   assert.equal(e.stills, 12); assert.equal(e.clips, 11);
 });
+
+import { detailArea } from '../../supabase/functions/_shared/hat-film-recipe.ts';
+const withDetail = (label) => ok({ ...base, detail_1: u('d1'), detail_1_label: label });
+const shotWith = (ctx, slot) => ctx.shots.filter((s) => s.references.some((r) => r.slot === slot)).map((s) => s.shot_id);
+
+test('"left side embroidery" goes to the left shot, not the front embroidery macro', () => {
+  assert.equal(detailArea('left side embroidery'), 'left');
+  assert.deepEqual(shotWith(compileHatFilmRun(withDetail('left side embroidery')), 'detail_1'), ['shot_05']);
+});
+
+test('explicit right/back/inside labels route to their own shot', () => {
+  assert.deepEqual(shotWith(compileHatFilmRun(withDetail('right side embroidered skull')), 'detail_1'), ['shot_04']);
+  assert.deepEqual(shotWith(compileHatFilmRun(withDetail('back closure stitching')), 'detail_1'), ['shot_07']);
+  assert.deepEqual(shotWith(compileHatFilmRun(withDetail('inside lining embroidery')), 'detail_1'), ['shot_10']);
+});
+
+test('generic label without an area still uses the front embroidery macro', () => {
+  assert.deepEqual(shotWith(compileHatFilmRun(withDetail('embroidery close-up')), 'detail_1'), ['shot_02']);
+});
+
+test('missing optional detail never invents a reference', () => {
+  const ctx = compileHatFilmRun(ok(base));
+  assert.equal(ctx.shots.flatMap((s) => s.references).filter((r) => r.slot.startsWith('detail')).length, 0);
+});
