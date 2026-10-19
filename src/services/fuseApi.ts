@@ -27,6 +27,8 @@ type TemplateDetailField = {
   required?: boolean | null;
   hint?: unknown;
   requirement?: Record<string, unknown> | null;
+  recipe?: unknown;
+  placeholder?: unknown;
 };
 
 
@@ -355,6 +357,9 @@ export interface TemplateDetail {
     hint?: string;
     /** FT2: additive metadata, present only when authored on the input. */
     requirement?: TemplateAssetRequirement;
+    /** Opt-in recipe id (e.g. hat_brand_film@1) and multiline placeholder. */
+    recipe?: string;
+    placeholder?: string;
   }[];
 
   locked_images?: Record<string, string>;
@@ -397,6 +402,8 @@ export async function fetchTemplateDetail(
               required: requirement?.required ?? field.required ?? true,
               hint: typeof field.hint === "string" ? field.hint : undefined,
               requirement,
+              ...(typeof field.recipe === "string" ? { recipe: field.recipe } : {}),
+              ...(typeof field.placeholder === "string" ? { placeholder: field.placeholder } : {}),
             };
           }),
         };

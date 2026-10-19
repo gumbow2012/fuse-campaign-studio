@@ -195,6 +195,8 @@ interface InputField {
   hint?: string;
   /** FT2: optional rich metadata authored on the template input. */
   requirement?: TemplateAssetRequirement;
+  recipe?: string;
+  placeholder?: string;
 }
 
 
@@ -1326,6 +1328,8 @@ export default function TemplateStudioPage() {
         required: field.required ?? true,
         hint: field.hint,
         requirement: field.requirement,
+        recipe: field.recipe,
+        placeholder: field.placeholder,
       }));
     }
 
@@ -1845,8 +1849,8 @@ export default function TemplateStudioPage() {
               releaseAutofill(field.key);
               setTextInputs((current) => ({ ...current, [field.key]: event.target.value }));
             }}
-            rows={3}
-            placeholder={field.label}
+            rows={field.placeholder ? 5 : 3}
+            placeholder={field.placeholder ?? field.label}
             className="min-h-[92px] rounded-[0.9rem] border-white/10 bg-white/[0.03] text-white"
           />
         ) : (
