@@ -65,7 +65,7 @@ async function casAssembly(admin: Admin, job: any, next: HatFilmAssemblyState, e
   let q = admin.from("execution_jobs")
     .update({ result_payload: { ...(job.result_payload ?? {}), [HAT_FILM_ASSEMBLY_KEY]: next } })
     .eq("id", job.id)
-    .neq(`result_payload->${HAT_FILM_ASSEMBLY_KEY}->>status`, "ready");
+    .or(`result_payload->${HAT_FILM_ASSEMBLY_KEY}->>status.is.null,result_payload->${HAT_FILM_ASSEMBLY_KEY}->>status.neq.ready`);
   if (expect.expiredBefore) q = q.lt(`result_payload->${HAT_FILM_ASSEMBLY_KEY}->>lock_expires_at`, expect.expiredBefore);
   else if (expect.token === null) q = q.is(`result_payload->${HAT_FILM_ASSEMBLY_KEY}->>lock_token`, null);
   else q = q.eq(`result_payload->${HAT_FILM_ASSEMBLY_KEY}->>lock_token`, expect.token);
