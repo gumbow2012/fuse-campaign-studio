@@ -99,7 +99,7 @@ export const HAT_FILM_SHOTS: HatFilmShot[] = [
   s(3, "generated", "Wide environment and action anchor shot", "steady wide shot with subtle drift", ["world"], { usesWorldAnchor: true, worldFrom: 1 }),
   s(4, "generated", "Wearer's right side product reveal", "short lateral move", ["right"], { detailMatch: /right/i }),
   s(5, "generated", "Wearer's left side embroidery / patch macro", "slow macro slide", ["left"], { detailMatch: /left|patch|side/i }),
-  s(6, "logo_composite", "Environmental brand presence: a flat, blank sign or banner in the world, framed for the brand logo", "restrained, near-locked camera", ["world"], { usesWorldAnchor: true, worldFrom: 3 }),
+  s(6, "logo_composite", "Environmental brand moment with open negative space (no sign); the original logo is placed as an intentional on-screen brand mark", "restrained, near-locked camera", ["world"], { usesWorldAnchor: true, worldFrom: 3 }),
   s(7, "generated", "Back and closure detail", "slow tilt across the closure", ["back"], { detailMatch: /back|closure|strap|snap|rear/i }),
   s(8, "generated", "Interior and underside reveal", "slow push", ["inside"]),
   s(9, "generated", "Overhead environment insert", "top-down, minimal motion", ["world"], { usesWorldAnchor: true, worldFrom: 3 }),

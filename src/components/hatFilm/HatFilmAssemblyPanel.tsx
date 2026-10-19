@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { assembleHatFilm, fetchHatFilmState, type HatFilmState } from "@/services/hatFilm/assembler";
+import { assembleHatFilm, fetchHatFilmState, isTabLockFree, OtherTabError, type HatFilmState } from "@/services/hatFilm/assembler";
+import { hatFilmPanelMode, readyShotCount } from "@/lib/hatFilmPanel";
 
 const PHASE_COPY: Record<string, string> = {
   generating_stills: "Creating shots",
@@ -20,6 +21,8 @@ export default function HatFilmAssemblyPanel({ jobId }: { jobId: string }) {
   const [progress, setProgress] = useState<{ p: number; stage: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const autoStarted = useRef(false);
+  const [tabLockFree, setTabLockFree] = useState(true);
+  const [otherTab, setOtherTab] = useState(false);
 
   const load = useCallback(async () => {
     try { setState(await fetchHatFilmState(jobId)); }
@@ -39,18 +42,25 @@ export default function HatFilmAssemblyPanel({ jobId }: { jobId: string }) {
       await assembleHatFilm(jobId, current, (p, stage) => setProgress({ p, stage }));
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof OtherTabError) setOtherTab(true);
+      else setError(e instanceof Error ? e.message : String(e));
       await load();
     } finally { setBusy(false); setProgress(null); }
   }, [jobId, load]);
 
   useEffect(() => {
-    if (!state || autoStarted.current || busy) return;
-    if (state.phase === "assembling_video" && state.manifest && !state.assembly.locked) {
-      autoStarted.current = true;
-      void start(state);
-    }
-  }, [state, busy, start]);
+    if (!state?.assembly.owned || busy) return;
+    let alive = true;
+    void isTabLockFree(jobId).then((free) => { if (alive) setTabLockFree(free); });
+    return () => { alive = false; };
+  }, [jobId, state?.assembly.owned, busy]);
+
+  const mode = state ? hatFilmPanelMode(state, { busy, autoStarted: autoStarted.current, tabLockFree }) : "idle";
+  useEffect(() => {
+    if (!state || mode !== "auto_start") return;
+    autoStarted.current = true;
+    void start(state);
+  }, [state, mode, start]);
 
   useEffect(() => {
     if (!busy) return;
@@ -60,7 +70,7 @@ export default function HatFilmAssemblyPanel({ jobId }: { jobId: string }) {
   }, [busy]);
 
   if (notHat || !state) return null;
-  const done = state.shots.filter((s) => s.status === "complete").length;
+  const done = readyShotCount(state.shots);
 
   return (
     <section className="mb-6 rounded-2xl border border-border/60 bg-card/60 p-5">
@@ -82,7 +92,7 @@ export default function HatFilmAssemblyPanel({ jobId }: { jobId: string }) {
         </div>
       ) : state.phase === "needs_review" ? (
         <p className="mt-3 text-sm text-muted-foreground">One or more shots didn't pass the product check after a retry. Review them below before the film can be assembled.</p>
-      ) : state.phase === "assembling_video" && state.assembly.locked ? (
+      ) : !busy && (mode === "other_tab" || otherTab) ? (
         <p className="mt-3 text-sm text-muted-foreground">Another tab is assembling this film. Keep that tab open.</p>
       ) : state.phase === "assembly_failed" || error ? (
         <div className="mt-3 space-y-3">

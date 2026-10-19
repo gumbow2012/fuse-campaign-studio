@@ -12,7 +12,7 @@ export type HatFilmState = {
   phase: string;
   job_status: string;
   shots: Array<{ shot_id: string; status: string; still_url: string | null; clip_url: string | null }>;
-  assembly: { status: string; attempts: number; error: string | null; locked: boolean };
+  assembly: { status: string; attempts: number; error: string | null; locked: boolean; owned?: boolean };
   final_url: string | null;
   manifest: { segments: HfSegment[]; logo_url: string; soundtrack_url: string } | null;
   manifest_error: string | null;
@@ -29,7 +29,24 @@ async function call<T>(action: string, jobId: string, extra: Record<string, unkn
   return data as T;
 }
 
-export const fetchHatFilmState = (jobId: string) => call<HatFilmState>("state", jobId);
+const tokenKey = (jobId: string) => `hatfilm:lock:${jobId}`;
+/** Sends this session's existing lease token (if any) so the server can say whether we own the lease. */
+export const fetchHatFilmState = (jobId: string) => {
+  const token = sessionStorage.getItem(tokenKey(jobId));
+  return call<HatFilmState>("state", jobId, token ? { token } : {});
+};
+
+export class OtherTabError extends Error {
+  constructor() { super("Another tab is assembling this film."); }
+}
+const tabLockName = (jobId: string) => `hatfilm-assembly:${jobId}`;
+
+/** True when no other open tab holds this film's in-browser lock (released automatically on reload/close). */
+export async function isTabLockFree(jobId: string): Promise<boolean> {
+  if (typeof navigator === "undefined" || !navigator.locks) return true;
+  const q = await navigator.locks.query();
+  return !(q.held ?? []).some((l) => l.name === tabLockName(jobId));
+}
 
 const tokenFor = (jobId: string) => {
   const key = `hatfilm:lock:${jobId}`;
@@ -38,7 +55,16 @@ const tokenFor = (jobId: string) => {
   return token;
 };
 
+/** Holds a browser tab lock for the whole assembly so a duplicated tab (same session token) can't run it twice. */
 export async function assembleHatFilm(jobId: string, state: HatFilmState, onProgress: (p: number, stage: string) => void) {
+  if (typeof navigator === "undefined" || !navigator.locks) return assembleLocked(jobId, state, onProgress);
+  return navigator.locks.request(tabLockName(jobId), { ifAvailable: true }, async (lock) => {
+    if (!lock) throw new OtherTabError();
+    return assembleLocked(jobId, state, onProgress);
+  });
+}
+
+async function assembleLocked(jobId: string, state: HatFilmState, onProgress: (p: number, stage: string) => void) {
   if (!state.manifest) throw new Error(state.manifest_error ?? "Shots aren't ready to assemble.");
   const token = tokenFor(jobId);
   await call("claim", jobId, { token });
