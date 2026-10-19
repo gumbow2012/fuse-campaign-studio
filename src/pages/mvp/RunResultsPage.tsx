@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import HatFilmAssemblyPanel from "@/components/hatFilm/HatFilmAssemblyPanel";
 import { AlertTriangle, ArrowLeft, Check, Download, Loader2, RefreshCw, Scissors } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import PageMeta from "@/components/mvp/PageMeta";
@@ -110,6 +111,7 @@ export default function RunResultsPage() {
       />
 
       <div className="mx-auto w-full max-w-5xl px-4 pb-24 pt-6 sm:px-6">
+        {runId ? <HatFilmAssemblyPanel jobId={runId} /> : null}
         <Button
           asChild
           variant="outline"

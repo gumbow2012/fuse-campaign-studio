@@ -13,6 +13,8 @@ import {
 } from "../_shared/supabase-admin.ts";
 import { PAPARAZZI_VERSION_ID, refundJobCreditsIfNeeded, runGraphJob } from "../_shared/executor.ts";
 import { buildTemplateInputPlan } from "../_shared/template-inputs.ts";
+import { compileHatFilmForJob, HatFilmInputError, isHatFilmGraph } from "../_shared/hat-film-runtime.ts";
+import { HAT_FILM_CONTEXT_KEY, missingHatFilmFields } from "../_shared/hat-film-recipe.ts";
 import {
   avatarIdentityImage,
   CAST_RUNTIME_KEY,
@@ -110,6 +112,7 @@ async function uploadInputFiles(
   admin: ReturnType<typeof createAdminClient>,
   jobId: string,
   inputFiles: StartTemplateRunBody["inputFiles"],
+  prefixWithKey = false,
 ) {
   const uploadedInputs: Record<string, string> = {};
 
@@ -120,7 +123,11 @@ async function uploadInputFiles(
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 48) || "input";
-    const storagePath = `system/lab-inputs/${jobId}/${safeName}.${extension}`;
+    // Hat Brand Film only: prefix with the input key so six angle uploads sharing a filename never overwrite each other.
+    const keySlug = nodeName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "input";
+    const storagePath = prefixWithKey
+      ? `system/lab-inputs/${jobId}/${keySlug}-${safeName}.${extension}`
+      : `system/lab-inputs/${jobId}/${safeName}.${extension}`;
 
     const { error: uploadError } = await admin.storage
       .from("fuse-assets")
@@ -697,6 +704,19 @@ Deno.serve(async (req) => {
       versionNodeIds: new Set(allVersionNodes.map((node) => node.id)),
     });
 
+    // Hat Brand Film (opt-in): required fields must be present before any job or charge.
+    if (isHatFilmGraph(allVersionNodes as any)) {
+      const present: Record<string, unknown> = {};
+      const supplied = { ...(body.inputs ?? {}), ...Object.fromEntries(Object.keys((body as any).inputFiles ?? {}).map((k) => [k, "file"])) };
+      for (const node of inputNodes) {
+        const slot = (node.prompt_config as any)?.hat_film_slot;
+        const value = supplied[node.id] ?? supplied[node.name] ?? (slot ? supplied[slot] : undefined);
+        if (slot && value) present[slot] = value;
+      }
+      const missing = missingHatFilmFields(present);
+      if (missing.length) return json({ error: "HAT_FILM_INPUTS_INVALID", issues: missing }, 400);
+    }
+
     const userRoles = user ? await getUserRoles(user.id, admin) : [];
     const bypassCredits = runnerAccess || userRoles.some((role) => role === "admin" || role === "dev");
     const templateName = getVersionTemplateName(version);
@@ -756,7 +776,7 @@ Deno.serve(async (req) => {
     if (jobError || !job) throw new Error(jobError?.message ?? "Failed to create job");
     jobId = job.id;
 
-    const uploadedInputs = await uploadInputFiles(admin, job.id, body.inputFiles);
+    const uploadedInputs = await uploadInputFiles(admin, job.id, body.inputFiles, isHatFilmGraph(allVersionNodes as any));
 
     const finalInputs = expandInputsForTemplate({
       templateName,
@@ -764,7 +784,10 @@ Deno.serve(async (req) => {
       suppliedInputs: { ...uploadedInputs, ...inputs },
     });
 
-    const basePayload = castRuntime ? { ...finalInputs, [CAST_RUNTIME_KEY]: castRuntime } : finalInputs;
+    const castPayload = castRuntime ? { ...finalInputs, [CAST_RUNTIME_KEY]: castRuntime } : finalInputs;
+    // Hat Brand Film: full validation + immutable compiled snapshot, still before the charge.
+    const hatFilmContext = compileHatFilmForJob(allVersionNodes as any, finalInputs as Record<string, unknown>);
+    const basePayload = hatFilmContext ? { ...castPayload, [HAT_FILM_CONTEXT_KEY]: hatFilmContext } : castPayload;
     const { error: inputUpdateError } = await admin
       .from("execution_jobs")
       .update({
@@ -858,6 +881,10 @@ Deno.serve(async (req) => {
 
     return json({ jobId: job.id, status: "queued" }, 202);
   } catch (error) {
+    if (error instanceof HatFilmInputError) {
+      if (jobId) await admin.from("execution_jobs").update({ status: "failed", error_log: error.message }).eq("id", jobId);
+      return json({ error: error.code, issues: error.issues }, 400);
+    }
     if (error instanceof CastConfigurationError) {
       // Fail closed before any provider submission or credit charge.
       return json({ error: error.code, detail: error.message }, 400);

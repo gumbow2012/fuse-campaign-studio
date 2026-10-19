@@ -295,6 +295,9 @@ Deno.serve(async (req) => {
         required: requirement?.required ?? true,
         hint: requirement?.shortInstruction ?? `${slot.name} is required for this template.`,
         requirement,
+        // Additive, opt-in: only Hat Brand Film nodes carry these keys.
+        ...(typeof slotNode?.prompt_config?.recipe === "string" ? { recipe: slotNode.prompt_config.recipe } : {}),
+        ...(typeof slotNode?.prompt_config?.editor_placeholder === "string" ? { placeholder: slotNode.prompt_config.editor_placeholder } : {}),
       };
     });
 
