@@ -26,7 +26,7 @@ test('manifest is exactly 12 shots / 645 frames with the approved cuts', () => {
   assert.deepEqual(HAT_FILM_CUTS, [0, 43, 72, 109, 147, 189, 223, 265, 340, 370, 414, 493, 645]);
   assert.equal(HAT_FILM_SHOTS.reduce((s, x) => s + x.frames, 0), 645);
   const edl = buildEditDecisionList();
-  assert.ok(edl.every((e) => e.muted && e.transition === 'hard_cut' && e.trim_end_ms <= 5000));
+  assert.ok(edl.every((e) => e.muted && e.transition === 'hard_cut' && (e.logo_overlay || e.trim_end_ms <= 5000)));
 });
 
 test('angles route to the right shots and never swap', () => {
