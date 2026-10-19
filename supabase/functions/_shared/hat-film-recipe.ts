@@ -175,3 +175,21 @@ export function buildEditDecisionList() {
     logo_overlay: shot.kind === "logo_composite",
   }));
 }
+
+/**
+ * Cost estimate (USD fallback prices; live fal pricing remains authoritative).
+ * 12 stills (incl. backgrounds for logo shots 06/12) at the image model flat price;
+ * 11 animated 5s clips, generated audio off (shot 12 is a still + logo composite).
+ * Worst case includes one automatic retry per shot.
+ */
+export function estimateHatFilm(p: { imageUsd: number; videoUsdPerSecond: number; usdPerCredit: number }) {
+  const stills = HAT_FILM_SHOTS.length;
+  const clips = HAT_FILM_SHOTS.filter((s) => s.index !== 12).length;
+  const baseUsd = stills * p.imageUsd + clips * HAT_FILM_CLIP_SECONDS * p.videoUsdPerSecond;
+  const maxUsd = baseUsd * (1 + HAT_FILM_MAX_AUTO_RETRIES);
+  return {
+    stills, clips,
+    base_usd: +baseUsd.toFixed(2), max_usd: +maxUsd.toFixed(2),
+    base_credits: Math.ceil(baseUsd / p.usdPerCredit), max_credits: Math.ceil(maxUsd / p.usdPerCredit),
+  };
+}
