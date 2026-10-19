@@ -64,16 +64,21 @@ async function loadShots(admin: Admin, jobId: string, qa: HatFilmQaState = empty
 
 /** Atomic compare-and-set: writes only if the stored lock still matches `expect`. */
 async function casAssembly(admin: Admin, job: any, next: HatFilmAssemblyState, expect: { token: string | null; expiredBefore?: string }) {
-  let q = admin.from("execution_jobs")
-    .update({ result_payload: { ...(job.result_payload ?? {}), [HAT_FILM_ASSEMBLY_KEY]: next } })
-    .eq("id", job.id)
-    .or(`result_payload->${HAT_FILM_ASSEMBLY_KEY}->>status.is.null,result_payload->${HAT_FILM_ASSEMBLY_KEY}->>status.neq.ready`);
-  if (expect.expiredBefore) q = q.lt(`result_payload->${HAT_FILM_ASSEMBLY_KEY}->>lock_expires_at`, expect.expiredBefore);
-  else if (expect.token === null) q = q.is(`result_payload->${HAT_FILM_ASSEMBLY_KEY}->>lock_token`, null);
-  else q = q.eq(`result_payload->${HAT_FILM_ASSEMBLY_KEY}->>lock_token`, expect.token);
-  const { data, error } = await q.select("id");
+  // Atomic, key-scoped: only the assembly key is merged into the CURRENT payload, so
+  // concurrent QA/outputs writes are never lost. Same guards as before, evaluated in-row.
+  const lockGuard = expect.expiredBefore
+    ? { field: "lock_expires_at", op: "lt", value: expect.expiredBefore }
+    : expect.token === null
+    ? { field: "lock_token", op: "is_null" }
+    : { field: "lock_token", op: "eq", value: expect.token };
+  const { data, error } = await admin.rpc("patch_job_result_payload", {
+    p_job_id: job.id,
+    p_patch: { [HAT_FILM_ASSEMBLY_KEY]: next },
+    p_guard_key: HAT_FILM_ASSEMBLY_KEY,
+    p_guards: [{ field: "status", op: "not_eq_or_null", value: "ready" }, lockGuard],
+  });
   if (error) throw new Error(error.message);
-  return (data ?? []).length === 1;
+  return data === true;
 }
 
 const sign = (admin: Admin, ref: string | null | undefined) => (ref ? resolveDisplayUrl(admin, ref, 6 * 3600) : Promise.resolve(null));

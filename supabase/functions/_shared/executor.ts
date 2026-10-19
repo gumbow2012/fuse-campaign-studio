@@ -32,7 +32,7 @@ import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
 import { ensureHatFilmContext, hatFilmPrompt, hatFilmStillInputs } from "./hat-film-runtime.ts";
 import { hatFilmCorrection, hatFilmGateBeforeClip } from "./hat-film-qa-gemini.ts";
-import { HAT_FILM_QA_KEY } from "./hat-film-qa.ts";
+import { QA_CLAIM_MS } from "./hat-film-qa.ts";
 import { HAT_FILM_ASSEMBLY_KEY, emptyAssembly } from "./hat-film-assembly.ts";
 import { HAT_FILM_CONTEXT_KEY } from "./hat-film-recipe.ts";
 import { buildIdentityLockedPrompt } from "./identity-lock.ts";
@@ -1139,35 +1139,70 @@ export async function finalizeJobIfTerminal(admin: AdminClient, jobId: string) {
     return acc;
   }, {});
 
-  // Hat Brand Film: keep (never overwrite) the browser-assembly state on repeat finalizes.
+  // Hat Brand Film: merge outputs atomically so concurrent QA/assembly state is never
+  // overwritten by a stale copy; seed the assembly state only if it is absent.
+  // Every other template keeps the original whole-payload replacement.
   const { data: jobRow } = await admin
     .from("execution_jobs")
-    .select("input_payload, result_payload")
+    .select("input_payload")
     .eq("id", jobId)
     .maybeSingle();
-  const hatFilmExtra = (jobRow as any)?.input_payload?.[HAT_FILM_CONTEXT_KEY]
-    ? {
-      [HAT_FILM_ASSEMBLY_KEY]: (jobRow as any)?.result_payload?.[HAT_FILM_ASSEMBLY_KEY] ?? emptyAssembly(),
-      ...((jobRow as any)?.result_payload?.[HAT_FILM_QA_KEY] ? { [HAT_FILM_QA_KEY]: (jobRow as any).result_payload[HAT_FILM_QA_KEY] } : {}),
-    }
-    : {};
+  const isHatFilm = Boolean((jobRow as any)?.input_payload?.[HAT_FILM_CONTEXT_KEY]);
 
-  await admin
-    .from("execution_jobs")
-    .update({
-      status: "complete",
-      progress: 100,
-      completed_at: new Date().toISOString(),
-      result_payload: { outputs, telemetry, ...hatFilmExtra },
-      error_log: null,
-    })
-    .eq("id", jobId);
+  if (isHatFilm) {
+    const merged = await admin.rpc("patch_job_result_payload", { p_job_id: jobId, p_patch: { outputs, telemetry } });
+    if (merged.error) throw new Error(`Hat film finalize failed: ${merged.error.message}`);
+    await admin.rpc("patch_job_result_payload", {
+      p_job_id: jobId,
+      p_patch: { [HAT_FILM_ASSEMBLY_KEY]: emptyAssembly() },
+      p_guard_key: HAT_FILM_ASSEMBLY_KEY,
+      p_guards: [{ op: "key_absent" }],
+    });
+    await admin
+      .from("execution_jobs")
+      .update({ status: "complete", progress: 100, completed_at: new Date().toISOString(), error_log: null })
+      .eq("id", jobId);
+  } else {
+    await admin
+      .from("execution_jobs")
+      .update({
+        status: "complete",
+        progress: 100,
+        completed_at: new Date().toISOString(),
+        result_payload: { outputs, telemetry },
+        error_log: null,
+      })
+      .eq("id", jobId);
+  }
 
   // P5C — one immutable creator earning per successful monetized customer run.
   await createCreatorEarningForJob(admin, { jobId });
 
   // F2 — a completed free first video burns the entitlement (reserved -> consumed).
   await consumeFreeVideoEntitlementForJob(admin, jobId);
+}
+
+/** Max time one invocation sleeps waiting on another worker's QA claim (edge wall-clock safety). */
+const HAT_WAIT_BUDGET_MS = 120_000;
+
+/**
+ * Re-invokes the run in a fresh edge invocation using the existing runner-code resume
+ * path. Best effort: if it cannot hand off, the stale-run reconciler still closes the run
+ * out (as partial — never a false Ready).
+ */
+async function handOffHatFilmJob(jobId: string) {
+  const url = Deno.env.get("SUPABASE_URL");
+  const code = Deno.env.get("LAB_RUNNER_CODE")?.trim();
+  if (!url || !code) {
+    console.warn("[hat-film] cannot hand off waiting run (missing runner code)", jobId);
+    return;
+  }
+  // The fresh invocation gets its own wait budget; at most two links cover a 3-minute claim.
+  await fetch(`${url}/functions/v1/resume-template-job`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-runner-code": code },
+    body: JSON.stringify({ jobId }),
+  }).catch((error) => console.warn("[hat-film] hand-off failed", jobId, String(error)));
 }
 
 export async function runGraphJob(admin: AdminClient, jobId: string) {
@@ -1312,6 +1347,19 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
   await admin.from("execution_jobs").update({ status: "running", progress: 10 }).eq("id", job.id);
 
   const mutableSteps = [...(steps as StepRow[])];
+  if (hatFilm) {
+    // A Hat clip left "running" with no provider request was abandoned mid-check (the
+    // worker died). Re-gate it: the QA claim serializes checks and the gate's
+    // clip_submitted_by marker guarantees a single submission.
+    for (const step of mutableSteps) {
+      const n = nodeMap.get(step.node_id) as any;
+      if (step.status === "running" && !step.provider_request_id && n?.prompt_config?.hat_film_stage === "clip") step.status = "pending";
+    }
+  }
+  // Hat Brand Film: clip steps whose product check is held by another worker. They are
+  // skipped (never re-gated in a tight loop) until that claim expires; see below.
+  const hatWaiting = new Map<string, number>();
+  let hatWaitedMs = 0;
 
   while (true) {
     const pendingSteps = mutableSteps.filter((step) => step.status === "pending");
@@ -1333,14 +1381,31 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
     }
 
     const readySteps = pendingSteps.filter((step) =>
-      isStepReady(step, incomingByTarget.get(step.node_id) ?? [], resolved)
+      !hatWaiting.has(step.id) && isStepReady(step, incomingByTarget.get(step.node_id) ?? [], resolved)
     );
 
     if (!readySteps.length) {
       const hasAsyncRunning = mutableSteps.some((step) => step.status === "running" && step.provider_request_id);
       if (hasAsyncRunning) {
+        // A later provider callback re-runs the graph and re-gates any waiting clip.
         await refreshJobProgress(admin, job.id);
         return;
+      }
+      if (hatWaiting.size) {
+        // Nothing else will wake this run: wait (bounded) for the other worker's claim to
+        // expire, then re-gate. If that is longer than this invocation can safely sleep,
+        // hand the run to a fresh invocation instead of leaving it wedged.
+        const wakeAt = Math.min(...hatWaiting.values()) + 1_000;
+        const sleepMs = Math.max(1_000, wakeAt - Date.now());
+        if (hatWaitedMs + sleepMs > HAT_WAIT_BUDGET_MS) {
+          await refreshJobProgress(admin, job.id);
+          await handOffHatFilmJob(job.id);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, sleepMs));
+        hatWaitedMs += sleepMs;
+        hatWaiting.clear();
+        continue;
       }
       throw new Error("No executable steps remain");
     }
@@ -1533,8 +1598,18 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             const stillRequestId = stillStep?.provider_request_id ?? null;
             // The gate records the rejected request id as superseded (durably, CAS) before we resubmit.
             const gate = await hatFilmGateBeforeClip(admin, { jobId: job.id, ctx: hatFilm, shotId, stillUrl: initImageUrl, stillRequestId });
+            if (gate.action === "skip") {
+              // Another worker was already told to animate this shot; never submit twice.
+              continue;
+            }
             if (gate.action === "wait") {
-              // Another worker owns this shot's check and will submit the clip.
+              // Another worker owns this shot's check and normally submits the clip itself.
+              // Put the step back to pending (only if nothing was submitted) so a later
+              // invocation can re-gate it if that worker dies; re-gate here after the claim.
+              await admin.from("execution_steps").update({ status: "pending" })
+                .eq("id", step.id).is("provider_request_id", null);
+              step.status = "pending";
+              hatWaiting.set(step.id, gate.until ? Date.parse(gate.until) : Date.now() + QA_CLAIM_MS);
               continue;
             }
             if (gate.action === "retry") {

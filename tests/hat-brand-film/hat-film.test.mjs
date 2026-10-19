@@ -157,6 +157,12 @@ test('QA: wrong top brim fails (gray underside recolored the top)', () => {
 });
 test('QA: three-hat shot with a gray upper bill fails', () => {
   assert.equal(judgeStill(shot(11), profile, { ...good, hat_count: 3, side_shown: 'multiple', top_brim_color: 'gray' }).verdict, 'fail');
+  // Each of the three hats is judged on its own upper bill: one gray bill fails even if the aggregate says black.
+  const three = { ...good, hat_count: 3, side_shown: 'multiple', top_brim_color: 'black' };
+  assert.equal(judgeStill(shot(11), profile, { ...three, top_brim_colors_per_hat: ['black', 'black', 'black'] }).verdict, 'pass');
+  assert.equal(judgeStill(shot(11), profile, { ...three, top_brim_colors_per_hat: ['black', 'light gray', 'black'] }).verdict, 'fail');
+  assert.equal(judgeStill(shot(11), profile, { ...three, top_brim_colors_per_hat: ['black', 'black'] }).verdict, 'fail');
+  assert.equal(judgeStill(shot(11), profile, { ...three }).verdict, 'fail');
 });
 test('QA: reversed sides fail', () => {
   const v = judgeStill(shot(4), profile, { ...good, side_shown: 'wearer_left', visible_text: '', side_identity: 'white text NOBODY CARES WORK HARDER' });

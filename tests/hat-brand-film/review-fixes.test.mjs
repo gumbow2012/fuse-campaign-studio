@@ -99,7 +99,26 @@ test('duplicate concurrent checks of the same shot run one paid inspection', asy
   const out = await Promise.all([1, 2, 3].map(() => qaMod.runHatFilmGate(d, { shot: shot(8), stillUrl: 'u/08', stillRequestId: 'r8' })));
   assert.equal(calls.still, 1);
   assert.equal(out.filter((o) => o.action === 'animate').length, 1);
-  assert.ok(out.every((o) => o.action === 'animate' || o.action === 'wait'));
+  assert.ok(out.every((o) => ['animate', 'wait', 'skip'].includes(o.action)));
+});
+
+test('a passed shot is handed to exactly one worker; later gates skip (no double clip charge)', async () => {
+  const store = memoryStore(); const calls = { ref: 0, still: 0 };
+  const d = deps(store, calls, () => goodFor(8));
+  const first = await qaMod.runHatFilmGate(d, { shot: shot(8), stillUrl: 'u/08', stillRequestId: 'r8' });
+  assert.equal(first.action, 'animate');
+  const later = await Promise.all([1, 2, 3].map(() => qaMod.runHatFilmGate(d, { shot: shot(8), stillUrl: 'u/08', stillRequestId: 'r8' })));
+  assert.deepEqual(later.map((o) => o.action), ['skip', 'skip', 'skip']);
+  assert.equal(calls.still, 1);
+  assert.ok(parseQa(store.doc.result.hat_film_qa).shots.shot_08.clip_submitted_by);
+});
+
+test('wait carries the blocking claim expiry so the executor can re-gate after it', async () => {
+  const store = memoryStore(); const calls = { ref: 0, still: 0 };
+  const d = deps(store, calls, () => goodFor(8));
+  const out = await Promise.all([1, 2].map(() => qaMod.runHatFilmGate(d, { shot: shot(8), stillUrl: 'u/08', stillRequestId: 'r8' })));
+  const waited = out.find((o) => o.action === 'wait');
+  if (waited) assert.ok(Number.isFinite(Date.parse(waited.until)));
 });
 
 test('retry is bounded: fail → one retry (old request superseded) → needs review', async () => {
