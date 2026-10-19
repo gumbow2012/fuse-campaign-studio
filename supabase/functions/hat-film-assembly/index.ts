@@ -6,6 +6,7 @@
 // issues an authenticated upload URL, and accepts the final file only after
 // verifying it exists and its reported probe matches 1080x1920 / 645 frames /
 // audio. No provider calls, no credit changes. Owner (or admin) only.
+import { probeMp4 } from "../_shared/mp4-source-audio-finish.ts";
 import { corsHeaders, createAdminClient, errorMessage, getUserRoles, json, requireUser } from "../_shared/supabase-admin.ts";
 import { resolveDisplayUrl } from "../_shared/asset-access.ts";
 import { HAT_FILM_CONTEXT_KEY, HAT_FILM_SHOTS } from "../_shared/hat-film-recipe.ts";
@@ -152,15 +153,19 @@ Deno.serve(async (req) => {
 
     if (action === "complete") {
       if (body.path !== outputPath) return json({ error: "Unexpected output path" }, 400);
-      const { data: signed } = await admin.storage.from(BUCKET).createSignedUrl(outputPath, 120);
-      const head = signed?.signedUrl ? await fetch(signed.signedUrl, { headers: { Range: "bytes=0-7" } }) : null;
-      const bytes = head?.ok ? new Uint8Array(await head.arrayBuffer()) : new Uint8Array();
-      const isMp4 = bytes.length >= 8 && String.fromCharCode(...bytes.slice(4, 8)) === "ftyp";
-      const v = body.verified ?? null;
-      const verified = v && isMp4 ? {
-        width: Number(v.width), height: Number(v.height), frames: Number(v.frames),
-        has_audio: v.has_audio === true, duration_ms: Number(v.duration_ms),
-      } : null;
+      // Verify the uploaded file ourselves; browser-reported numbers are ignored.
+      let verified: Record<string, unknown> | null = null;
+      try {
+        const { data: file, error: dlError } = await admin.storage.from(BUCKET).download(outputPath);
+        if (dlError || !file) throw new Error(dlError?.message ?? "Final file missing");
+        const p = probeMp4(new Uint8Array(await file.arrayBuffer()));
+        const audioOk = p.has_audio && p.audio_codec === "mp4a" && Math.abs(p.audio_duration_ms - 21500) <= 100;
+        verified = p.video_codec === "avc1" && audioOk ? { width: p.width, height: p.height, frames: p.frames, has_audio: true, duration_ms: p.duration_ms } : { ...p, has_audio: audioOk };
+      } catch (error) {
+        const next = failedAssembly(assembly, token, `Final file failed verification: ${errorMessage(error)}`);
+        await casAssembly(admin, job, next, { token });
+        return json({ status: next.status, error: next.error });
+      }
       const next = acceptAssembly(assembly, token, { output_path: outputPath, verified });
       const ok = await casAssembly(admin, job, next, { token });
       if (!ok) return json({ error: "LOCK_LOST" }, 409);

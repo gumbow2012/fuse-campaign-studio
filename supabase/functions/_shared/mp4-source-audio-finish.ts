@@ -633,3 +633,35 @@ export function shouldFinishSourceEdit(inputPayload: Record<string, unknown> | n
   const p = inputPayload ?? {};
   return p.source_video_edit === true && p.keep_audio === true && p.video_model === "kling-o3-pro-video-edit";
 }
+
+/**
+ * Independent server-side probe (additive; used by Hat Brand Film assembly to
+ * verify a browser-rendered file instead of trusting client claims). Same
+ * strict parser: rejects fragmented/encrypted/malformed files.
+ */
+export function probeMp4(bytes: Uint8Array) {
+  const f = parseFile(bytes, "file");
+  const video = f.traks.filter((t) => handlerOf(t) === "vide");
+  const audio = f.traks.filter((t) => handlerOf(t) === "soun");
+  if (video.length !== 1) fail("invalid_box", "file must have exactly one video track");
+  const v = video[0];
+  const tk = tkhdInfo(payloadOf(need(v, ["tkhd"], "tkhd"), "tkhd"));
+  const stszP = payloadOf(need(v, ["mdia", "minf", "stbl", "stsz"], "stsz"), "stsz");
+  const frames = view(stszP).getUint32(8);
+  const md = readTimescaleDuration(payloadOf(need(v, ["mdia", "mdhd"], "mdhd"), "mdhd"), "mdhd");
+  let audioMs = 0;
+  if (audio.length) {
+    const amd = readTimescaleDuration(payloadOf(need(audio[0], ["mdia", "mdhd"], "mdhd"), "mdhd"), "mdhd");
+    audioMs = amd.timescale ? Math.round((amd.duration / amd.timescale) * 1000) : 0;
+  }
+  return {
+    width: Math.round(tk.width),
+    height: Math.round(tk.height),
+    frames,
+    duration_ms: md.timescale ? Math.round((md.duration / md.timescale) * 1000) : 0,
+    has_audio: audio.length === 1 && audioMs > 0,
+    audio_duration_ms: audioMs,
+    video_codec: sampleEntryType(v),
+    audio_codec: audio.length ? sampleEntryType(audio[0]) : null,
+  };
+}
