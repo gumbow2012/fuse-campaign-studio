@@ -112,6 +112,7 @@ async function uploadInputFiles(
   admin: ReturnType<typeof createAdminClient>,
   jobId: string,
   inputFiles: StartTemplateRunBody["inputFiles"],
+  prefixWithKey = false,
 ) {
   const uploadedInputs: Record<string, string> = {};
 
@@ -122,9 +123,11 @@ async function uploadInputFiles(
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 48) || "input";
-    // Prefix with the input key so two uploads sharing a filename never overwrite each other.
+    // Hat Brand Film only: prefix with the input key so six angle uploads sharing a filename never overwrite each other.
     const keySlug = nodeName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "input";
-    const storagePath = `system/lab-inputs/${jobId}/${keySlug}-${safeName}.${extension}`;
+    const storagePath = prefixWithKey
+      ? `system/lab-inputs/${jobId}/${keySlug}-${safeName}.${extension}`
+      : `system/lab-inputs/${jobId}/${safeName}.${extension}`;
 
     const { error: uploadError } = await admin.storage
       .from("fuse-assets")
