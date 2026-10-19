@@ -5,7 +5,7 @@
  * "Ready" is only ever set by the server after it re-probes the uploaded file.
  */
 import { supabase } from "@/integrations/supabase/client";
-import { fitAudioPlanes, HF_AUDIO_RATE, HF_AUDIO_SAMPLES, type HfSegment } from "@/lib/hatFilmFramePlan";
+import type { HfSegment } from "@/lib/hatFilmFramePlan";
 import type { HatFilmWorkerRequest, HatFilmWorkerResponse } from "@/workers/hatFilm.worker";
 
 export type HatFilmState = {
@@ -38,24 +38,11 @@ const tokenFor = (jobId: string) => {
   return token;
 };
 
-async function decodeSoundtrack(url: string) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error("Couldn't load the soundtrack.");
-  const bytes = await response.arrayBuffer();
-  const ctx = new OfflineAudioContext(2, HF_AUDIO_SAMPLES, HF_AUDIO_RATE);
-  const buffer = await ctx.decodeAudioData(bytes);
-  const raw = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
-  if (buffer.sampleRate !== HF_AUDIO_RATE) throw new Error("Soundtrack sample rate mismatch.");
-  return fitAudioPlanes(raw.length === 1 ? [raw[0], raw[0]] : raw.slice(0, 2)).planes;
-}
-
 export async function assembleHatFilm(jobId: string, state: HatFilmState, onProgress: (p: number, stage: string) => void) {
   if (!state.manifest) throw new Error(state.manifest_error ?? "Shots aren't ready to assemble.");
   const token = tokenFor(jobId);
   await call("claim", jobId, { token });
   try {
-    onProgress(2, "Loading soundtrack");
-    const planes = await decodeSoundtrack(state.manifest.soundtrack_url);
     const worker = new Worker(new URL("../../workers/hatFilm.worker.ts", import.meta.url), { type: "module" });
     const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
       worker.onmessage = (e: MessageEvent<HatFilmWorkerResponse>) => {
@@ -65,8 +52,8 @@ export async function assembleHatFilm(jobId: string, state: HatFilmState, onProg
         else reject(new Error(m.message));
       };
       worker.onerror = (e) => reject(new Error(e.message || "Assembler crashed."));
-      const req: HatFilmWorkerRequest = { type: "assemble", jobId, segments: state.manifest!.segments, logoUrl: state.manifest!.logo_url, audio: { sampleRate: HF_AUDIO_RATE, channels: 2, planes } };
-      worker.postMessage(req, planes.map((p) => p.buffer));
+      const req: HatFilmWorkerRequest = { type: "assemble", jobId, segments: state.manifest!.segments, logoUrl: state.manifest!.logo_url, soundtrackUrl: state.manifest!.soundtrack_url };
+      worker.postMessage(req);
     }).finally(() => worker.terminate());
 
     onProgress(97, "Saving to your library");
