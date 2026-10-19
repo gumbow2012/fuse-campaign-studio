@@ -1,4 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { classifyProviderCallback } from "../_shared/provider-callback-guard.ts";
+import { HAT_FILM_QA_KEY, supersededRequestIds } from "../_shared/hat-film-qa.ts";
 
 import nacl from "npm:tweetnacl";
 
@@ -69,6 +71,7 @@ Deno.serve(async (req) => {
       .eq("provider_request_id", requestId)
       .single();
 
+    let matchedBy: "request_id" | "step_id" = "request_id";
     if ((stepError || !step) && url.searchParams.get("stepId")) {
       const stepId = url.searchParams.get("stepId");
       const jobId = url.searchParams.get("jobId");
@@ -80,17 +83,35 @@ Deno.serve(async (req) => {
       if (fallback.error) throw new Error(fallback.error.message);
       if (fallback.data && (!jobId || fallback.data.job_id === jobId)) {
         step = fallback.data as any;
-        if (!step.provider_request_id) {
-          await admin
-            .from("execution_steps")
-            .update({ provider_request_id: requestId })
-            .eq("id", step.id);
-          step.provider_request_id = requestId;
-        }
+        matchedBy = "step_id";
       }
     }
 
     if (!step) throw new Error(stepError?.message ?? "Step not found for request");
+
+    // Reject callbacks from superseded attempts (e.g. a still rejected by the
+    // Hat Brand Film product check whose late result arrives during/after its retry).
+    const { data: jobRow, error: jobRowError } = await admin
+      .from("execution_jobs").select("result_payload").eq("id", step.job_id).maybeSingle();
+    if (jobRowError) throw new Error(jobRowError.message);
+    const decision = classifyProviderCallback({
+      matchedBy,
+      stepRequestId: step.provider_request_id,
+      callbackRequestId: requestId,
+      superseded: supersededRequestIds((jobRow as any)?.result_payload?.[HAT_FILM_QA_KEY]),
+    });
+    if (decision === "superseded") return json({ ok: true, superseded: true });
+    if (decision === "adopt") {
+      const { data: adopted, error: adoptError } = await admin
+        .from("execution_steps")
+        .update({ provider_request_id: requestId })
+        .eq("id", step.id)
+        .is("provider_request_id", null)
+        .select("id");
+      if (adoptError) throw new Error(adoptError.message);
+      if ((adopted ?? []).length !== 1) return json({ ok: true, superseded: true });
+      step.provider_request_id = requestId;
+    }
 
     if (step.status === "complete") return json({ ok: true, duplicate: true });
 

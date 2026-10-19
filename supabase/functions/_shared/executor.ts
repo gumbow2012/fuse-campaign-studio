@@ -1528,15 +1528,24 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           // Hat Brand Film: automatic product check of the still BEFORE animation.
           if (hatFilm && (node as any).prompt_config?.hat_film_stage === "clip") {
             const shotId = String((node as any).prompt_config.hat_film_shot);
-            const gate = await hatFilmGateBeforeClip(admin, { jobId: job.id, ctx: hatFilm, shotId, stillUrl: initImageUrl });
+            const stillNode = nodes.find((n: any) => n.prompt_config?.hat_film_shot === shotId && n.prompt_config?.hat_film_stage === "still");
+            const stillStep = stillNode ? mutableSteps.find((s) => s.node_id === stillNode.id) : undefined;
+            const stillRequestId = stillStep?.provider_request_id ?? null;
+            // The gate records the rejected request id as superseded (durably, CAS) before we resubmit.
+            const gate = await hatFilmGateBeforeClip(admin, { jobId: job.id, ctx: hatFilm, shotId, stillUrl: initImageUrl, stillRequestId });
+            if (gate.action === "wait") {
+              // Another worker owns this shot's check and will submit the clip.
+              continue;
+            }
             if (gate.action === "retry") {
-              const stillNode = nodes.find((n: any) => n.prompt_config?.hat_film_shot === shotId && n.prompt_config?.hat_film_stage === "still");
-              const stillStep = stillNode ? mutableSteps.find((s) => s.node_id === stillNode.id) : undefined;
               if (!stillNode || !stillStep) throw new Error(`NEEDS_REVIEW: ${shotId} still step missing for retry`);
-              await admin.from("execution_steps").update({
+              let reset = admin.from("execution_steps").update({
                 status: "pending", provider_request_id: null, output_asset_id: null, completed_at: null, error_log: null,
-                output_payload: { hat_film_qa_retry: true },
+                output_payload: { hat_film_qa_retry: true, superseded_request_id: stillRequestId },
               }).eq("id", stillStep.id);
+              reset = stillRequestId ? reset.eq("provider_request_id", stillRequestId) : reset.is("provider_request_id", null);
+              const { error: resetError } = await reset;
+              if (resetError) throw new Error(`Retry reset failed: ${resetError.message}`);
               stillStep.status = "pending";
               stillStep.provider_request_id = null;
               resolved.delete(stillNode.id);

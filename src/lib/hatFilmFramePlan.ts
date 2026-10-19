@@ -61,8 +61,10 @@ export function coverRect(srcW: number, srcH: number, W = HF_WIDTH, H = HF_HEIGH
 const easeOut = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
 
 /**
- * Logo placement: aspect preserved, never warped. Composite shots place it in
- * the sign/banner area; the final hold scales 94%→100% over 1s then holds,
+ * Logo placement: aspect preserved, never warped, pixels unaltered. Shot 06
+ * places it as an intentional on-screen brand mark in the open upper-middle
+ * space the still prompt reserves (fixed screen position; NOT tracked to any
+ * object in the scene); the final hold scales 94%→100% over 1s then holds,
  * with a light sweep across the first 1.5s.
  */
 export function logoPlacement(kind: HfSegmentKind, f: number, frames: number, logoW: number, logoH: number): (Rect & { opacity: number; sweep: number | null }) | null {

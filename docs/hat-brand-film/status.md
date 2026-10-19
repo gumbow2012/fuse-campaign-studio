@@ -35,7 +35,10 @@ Draft only. Not published, not deployed, no paid generation run.
 - This backend has no graph tables (`nodes`, `edges`, `template_versions`, `execution_jobs`), so the seed and a real run can't execute here.
 - `FAL_API_KEY` is missing, so live prices and generation are unverified. Fallback estimate: 12 stills + 11 five-second clips ≈ $7.96 / 82 credits; worst case with one retry per shot ≈ $15.92 / 163 credits.
 - The browser assembler has not run on real clips; WebCodecs needs desktop Chrome or Edge.
-- Shot 06 composites the logo at a fixed sign area. It doesn't track a generated sign.
+- Shot 06 shows the original logo as an intentional, fixed on-screen brand mark over open space the still prompt reserves (no sign, banner or text is generated; the product check rejects any). It is not tracked to any scene object.
+- Product-check state is serialized: per-shot claims and one reference analysis per run, compare-and-set on a revision; rejected still request ids are recorded before a retry and their late callbacks are ignored.
+- Interior shots (08, 10) are judged on the underside/lining against the inside reference; the upper bill is required only on shots 01 and 11.
+- Studio price note shows the estimate, worst case with one retry per shot, and 12–23 product checks whose price is unavailable. Live totals are not verified.
 - Product checks: up to 12 analyzer calls per run (23 with retries), billed to FUSE's analysis key, not customer credits; no verified price.
 - Whether the run price covers the retry allowance hasn't been checked; the Hat template has no entry in the credit-cost table yet.
 

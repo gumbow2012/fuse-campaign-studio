@@ -11,8 +11,8 @@ import { GoogleGenAI } from "https://esm.sh/@google/genai@1.29.0";
 import { HAT_FILM_SHOTS } from "./hat-film-recipe.ts";
 import type { HatFilmRunContext } from "./hat-film-prompts.ts";
 import {
-  applyCheck, brimConflicts, decideAfterCheck, emptyShotQa, HAT_FILM_QA_KEY, judgeStill, normalizeReferenceProfile, parseQa,
-  REFERENCE_PROMPT, REFERENCE_SCHEMA, STILL_PROMPT, STILL_SCHEMA, type HatFilmQaState, type StillReport, type Verdict,
+  HAT_FILM_QA_KEY, parseQa, REFERENCE_PROMPT, REFERENCE_SCHEMA, runHatFilmGate, STILL_PROMPT, STILL_SCHEMA,
+  type GateResult, type HatFilmQaState, type QaStore,
 } from "./hat-film-qa.ts";
 import { resolveExecutionUrls } from "./asset-access.ts";
 
@@ -63,71 +63,47 @@ const refUrls = (ctx: HatFilmRunContext) => {
   return ["front", "right", "left", "back", "inside"].map(pick).filter((u): u is string => !!u);
 };
 
-export async function loadQa(admin: Admin, jobId: string): Promise<{ qa: HatFilmQaState; result: Record<string, unknown> }> {
-  const { data } = await admin.from("execution_jobs").select("result_payload").eq("id", jobId).maybeSingle();
-  const result = (data?.result_payload ?? {}) as Record<string, unknown>;
-  return { qa: parseQa(result[HAT_FILM_QA_KEY]), result };
+function jobStore(admin: Admin, jobId: string): QaStore {
+  let result: Record<string, unknown> = {};
+  return {
+    async read() {
+      const { data, error } = await admin.from("execution_jobs").select("result_payload").eq("id", jobId).maybeSingle();
+      if (error) throw new Error(`QA state read failed: ${error.message}`);
+      if (!data) throw new Error("QA state read failed: run not found");
+      result = (data.result_payload ?? {}) as Record<string, unknown>;
+      const qa = parseQa(result[HAT_FILM_QA_KEY]);
+      return { qa, rev: qa.rev ?? 0 };
+    },
+    async write(qa, expectedRev) {
+      const path = `result_payload->${HAT_FILM_QA_KEY}->>rev`;
+      let q = admin.from("execution_jobs").update({ result_payload: { ...result, [HAT_FILM_QA_KEY]: qa } }).eq("id", jobId);
+      q = expectedRev === 0 ? q.or(`${path}.is.null,${path}.eq.0`) : q.eq(path, String(expectedRev));
+      const { data, error } = await q.select("id");
+      if (error) throw new Error(`QA state write failed: ${error.message}`);
+      return (data ?? []).length === 1;
+    },
+  };
 }
 
-async function saveQa(admin: Admin, jobId: string, qa: HatFilmQaState) {
-  const { result } = await loadQa(admin, jobId); // re-read to keep other keys
-  await admin.from("execution_jobs").update({ result_payload: { ...result, [HAT_FILM_QA_KEY]: qa } }).eq("id", jobId);
+export async function loadQa(admin: Admin, jobId: string): Promise<{ qa: HatFilmQaState }> {
+  const { qa } = await jobStore(admin, jobId).read();
+  return { qa };
 }
 
-/** Reference analysis, once per run (stored; reused by every check). */
-async function ensureReference(admin: Admin, jobId: string, ctx: HatFilmRunContext, qa: HatFilmQaState) {
-  if (qa.reference?.status === "ok") return qa;
-  const now = new Date().toISOString();
-  try {
-    const raw = await ask(admin, REFERENCE_PROMPT, REFERENCE_SCHEMA, refUrls(ctx));
-    const n = normalizeReferenceProfile(raw);
-    if (!n.ok) qa.reference = { status: "invalid", profile: null, error: n.reason, analyzed_at: now };
-    else {
-      const conflicts = brimConflicts(n.profile, ctx.locks);
-      qa.reference = conflicts.length
-        ? { status: "invalid", profile: n.profile, error: conflicts.join("; "), analyzed_at: now }
-        : { status: "ok", profile: n.profile, error: null, analyzed_at: now };
-    }
-  } catch (e) {
-    const unavailable = (e as { unavailable?: boolean }).unavailable;
-    qa.reference = { status: unavailable ? "unavailable" : "invalid", profile: null, error: e instanceof Error ? e.message : String(e), analyzed_at: now };
-  }
-  await saveQa(admin, jobId, qa);
-  return qa;
-}
-
-export type GateResult = { action: "animate" } | { action: "retry"; correction: string } | { action: "needs_review"; reason: string };
+export type { GateResult };
 
 /** Runs before a Hat clip is submitted. Only "animate" lets the clip start. */
-export async function hatFilmGateBeforeClip(admin: Admin, args: { jobId: string; ctx: HatFilmRunContext; shotId: string; stillUrl: string | undefined }): Promise<GateResult> {
+export function hatFilmGateBeforeClip(admin: Admin, args: { jobId: string; ctx: HatFilmRunContext; shotId: string; stillUrl: string | undefined; stillRequestId: string | null }): Promise<GateResult> {
   const shot = HAT_FILM_SHOTS.find((s) => s.id === args.shotId);
-  if (!shot) return { action: "needs_review", reason: `unknown shot ${args.shotId}` };
-  let { qa } = await loadQa(admin, args.jobId);
-  const current = qa.shots[shot.id] ?? emptyShotQa();
-  if (current.status === "passed") return { action: "animate" };
-  if (current.status === "needs_review") return { action: "needs_review", reason: current.last?.issues.join("; ") || "needs review" };
-  if (!args.stillUrl) return { action: "needs_review", reason: "still missing" };
-
-  qa = await ensureReference(admin, args.jobId, args.ctx, qa);
-  const ref = qa.reference;
-  let verdict: Verdict | null = null;
-  let analyzer = ref?.status === "ok";
-  if (analyzer && ref?.profile) {
-    try {
-      const report = (await ask(admin, STILL_PROMPT, STILL_SCHEMA, [args.stillUrl, ...refUrls(args.ctx)])) as StillReport;
-      verdict = judgeStill(shot, ref.profile, report);
-    } catch (e) {
-      if ((e as { unavailable?: boolean }).unavailable) analyzer = false;
-      verdict = { verdict: "uncertain", issues: [`inspection failed: ${e instanceof Error ? e.message : String(e)}`] };
-    }
-  }
-  const decision = decideAfterCheck(verdict, current, analyzer);
-  const next = applyCheck(current, verdict ?? { verdict: "uncertain", issues: [`reference analysis ${ref?.status ?? "missing"}: ${ref?.error ?? ""}`] }, decision, new Date().toISOString());
-  qa.shots[shot.id] = next;
-  await saveQa(admin, args.jobId, qa);
-  if (decision === "animate") return { action: "animate" };
-  if (decision === "retry") return { action: "retry", correction: next.correction ?? "" };
-  return { action: "needs_review", reason: next.last?.issues.join("; ") || "product check could not verify this shot" };
+  if (!shot) return Promise.resolve({ action: "needs_review", reason: `unknown shot ${args.shotId}` });
+  return runHatFilmGate({
+    store: jobStore(admin, args.jobId),
+    analyzeReference: () => ask(admin, REFERENCE_PROMPT, REFERENCE_SCHEMA, refUrls(args.ctx)),
+    inspectStill: (url) => ask(admin, STILL_PROMPT, STILL_SCHEMA, [url, ...refUrls(args.ctx)]),
+    locks: args.ctx.locks,
+    now: () => Date.now(),
+    newId: () => crypto.randomUUID(),
+  }, { shot, stillUrl: args.stillUrl, stillRequestId: args.stillRequestId });
 }
 
 /** Correction text to append to a still prompt on its single retry. */

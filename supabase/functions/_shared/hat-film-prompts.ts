@@ -119,7 +119,9 @@ export function compileHatFilmRun(inputs: HatFilmInputs, opts: { soundtrackPath?
     const subject = shot.index === 11
       ? "Three identical copies of the SAME hat from the reference photos, arranged naturally in the setting. Every upper bill matches the front photo."
       : shot.kind !== "generated"
-        ? "No hat and no text in frame. Do not draw any logo or lettering; the brand logo is composited later from the original file."
+        ? (shot.index === 6
+          ? "No hat, no sign, no banner, no billboard, no screen and no text in frame. Do not draw any logo or lettering. Leave calm, uncluttered open space in the upper-middle of the frame; the brand mark is added on screen later from the original file."
+          : "No hat and no text in frame. Do not draw any logo or lettering; the brand logo is composited later from the original file.")
         : hasHat ? `The hat from the reference photos. ${shot.content}.` : "No hat in frame; environment only.";
     const anchor = shot.usesWorldAnchor ? ` Feature the ${world.anchor} prominently.` : "";
     return {
