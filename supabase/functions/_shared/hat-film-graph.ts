@@ -36,7 +36,10 @@ export function buildHatFilmGraph(versionId = HAT_FILM_VERSION_ID) {
       name: field.label,
       prompt_config: {
         editor_mode: "upload", editor_slot_key: field.key, editor_label: field.label, editor_hint: field.helper,
-        editor_expected: field.type, required: field.required, optional: !field.required, sort_order: index + 1,
+        editor_expected: field.key === "brand_vibe" ? "prompt" : field.type,
+        asset_type: field.type === "image" ? "image" : undefined,
+        short_instruction: field.helper, transparency_recommended: field.key === "logo" ? true : undefined,
+        required: field.required, optional: !field.required, sort_order: index + 1,
         hat_film_slot: field.key, recipe: HAT_FILM_RECIPE_ID,
         ...(field.key === "brand_vibe" ? { editor_placeholder: HAT_FILM_VIBE_PLACEHOLDER, multiline: true } : {}),
       },
