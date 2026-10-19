@@ -98,14 +98,27 @@ Deno.serve(async (req) => {
         still_url: await sign(admin, s.still_url), clip_url: await sign(admin, s.clip_url),
       })));
       const manifestReady = phase === "assembling_video" || phase === "assembly_failed";
+      let manifest = null;
+      let manifest_error: string | null = null;
+      if (manifestReady) {
+        try {
+          const signedForManifest = shots.map((s, i) => ({ ...s, still_url: signedShots[i].still_url, clip_url: signedShots[i].clip_url }));
+          manifest = buildRenderManifest(signedForManifest, {
+            logoUrl: await sign(admin, context.logo_url),
+            soundtrackUrl: await sign(admin, context.soundtrack_path),
+          });
+        } catch (error) {
+          manifest_error = errorMessage(error);
+        }
+      }
       return json({
         phase,
         job_status: job.status,
         shots: signedShots,
         assembly: { status: assembly.status, attempts: assembly.attempts, error: assembly.error, verified: assembly.verified, locked: !!assembly.lock_token && !canClaim(assembly, new Date().toISOString()) },
         final_url: assembly.status === "ready" ? await sign(admin, assembly.output_path) : null,
-        logo_url: manifestReady ? await sign(admin, context.logo_url) : null,
-        soundtrack_url: manifestReady ? await sign(admin, context.soundtrack_path) : null,
+        manifest,
+        manifest_error,
       });
     }
 
@@ -118,6 +131,8 @@ Deno.serve(async (req) => {
       // Fail before locking if the manifest can't be built (duplicates, gaps, missing logo/soundtrack).
       buildRenderManifest(shots, { logoUrl: context.logo_url, soundtrackUrl: context.soundtrack_path });
       const nowIso = new Date().toISOString();
+      // Same session resuming after a reload keeps its lock.
+      if (assembly.lock_token === token && assembly.status === "assembling") return json({ claimed: true, resumed: true, lock_expires_at: assembly.lock_expires_at });
       if (!canClaim(assembly, nowIso)) return json({ claimed: false, reason: "Another tab is assembling this film." }, 409);
       const next = claimed(assembly, token, new Date());
       const ok = assembly.lock_token
