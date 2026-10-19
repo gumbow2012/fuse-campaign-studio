@@ -45,14 +45,41 @@ async function ask(admin: Admin, prompt: string, schema: unknown, urls: string[]
   const signed = (await resolveExecutionUrls(admin, urls)) as string[];
   const parts = await Promise.all(signed.map(inline));
   const ai = new GoogleGenAI({ apiKey });
-  const res = await ai.models.generateContent({
-    model: MODEL,
-    // deno-lint-ignore no-explicit-any
-    contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }] as any,
-    // deno-lint-ignore no-explicit-any
-    config: { responseMimeType: "application/json", responseSchema: schema as any, maxOutputTokens: 1024, temperature: 0 },
-  });
-  return JSON.parse((res.text ?? "").trim());
+  // Thinking tokens count against the output budget; a 1024-token cap truncated the JSON mid-string in
+  // production (2026-10-19). Same budget/thinking level as the other working Gemini analyzers,
+  // plus a bounded retry so one malformed reply is never judged as a product failure.
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= ASK_ATTEMPTS; attempt++) {
+    try {
+      const res = await ai.models.generateContent({
+        model: MODEL,
+        // deno-lint-ignore no-explicit-any
+        contents: [{ role: "user", parts: [{ text: prompt }, ...parts] }] as any,
+        config: {
+          responseMimeType: "application/json",
+          // deno-lint-ignore no-explicit-any
+          responseSchema: schema as any,
+          maxOutputTokens: 8192,
+          temperature: 0,
+          // deno-lint-ignore no-explicit-any
+          thinkingConfig: { thinkingLevel: "low" } as any,
+        },
+      });
+      return parseAnalyzerJson(res.text);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+export const ASK_ATTEMPTS = 3;
+
+/** Strict JSON parse of an analyzer reply; tolerates surrounding whitespace or a ```json fence. */
+export function parseAnalyzerJson(text: string | null | undefined): unknown {
+  const raw = String(text ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  if (!raw) throw new Error("empty analyzer reply");
+  return JSON.parse(raw);
 }
 
 const refUrls = (ctx: HatFilmRunContext) => {
