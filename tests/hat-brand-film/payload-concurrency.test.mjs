@@ -40,3 +40,11 @@ test("every seeded node name fits the production nodes.name varchar(100)", async
   for (const n of g.nodes) assert.ok(n.name.length <= 100, `${n.name.length}: ${n.name}`);
   assert.ok(g.nodes.some((n) => n.name.endsWith(" (still)")));
 });
+
+test("product checks get enough output budget and retry malformed replies (prod truncation 2026-10-19)", () => {
+  const s = src("supabase/functions/_shared/hat-film-qa-gemini.ts");
+  assert.match(s, /maxOutputTokens: 8192/);
+  assert.match(s, /thinkingLevel: "low"/);
+  assert.match(s, /ASK_ATTEMPTS = 3/);
+  assert.doesNotMatch(s, /maxOutputTokens: 1024/);
+});
