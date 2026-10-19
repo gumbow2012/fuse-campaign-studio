@@ -48,3 +48,23 @@ test("product checks get enough output budget and retry malformed replies (prod 
   assert.match(s, /ASK_ATTEMPTS = 3/);
   assert.doesNotMatch(s, /maxOutputTokens: 1024/);
 });
+
+test("hat provider refusals are resubmitted (bounded, CAS on request id, old id superseded)", () => {
+  const s = src("supabase/functions/fal-webhook/index.ts");
+  assert.match(s, /HAT_PROVIDER_RETRIES = 2/);
+  assert.match(s, /\.eq\("provider_request_id", requestId\)/);
+  assert.match(s, /superseded_request_ids: \[\.\.\.new Set\(\[\.\.\.prior, requestId\]\)\]/);
+  assert.match(s, /output_payload as any\)\.superseded_request_ids/);
+});
+
+test("a provider-retried clip skips the single-submission gate and the executor loads output_payload", () => {
+  const s = src("supabase/functions/_shared/executor.ts");
+  assert.match(s, /hat_film_stage === "clip" && !hatProviderRetry/);
+  assert.match(s, /provider_request_id, output_asset_id, output_payload, assets!execution_steps_output_asset_id_fkey/);
+});
+
+test("provider submits keep hat retry bookkeeping (counter + superseded ids) in output_payload", () => {
+  const s = src("supabase/functions/_shared/executor.ts");
+  assert.equal((s.match(/\.\.\.hatRetryState\(step\)/g) ?? []).length, 2);
+  assert.match(s, /hat_provider_retries: p\.hat_provider_retries/);
+});
