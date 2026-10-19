@@ -776,7 +776,7 @@ Deno.serve(async (req) => {
     if (jobError || !job) throw new Error(jobError?.message ?? "Failed to create job");
     jobId = job.id;
 
-    const uploadedInputs = await uploadInputFiles(admin, job.id, body.inputFiles);
+    const uploadedInputs = await uploadInputFiles(admin, job.id, body.inputFiles, isHatFilmGraph(allVersionNodes as any));
 
     const finalInputs = expandInputsForTemplate({
       templateName,
