@@ -30,6 +30,9 @@ h2{font-size:11px;margin:12px 0 6px;color:#8fd3ff;opacity:.9}
 .ok{color:#86efac}.warn{color:#fbbf24}.bad{color:#fca5a5}
 .empty{padding:22px;text-align:center;color:#9fb0c3;border:1px dashed #2b4b57;border-radius:14px}
 input[type=file]{color:#9fb0c3;font-size:12px}
+.slotbody{display:flex;gap:10px;align-items:center;margin-top:6px}
+.thumb{width:64px;height:64px;flex:none;border-radius:10px;border:1px solid #2b4b57;background:#0b1220 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#9fb0c3;font-size:10px;overflow:hidden}
+.thumb img,.thumb video{width:100%;height:100%;object-fit:cover}
 `;
 
 const BRIDGE = `
@@ -77,31 +80,51 @@ function render(){
 render(); window.addEventListener("openai:set_globals", render);`);
 
 const UPLOAD = page("Upload your product", `<h1>Upload your product</h1><p class="muted">A phone photo on a plain background is fine.</p><div id="root" class="list"></div><p id="msg" class="muted"></p>`, `
+// Local previews per input, kept across re-renders (ChatGPT re-renders on every tool update).
+const thumbs = {}; const states = {};
 async function putFile(slot, file){
   const res = await fetch(slot.upload_url, { method: "PUT", headers: slot.upload_headers || {"Content-Type": file.type}, body: file });
   if (!res.ok) throw new Error("Upload failed ("+res.status+")");
+}
+function readPreview(file){
+  return new Promise((resolve) => {
+    if (!(file.type.startsWith("image/") || file.type.startsWith("video/"))) return resolve(null);
+    const r = new FileReader(); r.onload = () => resolve(String(r.result)); r.onerror = () => resolve(null);
+    r.readAsDataURL(file);
+  });
+}
+function thumbHtml(key, attached){
+  const t = thumbs[key];
+  if (!t) return '<div class="thumb">'+(attached ? 'Added' : 'No photo')+'</div>';
+  return '<div class="thumb">'+(t.video ? '<video src="'+t.src+'" muted playsinline></video>' : '<img src="'+t.src+'" alt="">')+'</div>';
 }
 function render(){
   const d = out(); const root = $("root"); root.innerHTML = "";
   const slots = d.upload_slots || [];
   if (!slots.length) { root.innerHTML = '<div class="empty">No upload slots in this session.</div>'; return; }
   for (const s of slots) {
+    const key = s.input_key; const st = states[key] || (s.attached ? "attached" : "needed");
+    const badge = st === "uploading" ? '<span class="warn">Uploading…</span>' : st === "attached" ? '<span class="ok">✓ Attached</span>' : st === "failed" ? '<span class="bad">Failed — try again</span>' : '<span class="warn">Needed</span>';
     const el = document.createElement("div"); el.className = "slot";
-    el.innerHTML = '<div class="row"><span class="name">'+esc(s.label||s.input_key)+'</span><span class="'+(s.attached?'ok':'warn')+'">'+(s.attached?'Attached':'Needed')+'</span></div><div class="muted">PNG, JPG or WEBP · up to '+Math.round((s.max_size_bytes||0)/1048576)+' MB</div><input type="file" accept="'+esc((s.accepted_mime_types||[]).join(","))+'">';
+    el.innerHTML = '<div class="row"><span class="name">'+esc(s.label||key)+'</span>'+badge+'</div><div class="slotbody">'+thumbHtml(key, st === "attached")+'<div><div class="muted">PNG, JPG or WEBP · up to '+Math.round((s.max_size_bytes||0)/1048576)+' MB</div><input type="file" accept="'+esc((s.accepted_mime_types||[]).join(","))+'"></div></div>';
     const input = el.querySelector("input");
     input.onchange = async () => {
       const file = input.files && input.files[0]; if (!file) return;
+      const src = await readPreview(file);
+      if (src) thumbs[key] = { src, video: file.type.startsWith("video/") };
+      states[key] = "uploading"; render();
       $("msg").textContent = "Uploading "+file.name+"…";
       try {
         await putFile(s, file);
-        await call("fuse_attach_uploaded_assets", { upload_session_id: d.upload_session_id, uploaded_files: [{ input_key: s.input_key, storage_key: s.storage_key, original_file_name: file.name, mime_type: file.type }] });
+        await call("fuse_attach_uploaded_assets", { upload_session_id: d.upload_session_id, uploaded_files: [{ input_key: key, storage_key: s.storage_key, original_file_name: file.name, mime_type: file.type }] });
+        states[key] = "attached"; render();
         $("msg").textContent = file.name+" attached.";
-      } catch (e) { $("msg").textContent = "Couldn't upload: "+e.message; }
+      } catch (e) { states[key] = "failed"; render(); $("msg").textContent = "Couldn't upload: "+e.message; }
     };
     root.appendChild(el);
   }
-  const missing = d.required_inputs_remaining || [];
-  $("msg").textContent = missing.length ? "Still needed: "+missing.join(", ") : (d.ready_to_prepare ? "All set — ready to prepare the campaign." : "");
+  const missing = (d.required_inputs_remaining || []).filter((k) => states[k] !== "attached");
+  if (!Object.values(states).includes("uploading")) $("msg").textContent = missing.length ? "Still needed: "+missing.join(", ") : (d.ready_to_prepare || Object.keys(states).length ? "All set — ready to prepare the campaign." : "");
 }
 render(); window.addEventListener("openai:set_globals", render);`);
 
@@ -286,11 +309,11 @@ function render(){
 }
 render(); window.addEventListener("openai:set_globals", render);`);
 
-export const WIDGET_VERSION = "v3";
+export const WIDGET_VERSION = "v4";
 export const widgetUri = (name: string) => `ui://fuse/${name}.${WIDGET_VERSION}.html`;
-/** Old unversioned URI (ui://fuse/<name>.html) -> current versioned URI, so old chats still resolve. */
+/** Old unversioned or older-versioned URI (ui://fuse/<name>[.vN].html) -> current URI, so old chats still resolve. */
 export const legacyWidgetUri = (uri: string): string | null => {
-  const m = uri.match(/^ui:\/\/fuse\/([a-z0-9-]+)\.html$/);
+  const m = uri.match(/^ui:\/\/fuse\/([a-z0-9-]+)(?:\.v\d+)?\.html$/);
   return m ? widgetUri(m[1]) : null;
 };
 export const WIDGETS: Record<string, { name: string; description: string; html: string }> = {
