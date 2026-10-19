@@ -171,7 +171,7 @@ test('ready count uses the server status "ready"', () => {
 
 /* shot 06 */
 test('shot 06 never asks the generator for a sign or logo; logo is an intentional on-screen mark', () => {
-  const r = validateHatFilmInputs({ front: 'a', right: 'b', left: 'c', back: 'd', inside: 'e', logo: 'f', brand_vibe: 'An unfinished construction site at dusk with excavators and work lights.' });
+  const r = validateHatFilmInputs({ ...Object.fromEntries(['front','right','left','back','inside','logo'].map((k) => [k, `https://cdn.test/${k}.png`])), brand_vibe: 'An unfinished construction site at dusk with excavators and work lights.' });
   const p = compileHatFilmRun(r.inputs).shots.find((s) => s.shot_id === 'shot_06').still_prompt;
   assert.doesNotMatch(p, /framed for the brand logo|blank sign or banner in the world/i);
   assert.match(p, /no sign/i);
