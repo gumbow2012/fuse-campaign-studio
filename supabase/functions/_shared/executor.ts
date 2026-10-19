@@ -1182,6 +1182,15 @@ export async function finalizeJobIfTerminal(admin: AdminClient, jobId: string) {
   await consumeFreeVideoEntitlementForJob(admin, jobId);
 }
 
+/** Hat Brand Film provider-retry bookkeeping that must survive a resubmit's output_payload write. */
+function hatRetryState(step: { output_payload?: Record<string, unknown> | null }) {
+  const p = (step.output_payload ?? {}) as Record<string, unknown>;
+  return {
+    ...(p.hat_provider_retries != null ? { hat_provider_retries: p.hat_provider_retries } : {}),
+    ...(Array.isArray(p.superseded_request_ids) ? { superseded_request_ids: p.superseded_request_ids } : {}),
+  };
+}
+
 /** Max time one invocation sleeps waiting on another worker's QA claim (edge wall-clock safety). */
 const HAT_WAIT_BUDGET_MS = 120_000;
 
@@ -1227,7 +1236,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
 
   const { data: steps, error: stepError } = await admin
     .from("execution_steps")
-    .select("id, job_id, node_id, status, provider_request_id, output_asset_id, assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
+    .select("id, job_id, node_id, status, provider_request_id, output_asset_id, output_payload, assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
     .eq("job_id", job.id);
   if (stepError || !steps) throw new Error(stepError?.message ?? "Failed to load steps");
 
@@ -1549,6 +1558,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
                 requestId,
                 status: "queued",
                 ...castAudit,
+                ...hatRetryState(step),
                 telemetry: {
                   estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
                   billingUnit: costEstimate?.unit ?? null,
@@ -1591,7 +1601,10 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           const endFrameUrl = params.get("end_frame_image")?.url;
 
           // Hat Brand Film: automatic product check of the still BEFORE animation.
-          if (hatFilm && (node as any).prompt_config?.hat_film_stage === "clip") {
+          // A clip back from a provider-refusal resubmit already passed its product check and was
+          // handed to exactly one worker (the webhook CAS-reset it); it skips the gate.
+          const hatProviderRetry = Number((step as any).output_payload?.hat_provider_retries ?? 0) > 0;
+          if (hatFilm && (node as any).prompt_config?.hat_film_stage === "clip" && !hatProviderRetry) {
             const shotId = String((node as any).prompt_config.hat_film_shot);
             const stillNode = nodes.find((n: any) => n.prompt_config?.hat_film_shot === shotId && n.prompt_config?.hat_film_stage === "still");
             const stillStep = stillNode ? mutableSteps.find((s) => s.node_id === stillNode.id) : undefined;
@@ -1819,6 +1832,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
                 requestId,
                 status: "queued",
                 ...castAudit,
+                ...hatRetryState(step),
                 telemetry: {
                   estimatedCostUsd: costEstimate?.estimatedCostUsd ?? null,
                   billingUnit: costEstimate?.unit ?? null,
