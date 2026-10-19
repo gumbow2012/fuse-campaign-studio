@@ -211,3 +211,15 @@ test('cost note bounds match the recipe and analyzer call count', () => {
   assert.deepEqual({ base: d.checks.base, max: d.checks.max }, qaMod.qaCallCount());
   assert.equal(d.maxRetriesPerShot, HAT_FILM_MAX_AUTO_RETRIES);
 });
+
+test('a stale worker holding a rejected still is skipped, never re-checked (retry budget intact)', async () => {
+  const store = memoryStore(); const calls = { ref: 0, still: 0 };
+  const d = deps(store, calls, () => ({ ...goodFor(8), under_brim_color: 'black' })); // fails
+  const first = await qaMod.runHatFilmGate(d, { shot: shot(8), stillUrl: 'u/08', stillRequestId: 'old' });
+  assert.equal(first.action, 'retry');
+  const stale = await qaMod.runHatFilmGate(d, { shot: shot(8), stillUrl: 'u/08', stillRequestId: 'old' });
+  assert.equal(stale.action, 'skip');
+  assert.equal(calls.still, 1);
+  const s = parseQa((await store.read()).qa).shots.shot_08;
+  assert.equal(s.status, 'retrying'); assert.equal(s.attempts, 1);
+});

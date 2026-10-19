@@ -365,6 +365,8 @@ export async function runHatFilmGate(deps: GateDeps, args: { shot: HatFilmShot; 
       return { next: qa, out: { action: "animate" } };
     }
     if (cur.status === "needs_review") return { next: null, out: { action: "needs_review", reason: cur.last?.issues.join("; ") || "needs review" } };
+    // A stale worker holding an already-rejected still: never re-check it (that would burn the retry).
+    if (args.stillRequestId && (cur.superseded_requests ?? []).includes(args.stillRequestId)) return { next: null, out: { action: "skip" } };
     if (live(cur.claim, now())) return { next: null, out: { action: "wait", until: cur.claim!.expires_at } };
     if (!args.stillUrl) {
       qa.shots[id] = { ...cur, status: "needs_review", last: { verdict: "uncertain", issues: ["still missing"] }, claim: null };
