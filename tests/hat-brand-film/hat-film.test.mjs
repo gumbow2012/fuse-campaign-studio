@@ -146,7 +146,7 @@ test('missing optional detail never invents a reference', () => {
 import { judgeStill, decideAfterCheck, applyCheck, emptyShotQa, normalizeReferenceProfile, brimConflicts, colorFamily, qaCallCount } from '../../supabase/functions/_shared/hat-film-qa.ts';
 const shot = (n) => HAT_FILM_SHOTS[n - 1];
 const profile = { top_brim_color: 'black', under_brim_color: 'light gray', front_text: 'THE WORKING GENTLEMEN', back_text: 'Paper Chaser',
-  right_side_identity: 'embroidered skull wearing yellow construction helmet', left_side_identity: 'white text NOBODY CARES WORK HARDER', confidence: 0.9 };
+  right_side_identity: 'embroidered skull wearing yellow construction helmet', left_side_identity: 'white text NOBODY CARES WORK HARDER', inside_identity: 'gray underside with black taped seams', confidence: 0.9 };
 const good = { hat_present: true, hat_count: 1, side_shown: 'front', top_brim_color: 'black', under_brim_visible: false, under_brim_color: null,
   visible_text: 'THE WORKING GENTLEMEN', text_legible: true, side_identity: '', any_text_or_logo: true, confidence: 0.9 };
 

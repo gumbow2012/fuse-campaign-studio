@@ -186,3 +186,9 @@ test('visible estimate includes bounded retries and unpriced product checks', ()
   assert.deepEqual(d.checks, { base: 12, max: 23, priceAvailable: false });
   assert.equal(d.liveTotalVerified, false);
 });
+
+test('cost note bounds match the recipe and analyzer call count', () => {
+  const d = hatFilmCostDisclosure(10);
+  assert.deepEqual({ base: d.checks.base, max: d.checks.max }, qaMod.qaCallCount());
+  assert.equal(d.maxRetriesPerShot, HAT_FILM_MAX_AUTO_RETRIES);
+});
