@@ -1,31 +1,57 @@
 /**
- * Hat Brand Film — automatic assembly planning and honest state (pure).
- * The I/O caller persists `HatFilmAssemblyState` on the job and dispatches the
- * render worker only when `decideAssembly` returns `dispatch`.
+ * Hat Brand Film — assembly state (pure). Assembly runs in the customer's
+ * browser through the FUSE export engine; the server owns a durable lock
+ * (compare-and-set on the job row) and only accepts a verified final file.
  */
 import {
-  buildEditDecisionList, HAT_FILM_FPS, HAT_FILM_HEIGHT, HAT_FILM_MAX_AUTO_RETRIES,
-  HAT_FILM_SHOTS, HAT_FILM_TOTAL_FRAMES, HAT_FILM_WIDTH,
+  assertCompleteShotSet, buildEditDecisionList, HAT_FILM_FPS, HAT_FILM_HEIGHT,
+  HAT_FILM_MAX_AUTO_RETRIES, HAT_FILM_SHOTS, HAT_FILM_TOTAL_FRAMES, HAT_FILM_WIDTH,
 } from "./hat-film-recipe.ts";
 
-export type ShotStatus = "pending" | "still" | "animating" | "ready" | "needs_review" | "failed";
-export type FilmPhase = "creating_images" | "animating_shots" | "assembling_video" | "ready" | "needs_review" | "render_unavailable" | "render_failed";
+export const HAT_FILM_ASSEMBLY_KEY = "hat_film_assembly";
+export const HAT_FILM_LOCK_MS = 15 * 60 * 1000;
 
-export interface ShotState { shot_id: string; status: ShotStatus; clip_url?: string | null; retries: number }
-export interface HatFilmAssemblyState {
-  dispatch_key: string | null; // set once; prevents duplicate dispatch
-  export_status: "none" | "rendering" | "ready" | "failed";
-  final_url: string | null;
-  final_verified: { width: number; height: number; frames: number; has_audio: boolean } | null;
+export type ShotStatus = "pending" | "still" | "animating" | "ready" | "needs_review" | "failed";
+export type FilmPhase = "creating_images" | "animating_shots" | "assembling_video" | "ready" | "needs_review" | "assembly_failed";
+
+export interface ShotState {
+  shot_id: string;
+  status: ShotStatus;
+  still_url?: string | null;
+  clip_url?: string | null;
+  clip_duration_ms?: number | null;
+  retries: number;
 }
 
-export function phaseFor(shots: ShotState[], a: HatFilmAssemblyState, rendererConfigured: boolean): FilmPhase {
-  if (a.export_status === "ready" && a.final_url && a.final_verified) return "ready";
-  if (a.export_status === "failed") return "render_failed";
+export interface HatFilmAssemblyState {
+  status: "waiting" | "assembling" | "ready" | "failed";
+  lock_token: string | null;
+  lock_expires_at: string | null;
+  attempts: number;
+  output_path: string | null;
+  verified: { width: number; height: number; frames: number; has_audio: boolean; duration_ms: number } | null;
+  error: string | null;
+}
+
+export const emptyAssembly = (): HatFilmAssemblyState => ({
+  status: "waiting", lock_token: null, lock_expires_at: null, attempts: 0, output_path: null, verified: null, error: null,
+});
+
+export function parseAssembly(value: unknown): HatFilmAssemblyState {
+  const v = (value ?? {}) as Partial<HatFilmAssemblyState>;
+  return { ...emptyAssembly(), ...v };
+}
+
+export function phaseFor(shots: ShotState[], a: HatFilmAssemblyState): FilmPhase {
+  if (a.status === "ready" && a.output_path && a.verified) return "ready";
   if (shots.some((s) => s.status === "needs_review" || s.status === "failed")) return "needs_review";
-  if (shots.some((s) => s.status === "pending" || s.status === "still") && !shots.some((s) => s.status === "animating")) return "creating_images";
-  if (shots.some((s) => s.status !== "ready")) return "animating_shots";
-  return rendererConfigured ? "assembling_video" : "render_unavailable";
+  const kinds = new Map(HAT_FILM_SHOTS.map((s) => [s.id, s.kind]));
+  const stillsDone = shots.every((s) => !!s.still_url);
+  if (!stillsDone) return "creating_images";
+  const clipsDone = shots.every((s) => kinds.get(s.shot_id) === "logo_hold" || (s.status === "ready" && !!s.clip_url));
+  if (!clipsDone) return "animating_shots";
+  if (a.status === "failed") return "assembly_failed";
+  return "assembling_video";
 }
 
 /** One automatic corrective retry per shot; then Needs review. */
@@ -33,42 +59,74 @@ export function onShotCheckFailed(s: ShotState): ShotState {
   return s.retries < HAT_FILM_MAX_AUTO_RETRIES ? { ...s, status: "pending", retries: s.retries + 1 } : { ...s, status: "needs_review" };
 }
 
-export type AssemblyDecision =
-  | { action: "wait" }
-  | { action: "blocked"; reason: string }
-  | { action: "already_dispatched" }
-  | { action: "dispatch"; dispatch_key: string; manifest: ReturnType<typeof buildRenderManifest> };
+export type ManifestSegment = {
+  shot_id: string;
+  kind: "generated" | "logo_composite" | "logo_hold";
+  frames: number;
+  start_frame: number;
+  source_url: string;
+  source_type: "video" | "image";
+  logo_overlay: boolean;
+};
 
-/** Idempotent: duplicate callbacks see dispatch_key and do nothing. */
-export function decideAssembly(jobId: string, shots: ShotState[], a: HatFilmAssemblyState, opts: { rendererConfigured: boolean; soundtrackUrl: string | null; logoUrl: string | null }): AssemblyDecision {
-  if (a.dispatch_key || a.export_status !== "none") return { action: "already_dispatched" };
-  if (shots.length !== HAT_FILM_SHOTS.length) return { action: "blocked", reason: "shot count mismatch" };
-  if (shots.some((s) => s.status === "needs_review" || s.status === "failed")) return { action: "blocked", reason: "a shot needs review" };
-  if (shots.some((s) => s.status !== "ready" || !s.clip_url)) return { action: "wait" };
-  if (!opts.rendererConfigured) return { action: "blocked", reason: "render worker not connected" };
-  if (!opts.soundtrackUrl) return { action: "blocked", reason: "template soundtrack missing" };
-  if (!opts.logoUrl) return { action: "blocked", reason: "logo missing" };
-  return { action: "dispatch", dispatch_key: `hatfilm:${jobId}:v1`, manifest: buildRenderManifest(shots, opts.soundtrackUrl, opts.logoUrl) };
+export interface RenderManifest {
+  output: { width: number; height: number; fps: number; frames: number; codec: "h264"; audio_codec: "aac" };
+  segments: ManifestSegment[];
+  logo_url: string;
+  soundtrack_url: string;
 }
 
-export function buildRenderManifest(shots: ShotState[], soundtrackUrl: string, logoUrl: string) {
+/**
+ * Builds the frame-exact manifest. Throws on a duplicate/missing shot, a clip
+ * shorter than its slot, or a missing logo/soundtrack. No partial manifests.
+ */
+export function buildRenderManifest(shots: ShotState[], opts: { logoUrl: string | null; soundtrackUrl: string | null }): RenderManifest {
+  assertCompleteShotSet(shots.map((s) => s.shot_id));
+  if (!opts.logoUrl) throw new Error("Logo missing");
+  if (!opts.soundtrackUrl) throw new Error("Template soundtrack missing");
   const byId = new Map(shots.map((s) => [s.shot_id, s]));
-  const edl = buildEditDecisionList();
+  const segments = buildEditDecisionList().map((e): ManifestSegment => {
+    const shot = byId.get(e.shot_id)!;
+    if (shot.status === "needs_review" || shot.status === "failed") throw new Error(`${e.shot_id} needs review`);
+    if (e.kind === "logo_hold") {
+      if (!shot.still_url) throw new Error(`${e.shot_id} still missing`);
+      return { shot_id: e.shot_id, kind: e.kind, frames: e.frames, start_frame: e.start_frame, source_url: shot.still_url, source_type: "image", logo_overlay: true };
+    }
+    if (!shot.clip_url) throw new Error(`${e.shot_id} clip missing`);
+    if (shot.clip_duration_ms != null && shot.clip_duration_ms < e.min_source_ms) {
+      throw new Error(`${e.shot_id} clip is ${shot.clip_duration_ms}ms; needs ${e.min_source_ms}ms`);
+    }
+    return { shot_id: e.shot_id, kind: e.kind, frames: e.frames, start_frame: e.start_frame, source_url: shot.clip_url, source_type: "video", logo_overlay: e.logo_overlay };
+  });
+  if (segments.reduce((n, s) => n + s.frames, 0) !== HAT_FILM_TOTAL_FRAMES) throw new Error("Frame total mismatch");
   return {
     output: { width: HAT_FILM_WIDTH, height: HAT_FILM_HEIGHT, fps: HAT_FILM_FPS, frames: HAT_FILM_TOTAL_FRAMES, codec: "h264", audio_codec: "aac" },
-    segments: edl.map((e) => ({ ...e, url: byId.get(e.shot_id)!.clip_url!, volume: 0 })),
-    overlays: edl.filter((e) => e.logo_overlay).map((e) => ({ type: "image", url: logoUrl, start_frame: e.start_frame, end_frame: e.end_frame, fit: "contain", treatment: "subtle_scale_light" })),
-    music: { url: soundtrackUrl, volume: 1, fade_out_ms: 400 },
+    segments, logo_url: opts.logoUrl, soundtrack_url: opts.soundtrackUrl,
   };
 }
 
-/** A queued/rendering export is never success. Ready requires a verified render. */
-export function acceptRenderCallback(a: HatFilmAssemblyState, cb: { status: "ready" | "failed"; url?: string | null; probe?: HatFilmAssemblyState["final_verified"] }): HatFilmAssemblyState {
-  if (a.export_status === "ready") return a; // duplicate callback
-  if (cb.status === "failed") return { ...a, export_status: "failed" };
-  const p = cb.probe;
-  const ok = !!cb.url && !!p && p.width === HAT_FILM_WIDTH && p.height === HAT_FILM_HEIGHT && p.frames === HAT_FILM_TOTAL_FRAMES && p.has_audio;
-  return ok ? { ...a, export_status: "ready", final_url: cb.url!, final_verified: p! } : { ...a, export_status: "failed" };
+/** May this caller take the lock now? (The DB update repeats this as its WHERE.) */
+export function canClaim(a: HatFilmAssemblyState, nowIso: string): boolean {
+  if (a.status === "ready") return false;
+  return !a.lock_token || !a.lock_expires_at || a.lock_expires_at < nowIso;
 }
 
-export const emptyAssembly = (): HatFilmAssemblyState => ({ dispatch_key: null, export_status: "none", final_url: null, final_verified: null });
+export function claimed(a: HatFilmAssemblyState, token: string, now: Date): HatFilmAssemblyState {
+  return { ...a, status: "assembling", lock_token: token, lock_expires_at: new Date(now.getTime() + HAT_FILM_LOCK_MS).toISOString(), attempts: a.attempts + 1, error: null };
+}
+
+/** Ready only for the lock holder and a verified 1080x1920 / 645-frame file with audio. */
+export function acceptAssembly(a: HatFilmAssemblyState, token: string, result: { output_path: string; verified: HatFilmAssemblyState["verified"] }): HatFilmAssemblyState {
+  if (a.status === "ready") return a;
+  if (a.lock_token !== token) throw new Error("Assembly lock is held by another session");
+  const p = result.verified;
+  const ok = !!result.output_path && !!p && p.width === HAT_FILM_WIDTH && p.height === HAT_FILM_HEIGHT &&
+    p.frames === HAT_FILM_TOTAL_FRAMES && p.has_audio && Math.abs(p.duration_ms - (HAT_FILM_TOTAL_FRAMES / HAT_FILM_FPS) * 1000) <= 100;
+  if (!ok) return { ...a, status: "failed", lock_token: null, lock_expires_at: null, error: "The assembled file didn't pass verification (size, frame count, duration or audio)." };
+  return { ...a, status: "ready", lock_token: null, lock_expires_at: null, output_path: result.output_path, verified: p, error: null };
+}
+
+export function failedAssembly(a: HatFilmAssemblyState, token: string, message: string): HatFilmAssemblyState {
+  if (a.status === "ready" || a.lock_token !== token) return a;
+  return { ...a, status: "failed", lock_token: null, lock_expires_at: null, error: message.slice(0, 300) };
+}
