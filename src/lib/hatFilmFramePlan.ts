@@ -35,7 +35,7 @@ export const localTargetUs = (f: number) => Math.round((f * 1e6) / HF_FPS);
  * Does a source ending at `sourceEndUs` (pts of last frame + its duration,
  * relative to its first frame) cover `frames` output frames? No padding.
  */
-export const coversSlot = (sourceEndUs: number, frames: number) => sourceEndUs >= localTargetUs(frames - 1) + 1;
+export const coversSlot = (sourceEndUs: number, frames: number) => sourceEndUs >= localTargetUs(frames) - 1000;
 
 /** Validates the manifest before rendering: order, contiguity, exact totals. */
 export function validateSegments(segments: HfSegment[]) {

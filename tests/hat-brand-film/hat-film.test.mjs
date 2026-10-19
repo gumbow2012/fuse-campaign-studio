@@ -89,8 +89,8 @@ test('lock: second session cannot claim while held; never ready without verifica
 
 test('frame grid and coverage: no padding of short sources', () => {
   assert.equal(frameTimestampUs(645), 21_500_000);
-  assert.equal(coversSlot(1_400_000, 43), true);   // 43 frames need up to 1.4 s
-  assert.equal(coversSlot(1_390_000, 43), false);
+  assert.equal(coversSlot(1_433_000, 43), true);   // 43 frames need 1.433 s
+  assert.equal(coversSlot(1_400_000, 43), false);
 });
 
 test('logo is placed without distortion', () => {
