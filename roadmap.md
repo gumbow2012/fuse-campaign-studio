@@ -1,1 +1,2 @@
 - [x] Jerry: deterministic source-audio/timeline finishing for Kling O3 source edit
+- [ ] Hat Brand Film: wire recipe into executor + seed draft template (blocked: test assets, render worker)
