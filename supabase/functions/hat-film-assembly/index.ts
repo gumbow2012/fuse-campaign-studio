@@ -166,7 +166,7 @@ Deno.serve(async (req) => {
         await casAssembly(admin, job, next, { token });
         return json({ status: next.status, error: next.error });
       }
-      const next = acceptAssembly(assembly, token, { output_path: outputPath, verified });
+      const next = acceptAssembly(assembly, token, { output_path: outputPath, verified: verified as never });
       const ok = await casAssembly(admin, job, next, { token });
       if (!ok) return json({ error: "LOCK_LOST" }, 409);
       return json({ status: next.status, error: next.error, final_url: next.status === "ready" ? await sign(admin, outputPath) : null });
