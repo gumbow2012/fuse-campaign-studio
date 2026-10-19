@@ -31,18 +31,21 @@ Deno.serve(async (req) => {
     };
 
     if (body.action === "seed") {
-      const { data: existing } = await admin.from("template_versions").select("id").eq("id", HAT_FILM_VERSION_ID).maybeSingle();
-      if (!existing) {
-        const { error: tErr } = await admin.from("fuse_templates").upsert({ ...graph.template, created_by: user.id }, { onConflict: "id", ignoreDuplicates: true });
-        if (tErr) throw new Error(tErr.message);
-        const { error: vErr } = await admin.from("template_versions").insert(graph.version);
-        if (vErr) throw new Error(vErr.message);
-        const { error: nErr } = await admin.from("nodes").insert(graph.nodes);
-        if (nErr) throw new Error(nErr.message);
-        const { error: eErr } = await admin.from("edges").insert(graph.edges);
-        if (eErr) throw new Error(eErr.message);
+      // Upserts on fixed ids: a partial earlier seed is completed, never duplicated.
+      // The version stays inactive; nothing else is touched.
+      const steps: Array<[string, () => PromiseLike<{ error: { message: string } | null }>]> = [
+        ["template", () => admin.from("fuse_templates").upsert({ ...graph.template, created_by: user.id }, { onConflict: "id", ignoreDuplicates: true })],
+        ["version", () => admin.from("template_versions").upsert({ ...graph.version, is_active: false }, { onConflict: "id", ignoreDuplicates: true })],
+        ["nodes", () => admin.from("nodes").upsert(graph.nodes, { onConflict: "id" })],
+        ["edges", () => admin.from("edges").upsert(graph.edges, { onConflict: "id" })],
+      ];
+      for (const [name, run] of steps) {
+        const { error } = await run();
+        if (error) throw new Error(`${name}: ${error.message}`);
       }
-      return json({ seeded: !existing, ...(await status()) });
+      const after = await status();
+      const complete = after.nodes === after.expected_nodes && after.edges === after.expected_edges;
+      return json({ seeded: complete, ...after });
     }
     return json(await status());
   } catch (error) {
