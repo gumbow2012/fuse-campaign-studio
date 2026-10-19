@@ -99,3 +99,9 @@ test('Ready requires a verified 645-frame 1080x1920 render with audio', () => {
   assert.equal(phaseFor(ready(), good, true), 'ready');
   assert.equal(acceptRenderCallback(good, { status: 'failed' }).export_status, 'ready');
 });
+
+import { estimateHatFilm } from '../../supabase/functions/_shared/hat-film-recipe.ts';
+test('estimate: nano-banana-pro $0.15 + Kling 3.0 Pro $0.112/s, retry allowance included', () => {
+  const e = estimateHatFilm({ imageUsd: 0.15, videoUsdPerSecond: 0.112, usdPerCredit: 0.098 });
+  assert.deepEqual(e, { stills: 12, clips: 11, base_usd: 7.96, max_usd: 15.92, base_credits: 82, max_credits: 163 });
+});
