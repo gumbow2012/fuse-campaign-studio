@@ -111,6 +111,17 @@ export function canClaim(a: HatFilmAssemblyState, nowIso: string): boolean {
   return !a.lock_token || !a.lock_expires_at || a.lock_expires_at < nowIso;
 }
 
+/**
+ * Lease view for the caller. `owned` = this browser session holds the live
+ * lease (same session token after a reload) and may resume; anyone else sees
+ * `locked` until it expires. An expired lease is neither locked nor owned.
+ */
+export function lockView(a: HatFilmAssemblyState, token: string | null, nowIso: string): { locked: boolean; owned: boolean } {
+  const live = a.status === "assembling" && !!a.lock_token && !canClaim(a, nowIso);
+  const owned = live && !!token && a.lock_token === token;
+  return { locked: live && !owned, owned };
+}
+
 export function claimed(a: HatFilmAssemblyState, token: string, now: Date): HatFilmAssemblyState {
   return { ...a, status: "assembling", lock_token: token, lock_expires_at: new Date(now.getTime() + HAT_FILM_LOCK_MS).toISOString(), attempts: a.attempts + 1, error: null };
 }

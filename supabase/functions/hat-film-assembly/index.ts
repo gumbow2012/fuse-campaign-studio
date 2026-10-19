@@ -13,7 +13,7 @@ import { resolveDisplayUrl } from "../_shared/asset-access.ts";
 import { HAT_FILM_CONTEXT_KEY, HAT_FILM_SHOTS } from "../_shared/hat-film-recipe.ts";
 import { parseHatFilmContext } from "../_shared/hat-film-prompts.ts";
 import {
-  acceptAssembly, buildRenderManifest, canClaim, claimed, failedAssembly, HAT_FILM_ASSEMBLY_KEY,
+  acceptAssembly, buildRenderManifest, canClaim, claimed, lockView, failedAssembly, HAT_FILM_ASSEMBLY_KEY,
   parseAssembly, phaseFor, type HatFilmAssemblyState, type ShotState,
 } from "../_shared/hat-film-assembly.ts";
 
@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
         phase,
         job_status: job.status,
         shots: signedShots,
-        assembly: { status: assembly.status, attempts: assembly.attempts, error: assembly.error, verified: assembly.verified, locked: !!assembly.lock_token && !canClaim(assembly, new Date().toISOString()) },
+        assembly: { status: assembly.status, attempts: assembly.attempts, error: assembly.error, verified: assembly.verified, ...lockView(assembly, token, new Date().toISOString()) },
         final_url: assembly.status === "ready" ? await sign(admin, assembly.output_path) : null,
         manifest,
         manifest_error,
@@ -134,7 +134,12 @@ Deno.serve(async (req) => {
       buildRenderManifest(shots, { logoUrl: context.logo_url, soundtrackUrl: context.soundtrack_path });
       const nowIso = new Date().toISOString();
       // Same session resuming after a reload keeps its lock.
-      if (assembly.lock_token === token && assembly.status === "assembling") return json({ claimed: true, resumed: true, lock_expires_at: assembly.lock_expires_at });
+      if (lockView(assembly, token, nowIso).owned) {
+        // Same browser session after a reload: renew its own live lease (CAS on its token).
+        const renewed = { ...assembly, lock_expires_at: claimed(assembly, token, new Date()).lock_expires_at };
+        const ok = await casAssembly(admin, job, renewed, { token });
+        return ok ? json({ claimed: true, resumed: true, lock_expires_at: renewed.lock_expires_at }) : json({ claimed: false, reason: "Another tab is assembling this film." }, 409);
+      }
       if (!canClaim(assembly, nowIso)) return json({ claimed: false, reason: "Another tab is assembling this film." }, 409);
       const next = claimed(assembly, token, new Date());
       const ok = assembly.lock_token
