@@ -42,6 +42,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { exportVideoWithLogo } from "@/services/videoExport/logoBurn";
 import { IMAGE_FLAT_USD, costPreview, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
 import {
   createOutfitSwapFolder,
@@ -53,6 +54,7 @@ import {
 import {
   analyzeOutfitSwapSource,
   analyzeOutfitSwapHats,
+  analyzeOutfitSwapLogo,
   isHatGarmentRun,
   analyzeOutfitSwapQa,
   applyFrameOverrides,
@@ -79,6 +81,7 @@ import {
   type OutfitSwapFrameSubject,
   type OutfitSwapGarment,
   type OutfitSwapHatAnalysis,
+  type OutfitSwapOverlayLogo,
   type OutfitSwapModelAssignment,
   type OutfitSwapQaReport,
   type OutfitSwapSubjectModel,
@@ -132,6 +135,10 @@ const HAT_SLOTS = [
   { slot: "underside", label: "Inside / underside", key: "undersideUrl" },
   { slot: "detail", label: "Detail close-up", key: "detailUrl" },
 ] as const;
+
+/** Where "Add my logo" goes when the source video has no logo of its own (normalized box). */
+const DEFAULT_LOGO_BOX = { x: 0.38, y: 0.84, w: 0.24, h: 0.09 };
+type LogoChoice = "keep" | "remove" | "replace";
 
 const SELECT_CLASS =
   "w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
@@ -854,6 +861,71 @@ export default function OutfitSwap() {
     if (hatMode && frames.length && !hatAnalysis && hatAnalysisState === "idle") void runHatAnalysis();
   }, [hatMode, frames, hatAnalysis, hatAnalysisState, runHatAnalysis]);
 
+  /* ------------------------------ LOGO ------------------------------ */
+  // The AI only removes the source logo; the customer's logo is drawn pixel-exact by the
+  // browser (preview + "Download with my logo"), never regenerated.
+  const [sourceLogo, setSourceLogo] = useState<OutfitSwapOverlayLogo | null>(null);
+  const [sourceLogoState, setSourceLogoState] = useState<"idle" | "loading" | "error">("idle");
+  const [myLogoUrl, setMyLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoChoice, setLogoChoice] = useState<LogoChoice>("keep");
+  const [logoExport, setLogoExport] = useState<{ videoId: string; progress: number } | null>(null);
+
+  useEffect(() => {
+    setSourceLogo(null);
+    if (!frames.length) return;
+    let cancelled = false;
+    setSourceLogoState("loading");
+    analyzeOutfitSwapLogo(frames.map((frame, index) => ({ frameId: `frame-${index}`, timestamp: frame.time, imageUrl: frame.url })))
+      .then((logo) => {
+        if (cancelled) return;
+        setSourceLogo(logo);
+        setSourceLogoState("idle");
+        if (logo.present) setLogoChoice((prev) => (prev === "keep" ? "remove" : prev));
+      })
+      .catch(() => !cancelled && setSourceLogoState("error"));
+    return () => {
+      cancelled = true;
+    };
+  }, [frames]);
+
+  const removeSourceLogo = sourceLogo?.present && logoChoice !== "keep" ? sourceLogo : null;
+  const logoBox = sourceLogo?.present && sourceLogo.box ? sourceLogo.box : DEFAULT_LOGO_BOX;
+  const placesMyLogo = logoChoice === "replace" && !!myLogoUrl;
+
+  const uploadMyLogo = useCallback(async (file: File | undefined) => {
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const folder = await createOutfitSwapFolder();
+      // Logos keep their transparency: uploaded as-is, never recompressed.
+      const stored = await uploadToStorage(folder, file, file.name);
+      setMyLogoUrl(stored.url);
+      setLogoChoice("replace");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not upload that logo");
+    } finally {
+      setLogoUploading(false);
+    }
+  }, []);
+
+  const downloadWithLogo = useCallback(async (videoId: string, videoUrl: string) => {
+    if (!myLogoUrl) return;
+    setLogoExport({ videoId, progress: 0 });
+    try {
+      await exportVideoWithLogo({
+        videoUrl,
+        logo: { id: "customer-logo", url: myLogoUrl, ...logoBox },
+        name: "outfit-swap-with-logo",
+        onStatus: (status) => setLogoExport({ videoId, progress: status.progress }),
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't add your logo to that video");
+    } finally {
+      setLogoExport(null);
+    }
+  }, [myLogoUrl, logoBox]);
+
   const swapFrame = useCallback(
     async (frameIndex: number) => {
       const frame = frames[frameIndex];
@@ -900,6 +972,7 @@ export default function OutfitSwap() {
         castAssignment: resolved.castAssignment,
         modelAssignment: resolved.modelAssignment,
         ...(hatSwap ? { hatSwap } : {}),
+        ...(removeSourceLogo ? { removeSourceLogo } : {}),
       });
       setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
       setApproved((prev) => {
@@ -915,7 +988,7 @@ export default function OutfitSwap() {
         return next;
       });
     },
-    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment, frameOverrides, hatMode, hatAnalysis, hatMapping],
+    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment, frameOverrides, hatMode, hatAnalysis, hatMapping, removeSourceLogo],
   );
 
 
@@ -1040,6 +1113,7 @@ export default function OutfitSwap() {
         frameSubjects: subjectUnion,
         castAssignment,
         modelAssignment,
+        ...(removeSourceLogo ? { removeSourceLogo } : {}),
       });
       // Non-blocking: each click is its own record, so several can run at once.
       setVideos((prev) => [data.generation, ...prev]);
@@ -1062,6 +1136,7 @@ export default function OutfitSwap() {
     analysis,
     castAssignment,
     modelAssignment,
+    removeSourceLogo,
   ]);
 
 
@@ -1804,6 +1879,78 @@ export default function OutfitSwap() {
                 />
               </div>
             </SectionCard>
+
+            {frames.length ? (
+              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl sm:p-5">
+                <h2 className="font-heading text-sm font-semibold text-foreground sm:text-base">Logo</h2>
+                <p className="mb-3 mt-0.5 text-xs text-muted-foreground">
+                  {sourceLogoState === "loading"
+                    ? "Checking the video for a logo…"
+                    : sourceLogo?.present
+                      ? `This video has a logo${sourceLogo.description ? ` (${sourceLogo.description})` : ""}. Remove it, or swap in yours — your logo is placed exactly, never redrawn.`
+                      : sourceLogoState === "error"
+                        ? "Couldn't check the video for a logo. You can still add yours."
+                        : "No logo found in this video. Add yours and it's placed at the bottom."}
+                </p>
+                <div className="space-y-3">
+                  <GarmentSlotUpload
+                    label="Your logo (PNG with transparency works best)"
+                    url={myLogoUrl}
+                    busy={logoUploading}
+                    onPick={(file) => void uploadMyLogo(file)}
+                    onClear={() => {
+                      setMyLogoUrl(null);
+                      setLogoChoice((prev) => (prev === "replace" ? (sourceLogo?.present ? "remove" : "keep") : prev));
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-1.5">
+                    {([
+                      ["replace", sourceLogo?.present ? "Replace with mine" : "Add mine", !myLogoUrl],
+                      ["remove", "Remove it", !sourceLogo?.present],
+                      ["keep", sourceLogo?.present ? "Keep the original" : "No logo", false],
+                    ] as [LogoChoice, string, boolean][]).map(([value, label, disabled]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setLogoChoice(value)}
+                        className={cn(
+                          "rounded-lg border px-2.5 py-1.5 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                          logoChoice === value
+                            ? "border-cyan-200/70 bg-cyan-400/10 text-cyan-100"
+                            : "border-white/15 bg-black/30 text-foreground/80 hover:border-cyan-200/40",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {placesMyLogo && frames[0] ? (
+                    <div
+                      className="relative mx-auto w-40 overflow-hidden rounded-xl border border-white/10 bg-black"
+                      style={{ aspectRatio: meta?.width && meta?.height ? `${meta.width} / ${meta.height}` : "9 / 16" }}
+                    >
+                      <img
+                        src={Object.values(swaps).find((swap) => swap?.status === "complete" && swap.outputUrl)?.outputUrl ?? frames[0].url}
+                        alt="Logo placement preview"
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      <img
+                        src={myLogoUrl!}
+                        alt="Your logo"
+                        className="absolute object-contain"
+                        style={{
+                          left: `${logoBox.x * 100}%`,
+                          top: `${logoBox.y * 100}%`,
+                          width: `${logoBox.w * 100}%`,
+                          height: `${logoBox.h * 100}%`,
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
             {/* PHASE 4 — single-subject runs get ONE simple model control.
                 "Keep original" (the default) is exactly today's behaviour. */}
@@ -2567,6 +2714,21 @@ export default function OutfitSwap() {
                               >
                                 <Download size={12} /> Download
                               </a>
+                              {placesMyLogo ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!!logoExport}
+                                  onClick={() => void downloadWithLogo(video.id, video.outputUrl as string)}
+                                  className="rounded-lg border-cyan-200/40 bg-transparent text-[11px] text-cyan-100 hover:border-cyan-200/70"
+                                >
+                                  {logoExport?.videoId === video.id ? (
+                                    <><Loader2 size={12} className="animate-spin" /> {Math.round(logoExport.progress)}%</>
+                                  ) : (
+                                    <><Download size={12} /> With my logo</>
+                                  )}
+                                </Button>
+                              ) : null}
                               <Button
                                 size="sm"
                                 variant="outline"
