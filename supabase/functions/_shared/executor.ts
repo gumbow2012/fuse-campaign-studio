@@ -1190,6 +1190,8 @@ function hatRetryState(step: { output_payload?: Record<string, unknown> | null }
     ...(Array.isArray(p.superseded_request_ids) ? { superseded_request_ids: p.superseded_request_ids } : {}),
   };
 }
+const hatProviderRetryFor = (step: any) => Number(step?.output_payload?.hat_provider_retries ?? 0);
+
 /** Hat Brand Film: a failed/canceled run must never submit more paid work. */
 async function hatJobStopped(admin: AdminClient, jobId: string) {
   const { data } = await admin.from("execution_jobs").select("status").eq("id", jobId).maybeSingle();
@@ -1620,6 +1622,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             const stillRequestId = stillStep?.provider_request_id ?? null;
             // The gate records the rejected request id as superseded (durably, CAS) before we resubmit.
             const gate = await hatFilmGateBeforeClip(admin, { jobId: job.id, ctx: hatFilm, shotId, stillUrl: initImageUrl, stillRequestId });
+            console.log(JSON.stringify({ hat: "clip_gate", job: job.id, shot: shotId, step: step.id, still: stillRequestId, action: gate.action }));
             if (gate.action === "skip") {
               // Another worker was already told to animate this shot; never submit twice.
               continue;
@@ -1815,6 +1818,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             const { qa } = await loadQa(admin, job.id);
             const shotQa = qa.shots[shotId];
             const stillId = (stillRow as any)?.provider_request_id ?? null;
+            console.log(JSON.stringify({ hat: "clip_rule", job: job.id, shot: shotId, step: step.id, qa: shotQa?.status ?? null, still: (stillRow as any)?.status ?? null, stillId }));
             if (shotQa?.status !== "passed" || (stillRow as any)?.status !== "complete" ||
                 (stillId && (shotQa.superseded_requests ?? []).includes(stillId))) {
               await admin.from("execution_steps").update({ status: "pending" }).eq("id", step.id).is("provider_request_id", null);
@@ -1823,6 +1827,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
             }
           }
 
+          if (hatFilm) console.log(JSON.stringify({ hat: "clip_submit", job: job.id, shot: (node as any).prompt_config?.hat_film_shot ?? null, step: step.id, stage: (node as any).prompt_config?.hat_film_stage ?? null, providerRetry: hatProviderRetryFor(step) }));
           const requestId = await submitVideoJob({
             prompt,
             initImageUrl: providerInitImageUrl,
