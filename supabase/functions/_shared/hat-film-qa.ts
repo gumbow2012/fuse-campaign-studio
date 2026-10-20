@@ -206,9 +206,12 @@ export function judgeStill(shot: HatFilmShot, profile: ReferenceProfile, report:
     // Every hat is checked on its own; one aggregate color must never hide a wrong bill.
     const perHat = Array.isArray(report.top_brim_colors_per_hat) ? report.top_brim_colors_per_hat : [];
     if (perHat.length < exp.count) issues.push(`upper bill color not reported for each of the ${exp.count} hats`);
+    // Shot 11 may show one hat upside-down (inside view): a hidden upper bill is fine, but every
+    // VISIBLE one must match, and at least one must be visible.
     perHat.slice(0, exp.count).forEach((color, i) => {
-      if (exp.top === "required") checkBrim(issues, `top of the brim on hat ${i + 1}`, "required", color != null, color, profile.top_brim_color);
+      checkBrim(issues, `top of the brim on hat ${i + 1}`, "if_visible", color != null, color, profile.top_brim_color);
     });
+    if (exp.top === "required" && perHat.length && perHat.slice(0, exp.count).every((c) => c == null)) issues.push("no hat shows the top of the brim");
   }
 
   const topVisible = typeof report.top_brim_visible === "boolean" ? report.top_brim_visible : !!report.top_brim_color;

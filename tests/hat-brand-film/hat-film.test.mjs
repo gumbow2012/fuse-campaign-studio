@@ -209,3 +209,10 @@ test('QA: analyzer call count is in the estimate (no invented price)', () => {
   assert.deepEqual({ base: e.analysis_calls.base, max: e.analysis_calls.max, usd: e.analysis_calls.usd }, { base: 12, max: 23, usd: null });
   assert.deepEqual(qaCallCount(), { base: 12, max: 23 });
 });
+
+test('QA: three-hat shot may show one hat upside-down (hidden upper bill), but never all hidden', () => {
+  const three = { ...good, hat_count: 3, side_shown: 'multiple', top_brim_color: 'black' };
+  assert.equal(judgeStill(shot(11), profile, { ...three, top_brim_colors_per_hat: [null, 'black', 'black'] }).verdict, 'pass');
+  assert.equal(judgeStill(shot(11), profile, { ...three, top_brim_colors_per_hat: [null, 'gray', 'black'] }).verdict, 'fail');
+  assert.equal(judgeStill(shot(11), profile, { ...three, top_brim_color: null, top_brim_visible: false, top_brim_colors_per_hat: [null, null, null] }).verdict, 'fail');
+});
