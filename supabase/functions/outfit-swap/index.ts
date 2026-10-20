@@ -39,6 +39,7 @@ import {
   requiresFusedAssembly,
   swapsAnyModel,
 } from "../_shared/outfit-swap-assembly.ts";
+import { assembleHatSwap, buildHatReconstructionPrompt, type HatGarment, type HatSwapRequest, isHatRun } from "../_shared/hat-swap.ts";
 
 /**
  * Outfit Swap: per-frame nano-banana wardrobe edits + one Seedance
@@ -326,6 +327,8 @@ async function startSwapFrame(admin: AdminClient, args: {
   frameSubjects?: AssemblyFrameSubject[];
   castAssignment?: Record<string, any>;
   modelAssignment?: Record<string, any>;
+  /** HAT MODE (optional) — source hats in this frame + source→customer hat mapping. */
+  hatSwap?: HatSwapRequest | null;
 }) {
   const sourceFrameUrl = String(args.sourceFrameUrl ?? "").trim();
   if (!sourceFrameUrl) throw new Error("A source frame is required");
@@ -346,9 +349,19 @@ async function startSwapFrame(admin: AdminClient, args: {
   });
   let assembly: AssembledFrameEdit | null = null;
 
+  // ---- HAT MODE: product videos of hats. Each source hat becomes its mapped customer
+  // hat (or the one default hat), with only the view-matched reference photos.
+  const hatMode = !!args.hatSwap && isHatRun(garments);
+  if (hatMode) {
+    const hat = assembleHatSwap({ sourceFrameUrl, garments: garments as HatGarment[], hatSwap: args.hatSwap!, extraPrompt: args.extraPrompt });
+    if (hat.imageUrls.length > MAX_REFERENCE_IMAGES) throw new Error("Too many hats in this frame to swap at once (max 4)");
+    imageUrls = hat.imageUrls;
+    prompt = hat.prompt;
+  }
+
   // ---- PHASE 5 FUSED PATH: source frame + identity refs + orientation-correct
   // garment refs → ONE nano-banana edit. Never two sequential edits.
-  const needsFused = requiresFusedAssembly({
+  const needsFused = !hatMode && requiresFusedAssembly({
     frameSubjects: args.frameSubjects ?? [],
     garments: garments as AssemblyGarment[],
     castAssignment: args.castAssignment ?? {},
@@ -443,7 +456,8 @@ async function startSwapFrame(admin: AdminClient, args: {
           garments,
           // PHASE 5: the request architecture used for this frame. `fused` frames
           // handle every visible subject in ONE edit — never a second pass.
-          assembly_mode: assembly ? assembly.mode : "legacy_single_subject",
+          assembly_mode: hatMode ? "hat" : assembly ? assembly.mode : "legacy_single_subject",
+          ...(hatMode ? { hat_swap: args.hatSwap } : {}),
           ...(assembly
             ? { assembly_plan: assembly.plan, assembly_verification_pending: true }
             : {}),
@@ -512,7 +526,10 @@ async function startReconstruction(admin: AdminClient, args: {
     modelAssignment: resolvedVideoModels,
     extraPrompt: args.extraPrompt,
   });
-  const prompt = sourceMotionPrompt(reconstruction.prompt);
+  const videoGarments = Array.isArray(args.garments) ? args.garments : [];
+  const prompt = sourceMotionPrompt(
+    isHatRun(videoGarments) ? buildHatReconstructionPrompt(videoGarments as HatGarment[], args.extraPrompt) : reconstruction.prompt,
+  );
   if (reconstruction.enriched) {
     console.log(
       "[outfit-swap][phase7][enriched-reconstruction]",
@@ -838,6 +855,7 @@ Deno.serve(async (req) => {
         frameSubjects: Array.isArray(body.frameSubjects) ? body.frameSubjects : [],
         castAssignment: body.castAssignment ?? {},
         modelAssignment: body.modelAssignment ?? {},
+        hatSwap: body.hatSwap ?? null,
         webhookBase,
       });
       return json({ generation });
