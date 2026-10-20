@@ -151,6 +151,7 @@ export type OutfitSwapAnalysisResult = {
  */
 export async function analyzeOutfitSwapSource(
   frames: { frameId: string; timestamp: number; imageUrl: string }[],
+  mode?: "hats",
 ): Promise<OutfitSwapAnalysisResult> {
   const {
     data: { session },
@@ -163,7 +164,7 @@ export async function analyzeOutfitSwapSource(
       apikey: SUPABASE_PUBLISHABLE_KEY,
       Authorization: `Bearer ${session?.access_token ?? SUPABASE_PUBLISHABLE_KEY}`,
     },
-    body: JSON.stringify({ frames }),
+    body: JSON.stringify(mode ? { frames, mode } : { frames }),
   });
 
   const data = await response.json().catch(() => null);
@@ -201,7 +202,36 @@ export type OutfitSwapGarment = {
   backUrl: string | null;
   detailUrl?: string | null;
   sideUrl?: string | null;
+  /** HAT MODE extra angles + exact lettering (type "Hat" only). */
+  rightUrl?: string | null;
+  leftUrl?: string | null;
+  undersideUrl?: string | null;
+  lettering?: string | null;
 };
+
+/** Hat mode: every product in the run is a hat (product videos of hats). */
+export function isHatGarmentRun(garments: OutfitSwapGarment[]): boolean {
+  return garments.length > 0 && garments.every((garment) => garment.type.trim().toLowerCase() === "hat");
+}
+
+export type OutfitSwapHatView = "front" | "right" | "left" | "back" | "underside" | "top" | "macro" | "multiple" | "uncertain";
+/** Distinct source hats in the clip (stable ids) + the view of each hat per frame. */
+export type OutfitSwapHatAnalysis = {
+  version: string;
+  mode: "hats";
+  frameCount: number;
+  hatCount: number;
+  hatTracks: { hatId: string; description: string; firstFrameId: string | null; frameCount: number }[];
+  frames: { frameId: string; timestamp: number; hats: { hatId: string; view: OutfitSwapHatView; confidence: number }[] }[];
+};
+
+/** Hat mode analysis: one cached call that finds every distinct hat and its view per frame. */
+export async function analyzeOutfitSwapHats(
+  frames: { frameId: string; timestamp: number; imageUrl: string }[],
+): Promise<{ fingerprint: string; analysis: OutfitSwapHatAnalysis }> {
+  const result = await analyzeOutfitSwapSource(frames, "hats");
+  return { fingerprint: result.fingerprint, analysis: result.analysis as unknown as OutfitSwapHatAnalysis };
+}
 
 /* ------------------------------------------------------------------ *
  * PHASE 3 — SUBJECT → GARMENT ASSIGNMENT (mapping + storage only)
