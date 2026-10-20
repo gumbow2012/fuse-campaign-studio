@@ -92,6 +92,16 @@ export function spellLettering(text: string): string {
 /** Templates pass "{{input:<node>}}" as lettering; the runner fills (and spells) it at run time. */
 const spelled = (text: string) => text.startsWith("{{input:") ? text.replace("{{input:", "{{spell:") : spellLettering(text);
 
+/** Brand swaps repackage products in the brand's palette; keeping source colors made logos read as pasted-on stickers. */
+export const BRAND_REPACKAGE = [
+  "This is a full repackage, not a sticker: recolor each wrapper's, package's, sign's and machine panel's entire printed design (background, stripes, bands, name panels) to the brand's own color palette taken from its logo, and recolor any product visible through or printed on the packaging to match that palette.",
+  "Print the logo into each surface so it follows every fold, crinkle, curve, gloss highlight and transparency of the material, with the same lighting, focus, motion blur and grain as its surroundings; never a flat overlay.",
+  "Remove every other original brand name, product name and printed word; replace it with the brand name or leave the area as plain brand-colored design.",
+  "Apply this to every item in frame, including partly hidden, blurred, falling and background ones, so none keeps the original design.",
+  "Keep each item's shape, count, position, layout, materials, lighting and perspective.",
+  "Never put the brand logo on a hat; hats follow only the hat instructions.",
+].join(" ");
+
 /** "Brand / logo" products replace branding printed in the scene (signs, packaging, labels). */
 export const isBrandGarment = (g: { type?: string | null }) => /brand|logo/i.test(clean(g.type));
 
@@ -154,7 +164,7 @@ export function assembleHatSwap(args: {
     lines.push(
       `Every brand name and logo printed on signs, displays, machines, packaging, wrappers and labels in image 1 becomes the brand shown in reference image ${imageUrls.length}` +
         (name ? `, with the name reading exactly "${name}" (spelled ${spelled(name)}); never add, drop or change letters` : "") +
-        ". Keep each item's shape, layout, colors, materials, lighting and perspective; change only the brand mark and its wording. Logos on hats follow the hat instructions instead.",
+        ". " + BRAND_REPACKAGE,
     );
   }
   if (!lines.length) throw new Error("Nothing to swap in this frame");
