@@ -52,6 +52,8 @@ import {
 
 import {
   analyzeOutfitSwapSource,
+  analyzeOutfitSwapHats,
+  isHatGarmentRun,
   analyzeOutfitSwapQa,
   applyFrameOverrides,
   callOutfitSwap,
@@ -76,6 +78,7 @@ import {
   type OutfitSwapFrameOverrides,
   type OutfitSwapFrameSubject,
   type OutfitSwapGarment,
+  type OutfitSwapHatAnalysis,
   type OutfitSwapModelAssignment,
   type OutfitSwapQaReport,
   type OutfitSwapSubjectModel,
@@ -119,7 +122,16 @@ const VIDEO_MODELS = [
 type Frame = { time: number; url: string };
 /** PHASE 2: structured refs; `url` still mirrors FRONT for generation. */
 type Garment = OutfitSwapGarment;
-type GarmentSlot = "front" | "back" | "detail" | "side";
+type GarmentSlot = "front" | "back" | "detail" | "side" | "right" | "left" | "underside";
+
+/** HAT MODE upload slots (front is the product photo itself). All optional. */
+const HAT_SLOTS = [
+  { slot: "back", label: "Back", key: "backUrl" },
+  { slot: "right", label: "Wearer's right side", key: "rightUrl" },
+  { slot: "left", label: "Wearer's left side", key: "leftUrl" },
+  { slot: "underside", label: "Inside / underside", key: "undersideUrl" },
+  { slot: "detail", label: "Detail close-up", key: "detailUrl" },
+] as const;
 
 const SELECT_CLASS =
   "w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
@@ -647,6 +659,9 @@ export default function OutfitSwap() {
             if (slot === "front") return { ...item, frontUrl: stored.url, url: stored.url };
             if (slot === "back") return { ...item, backUrl: stored.url };
             if (slot === "detail") return { ...item, detailUrl: stored.url };
+            if (slot === "right") return { ...item, rightUrl: stored.url };
+            if (slot === "left") return { ...item, leftUrl: stored.url };
+            if (slot === "underside") return { ...item, undersideUrl: stored.url };
             return { ...item, sideUrl: stored.url };
           }),
         );
@@ -807,6 +822,38 @@ export default function OutfitSwap() {
     };
   }, [inFlightIds.join(",")]);
 
+  /* ------------------------------ HAT MODE ------------------------------ */
+  // Every product is a hat → find the distinct hats in the clip and let the user map
+  // each to one of their hats. One uploaded hat replaces every hat in the video.
+  const hatMode = useMemo(() => isHatGarmentRun(garments), [garments]);
+  const [hatAnalysis, setHatAnalysis] = useState<OutfitSwapHatAnalysis | null>(null);
+  const [hatAnalysisState, setHatAnalysisState] = useState<"idle" | "loading" | "error">("idle");
+  const [hatMapping, setHatMapping] = useState<Record<string, string>>({});
+
+  const runHatAnalysis = useCallback(async () => {
+    if (!frames.length) return;
+    setHatAnalysisState("loading");
+    try {
+      const result = await analyzeOutfitSwapHats(
+        frames.map((frame, index) => ({ frameId: `frame-${index}`, timestamp: frame.time, imageUrl: frame.url })),
+      );
+      setHatAnalysis(result.analysis);
+      setHatAnalysisState("idle");
+    } catch {
+      setHatAnalysisState("error");
+    }
+  }, [frames]);
+
+  useEffect(() => {
+    setHatAnalysis(null);
+    setHatAnalysisState("idle");
+    setHatMapping({});
+  }, [frames]);
+
+  useEffect(() => {
+    if (hatMode && frames.length && !hatAnalysis && hatAnalysisState === "idle") void runHatAnalysis();
+  }, [hatMode, frames, hatAnalysis, hatAnalysisState, runHatAnalysis]);
+
   const swapFrame = useCallback(
     async (frameIndex: number) => {
       const frame = frames[frameIndex];
@@ -825,6 +872,19 @@ export default function OutfitSwap() {
         modelAssignment,
         overrides: frameOverrides[frameIndex],
       });
+      // HAT MODE: this frame's source hats (+ view) and the source→customer hat mapping.
+      const hatFrame = hatMode ? hatAnalysis?.frames.find((entry) => entry.frameId === `frame-${frameIndex}`) : null;
+      const hatSwap = hatMode
+        ? {
+          hats: (hatFrame?.hats ?? []).map((hat) => ({
+            hatId: hat.hatId,
+            view: hat.view,
+            description: hatAnalysis?.hatTracks.find((track) => track.hatId === hat.hatId)?.description ?? null,
+          })),
+          mapping: hatMapping,
+          defaultGarmentId: garments[0]?.id ?? null,
+        }
+        : null;
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
@@ -839,6 +899,7 @@ export default function OutfitSwap() {
         frameSubjects: resolved.frameSubjects,
         castAssignment: resolved.castAssignment,
         modelAssignment: resolved.modelAssignment,
+        ...(hatSwap ? { hatSwap } : {}),
       });
       setSwaps((prev) => ({ ...prev, [frameIndex]: data.generation }));
       setApproved((prev) => {
@@ -854,7 +915,7 @@ export default function OutfitSwap() {
         return next;
       });
     },
-    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment, frameOverrides],
+    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment, frameOverrides, hatMode, hatAnalysis, hatMapping],
   );
 
 
@@ -1569,7 +1630,7 @@ export default function OutfitSwap() {
                             ))}
                           </select>
                         </div>
-                        <div>
+                        {garment.type !== "Hat" ? (<div>
                           <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                             Apply to
                           </label>
@@ -1588,7 +1649,7 @@ export default function OutfitSwap() {
                               </option>
                             ))}
                           </select>
-                        </div>
+                        </div>) : null}
                         <Input
                           value={garment.label}
                           onChange={(event) =>
@@ -1610,8 +1671,39 @@ export default function OutfitSwap() {
                       </button>
                     </div>
 
-                    {/* PHASE 2 — structured refs. FRONT is the primary ref used by
-                        generation; BACK/DETAIL/SIDE are captured + stored only. */}
+                    {garment.type === "Hat" ? (
+                      <div className="mt-2.5 space-y-2 border-t border-white/10 pt-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Hat angles · optional, more angles = closer match
+                        </p>
+                        {HAT_SLOTS.map(({ slot, label, key }) => (
+                          <GarmentSlotUpload
+                            key={slot}
+                            label={label}
+                            url={garment[key] ?? null}
+                            busy={slotUploading === `${index}:${slot}`}
+                            onPick={(file) => void uploadGarmentSlot(index, slot, file)}
+                            onClear={() =>
+                              setGarments((prev) =>
+                                prev.map((item, i) => (i === index ? { ...item, [key]: null } : item)),
+                              )
+                            }
+                          />
+                        ))}
+                        <Input
+                          value={garment.lettering ?? ""}
+                          onChange={(event) =>
+                            setGarments((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, lettering: event.target.value } : item)),
+                            )
+                          }
+                          placeholder="Exact lettering on the hat (optional)"
+                          className="h-8 rounded-lg border-white/12 bg-black/40 text-xs"
+                        />
+                      </div>
+                    ) : (
+                    /* PHASE 2 — structured refs. FRONT is the primary ref used by
+                        generation; BACK/DETAIL/SIDE are captured + stored only. */
                     <div className="mt-2.5 space-y-2 border-t border-white/10 pt-2.5">
                       <label className="flex cursor-pointer items-center justify-between gap-3">
                         <span className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
@@ -1686,6 +1778,7 @@ export default function OutfitSwap() {
                         {expandedRefs.has(index) ? "Hide extra references" : "Add more references"}
                       </button>
                     </div>
+                    )}
                   </div>
                 ))}
                 <button
@@ -1926,7 +2019,7 @@ export default function OutfitSwap() {
               }
             >
               {/* Detection-only status — no generation happens here. */}
-              {frames.length && analysisStage !== "idle" ? (
+              {frames.length && analysisStage !== "idle" && !hatMode ? (
                 <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px]">
                   {analysisStage === "done" && analysis ? (
                     <div className="flex flex-wrap items-center gap-2 text-cyan-100">
@@ -1963,6 +2056,70 @@ export default function OutfitSwap() {
                       </span>
                     </div>
                   )}
+                </div>
+              ) : null}
+
+              {hatMode && frames.length ? (
+                <div className="mb-3 space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-[11px]">
+                  {hatAnalysisState === "loading" ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 size={12} className="animate-spin text-cyan-200" />
+                      <span>Finding the hats in this video…</span>
+                    </div>
+                  ) : hatAnalysisState === "error" ? (
+                    <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                      <span>Couldn't find the hats in this video. Swaps still replace every hat with your first hat.</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void runHatAnalysis()}
+                        className="h-6 rounded-lg border-white/15 bg-transparent text-[10px]"
+                      >
+                        Retry
+                      </Button>
+                    </div>
+                  ) : hatAnalysis ? (
+                    <>
+                      <p className="font-semibold tracking-wide text-cyan-100">
+                        ✓ {hatAnalysis.hatCount === 1 ? "1 HAT" : `${hatAnalysis.hatCount} HATS`} IN THIS VIDEO
+                      </p>
+                      <p className="text-muted-foreground">
+                        {garments.length === 1
+                          ? hatAnalysis.hatCount > 1
+                            ? "Your hat replaces every hat in the video. Add more hats to give each one its own replacement."
+                            : "Your hat replaces the hat in every frame."
+                          : "Pick which of your hats replaces each one."}
+                      </p>
+                      {hatAnalysis.hatTracks.map((track) => {
+                        const thumb = track.firstFrameId ? frames[Number(track.firstFrameId.replace("frame-", ""))]?.url : null;
+                        return (
+                          <div key={track.hatId} className="flex items-center gap-2">
+                            {thumb ? <img src={thumb} alt="" className="h-12 w-9 shrink-0 rounded-md object-cover" /> : null}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-foreground">{track.description}</p>
+                              <p className="text-muted-foreground">
+                                {track.frameCount} frame{track.frameCount === 1 ? "" : "s"}
+                              </p>
+                            </div>
+                            {garments.length > 1 ? (
+                              <select
+                                aria-label={`Replacement for ${track.description}`}
+                                value={hatMapping[track.hatId] ?? garments[0].id}
+                                onChange={(event) => setHatMapping((prev) => ({ ...prev, [track.hatId]: event.target.value }))}
+                                className={cn(SELECT_CLASS, "w-40")}
+                              >
+                                {garments.map((garment, index) => (
+                                  <option key={garment.id} value={garment.id}>
+                                    {garment.label || garment.name || `Hat ${index + 1}`}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </>
+                  ) : null}
                 </div>
               ) : null}
 
