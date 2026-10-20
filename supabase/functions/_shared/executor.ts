@@ -29,7 +29,7 @@ import {
 } from "./free-video.ts";
 import { sortEdgesByExecutionOrder, targetParamOrder } from "./edge-order.ts";
 
-import { isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
+import { fillInputPlaceholders, isPromptNode, resolveNodePrompt } from "./prompt-nodes.ts";
 import { ensureHatFilmContext, hatFilmPrompt, hatFilmStillInputs } from "./hat-film-runtime.ts";
 import { hatFilmCorrection, hatFilmGateBeforeClip, loadQa } from "./hat-film-qa-gemini.ts";
 import { QA_CLAIM_MS } from "./hat-film-qa.ts";
@@ -1549,7 +1549,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
           const hatStill = hatFilmPrompt(hatFilm, node as any);
           const hatCorrection = hatStill ? await hatFilmCorrection(admin, job.id, (node as any).prompt_config?.hat_film_shot) : null;
           const prompt = (hatStill ? (hatCorrection ? `${hatStill} ${hatCorrection}` : hatStill) : null) ??
-            lockPrompt(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap));
+            lockPrompt(fillInputPlaceholders(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap), jobInputs, nodeMap as any));
           const referenceAsset = getNodeReferenceAsset(node, assetMap);
           if (referenceAsset?.type === "video" || orderedParamEntries.some(([, value]) => value.type === "video")) {
             throw new Error(`${node.name} accepts images only; connect the source video to the Seedance step`);
@@ -1655,7 +1655,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
       } else if (node.node_type === "video_gen") {
         try {
           const prompt = hatFilmPrompt(hatFilm, node as any) ??
-            lockPrompt(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap));
+            lockPrompt(fillInputPlaceholders(resolveNodePrompt(node, promptEdgesByTarget.get(node.id) ?? [], nodeMap), jobInputs, nodeMap as any));
           const initImageUrl = params.get("init_image")?.url ??
             params.get("start_frame_image")?.url ??
             [...params.values()][0]?.url;

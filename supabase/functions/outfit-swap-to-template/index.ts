@@ -12,6 +12,7 @@ import { signDeepDisplayUrls } from "../_shared/asset-access.ts";
 import { resolveOwnedSourceVideo } from "../_shared/source-video.ts";
 import { sourceMotionPrompt } from "../_shared/video-reference.ts";
 import { buildSeedanceReferenceInput } from "../_shared/fal.ts";
+import { type FrameHat, type HatGarment, isHatRun, planSceneTemplate } from "../_shared/hat-swap.ts";
 import {
   corsHeaders,
   createAdminClient,
@@ -87,6 +88,29 @@ function readProducts(value: unknown): ProductDraft[] {
     .slice(0, MAX_PRODUCTS);
 }
 
+/**
+ * Hat/scene runs (every product a hat or a brand/logo): the approved run's garments plus,
+ * per approved frame, the hats detected in it. Null for ordinary clothing runs.
+ */
+function readScene(value: unknown, frameCount: number) {
+  const record = value && typeof value === "object" ? value as Record<string, any> : null;
+  if (!record || !Array.isArray(record.garments)) return null;
+  const garments = (record.garments as HatGarment[])
+    .filter((g) => g && typeof g.id === "string")
+    .slice(0, MAX_PRODUCTS);
+  if (!isHatRun(garments)) return null;
+  const frames: { hats: FrameHat[]; analyzed: boolean }[] = (Array.isArray(record.frames) ? record.frames : [])
+    .slice(0, frameCount)
+    .map((frame: any) => ({ hats: Array.isArray(frame?.hats) ? frame.hats : [], analyzed: frame?.analyzed === true }));
+  while (frames.length < frameCount) frames.push({ hats: [], analyzed: false });
+  return {
+    garments,
+    frames,
+    mapping: record.mapping && typeof record.mapping === "object" ? record.mapping as Record<string, string> : {},
+    defaultGarmentId: typeof record.defaultGarmentId === "string" ? record.defaultGarmentId : null,
+  };
+}
+
 /** Clean staged layout matching the canvas coordinate space. */
 const STAGE_X = { input: 80, product: 80, image: 620, video: 1180, kling: 1180 };
 const ROW_GAP = 240;
@@ -104,6 +128,10 @@ Deno.serve(async (req) => {
 
     const frames = readFrames(body.frames);
     const products = readProducts(body.products);
+    // Hat/scene runs get customer-replaceable hat, logo and brand-name inputs instead of locked products.
+    const scene = readScene(body.scene, frames.length);
+    const scenePlan = scene ? planSceneTemplate({ ...scene, newId: () => crypto.randomUUID() }) : null;
+    const graphProducts = scenePlan ? [] : products;
     if (!frames.length) throw new Error("At least one approved swapped frame is required");
     if (!products.length) throw new Error("At least one product reference is required");
     const sourceVideo = await resolveOwnedSourceVideo(admin, user.id, body.sourceVideo);
@@ -182,10 +210,12 @@ Deno.serve(async (req) => {
     positions[sourceVideoNodeId] = { x: STAGE_X.image, y: 80 + Math.max(frames.length, products.length) * ROW_GAP };
 
     // --- Persist each product image as a locked template asset ---
-    const { data: productAssets, error: productAssetsError } = await admin
+    const { data: productAssets, error: productAssetsError } = !graphProducts.length
+      ? { data: [] as { id: string }[], error: null }
+      : await admin
       .from("assets")
       .insert(
-        products.map((product, index) => ({
+        graphProducts.map((product, index) => ({
           supabase_storage_url: product.url,
           asset_type: "image",
           metadata: {
@@ -199,13 +229,13 @@ Deno.serve(async (req) => {
       )
       .select("id");
     if (productAssetsError) throw new Error(productAssetsError.message);
-    if (!productAssets || productAssets.length !== products.length) {
+    if (!productAssets || productAssets.length !== graphProducts.length) {
       throw new Error("Failed to persist product references");
     }
     const productAssetIds = productAssets.map((asset: { id: string }) => String(asset.id));
 
     // --- Product reference inputs (hidden locked references) ---
-    const productNodes = products.map((product, index) => {
+    const productNodes = graphProducts.map((product, index) => {
       const id = crypto.randomUUID();
       const typeLabel = product.type ?? "Product";
       const label = `Product Reference ${String(index + 1).padStart(2, "0")} · ${typeLabel}`;
@@ -233,6 +263,46 @@ Deno.serve(async (req) => {
       return { id, index, slotKey };
     });
 
+
+    // --- Scene runs: customer inputs (hat angles, logo, brand name); the author's are the samples ---
+    if (scenePlan) {
+      const imageInputs = scenePlan.inputs.filter((input) => input.sampleUrl);
+      const { data: sampleAssets, error: sampleAssetsError } = imageInputs.length
+        ? await admin.from("assets").insert(imageInputs.map((input) => ({
+          supabase_storage_url: input.sampleUrl,
+          asset_type: "image",
+          metadata: { source: "outfit_swap_scene_sample", templateId: template.id, versionId, slot: input.key },
+        }))).select("id")
+        : { data: [] as { id: string }[], error: null };
+      if (sampleAssetsError || !sampleAssets || sampleAssets.length !== imageInputs.length) {
+        throw new Error(sampleAssetsError?.message ?? "Failed to persist sample references");
+      }
+      const sampleAssetId = new Map(imageInputs.map((input, index) => [input.id, String(sampleAssets[index].id)]));
+      scenePlan.inputs.forEach((input, index) => {
+        nodes.push({
+          id: input.id,
+          version_id: versionId,
+          node_type: "user_input",
+          model_id: null,
+          name: input.label,
+          default_asset_id: sampleAssetId.get(input.id) ?? null,
+          prompt_config: {
+            editor_mode: "upload",
+            editor_slot_key: input.key,
+            editor_label: input.label,
+            editor_hint: input.hint ?? null,
+            editor_expected: input.expected,
+            required: input.required,
+            optional: !input.required,
+            sort_order: index + 1,
+            sample_url: input.sampleUrl ?? null,
+            sample_text: input.sampleText ?? null,
+            outfit_swap_role: "scene_input",
+          },
+        });
+        positions[input.id] = { x: STAGE_X.product, y: 80 + (frames.length + index) * ROW_GAP };
+      });
+    }
 
     // --- Persist each approved swapped frame as a locked template asset ---
     const { data: frameAssets, error: frameAssetsError } = await admin
@@ -280,13 +350,20 @@ Deno.serve(async (req) => {
         name: `Approved Swap Frame ${suffix}`,
       });
 
+      // Scene run with nothing to swap in this frame: the approved frame feeds the video as-is.
+      const scenePlanFrame = scenePlan ? scenePlan.frames[index] : undefined;
+      if (scenePlanFrame === null) {
+        positions[inputId] = { x: STAGE_X.input, y: 80 + index * ROW_GAP };
+        return { inputId, imageId: inputId, index, suffix };
+      }
+
       nodes.push({
         id: imageId,
         version_id: versionId,
         node_type: "image_gen",
         model_id: null,
         prompt_config: {
-          prompt: UNIVERSAL_SWAP_PROMPT,
+          prompt: scenePlanFrame ? scenePlanFrame.prompt : UNIVERSAL_SWAP_PROMPT,
           aspect_ratio: aspectRatio,
           output_exposed: true,
           outfit_swap_role: "swap",
@@ -306,6 +383,17 @@ Deno.serve(async (req) => {
         target_node_id: imageId,
         mapping_logic: { target_param: "image_1", edge_order: 1 },
         condition_logic: null,
+      });
+      // Scene run: only this frame's view-matched customer inputs, in prompt order.
+      scenePlanFrame?.refInputIds.forEach((sourceId, refIndex) => {
+        edges.push({
+          id: crypto.randomUUID(),
+          version_id: versionId,
+          source_node_id: sourceId,
+          target_node_id: imageId,
+          mapping_logic: { target_param: `image_${refIndex + 2}`, edge_order: refIndex + 2 },
+          condition_logic: null,
+        });
       });
       // All product references → the same Nano Banana node.
       productNodes.forEach((product, productIndex) => {
@@ -340,7 +428,7 @@ Deno.serve(async (req) => {
       node_type: "video_gen",
       model_id: null,
       prompt_config: {
-        prompt: sourceMotionPrompt(UNIVERSAL_RECONSTRUCTION_PROMPT),
+        prompt: sourceMotionPrompt(scenePlan ? scenePlan.reconstructionPrompt : UNIVERSAL_RECONSTRUCTION_PROMPT),
         video_model: videoModel,
         video_mode: "multi_reference",
         requires_source_video: true,

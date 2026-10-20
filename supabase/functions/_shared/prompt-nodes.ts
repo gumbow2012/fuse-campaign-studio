@@ -48,3 +48,22 @@ export function resolveNodePrompt(
   const connected = promptNodeText(nodeById.get(preferred.source_node_id));
   return connected || ownPrompt;
 }
+
+/**
+ * Fills customer text into a model prompt at run time:
+ *   {{input:<nodeId>}} → the run's text for that input node (or its sample_text)
+ *   {{spell:<nodeId>}} → the same text spelled letter by letter (T-H-E-/-W-O-R-K)
+ * Prompts without placeholders are returned unchanged.
+ */
+export function fillInputPlaceholders(
+  prompt: string,
+  inputs: Record<string, unknown>,
+  nodeById: Map<string, { prompt_config?: Record<string, unknown> | null }>,
+): string {
+  if (!prompt.includes("{{")) return prompt;
+  const value = (id: string) =>
+    String(inputs[id] ?? nodeById.get(id)?.prompt_config?.sample_text ?? "").trim();
+  return prompt
+    .replace(/\{\{spell:([0-9a-f-]{36})\}\}/g, (_m, id: string) => [...value(id)].map((c) => (c === " " ? "/" : c)).join("-"))
+    .replace(/\{\{input:([0-9a-f-]{36})\}\}/g, (_m, id: string) => value(id));
+}
