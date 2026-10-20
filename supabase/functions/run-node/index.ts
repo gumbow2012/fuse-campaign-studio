@@ -13,7 +13,7 @@ import {
 } from "../_shared/supabase-admin.ts";
 import { assertVersionAccess, FORBIDDEN_TEMPLATE_MESSAGE } from "../_shared/template-scope.ts";
 import { resolveSingleNodeInputs } from "../_shared/single-node-inputs.ts";
-import { isPromptNode, resolveNodePrompt } from "../_shared/prompt-nodes.ts";
+import { fillInputPlaceholders, isPromptNode, resolveNodePrompt } from "../_shared/prompt-nodes.ts";
 import {
   clampSeedanceDuration,
   getFalPricing,
@@ -247,9 +247,13 @@ async function startRun(admin: AdminClient, args: {
   );
 
   const suppliedInputs: Record<string, string> = {};
+  // Typed text inputs (brand names etc.) only fill {{input:}} placeholders; they are never uploads.
+  const typedInputs: Record<string, string> = {};
   for (const [key, value] of Object.entries(args.suppliedInputs ?? {})) {
     if (!value) continue;
-    suppliedInputs[key] = assertOwnedUploadUrl(String(value), args.userId);
+    const expected = (nodes as NodeRow[] | null)?.find((candidate) => candidate.id === key)?.prompt_config?.editor_expected;
+    if (expected === "text" || expected === "prompt") typedInputs[key] = String(value).trim().slice(0, 500);
+    else suppliedInputs[key] = assertOwnedUploadUrl(String(value), args.userId);
   }
 
   const node = (nodes as NodeRow[] | null)?.find((candidate) => candidate.id === args.nodeId);
@@ -268,7 +272,7 @@ async function startRun(admin: AdminClient, args: {
   const promptEdges = ((edges ?? []) as EdgeRow[]).filter((edge) =>
     edge.target_node_id === node.id && isPromptNode(nodeById.get(edge.source_node_id))
   );
-  const prompt = resolveNodePrompt(node, promptEdges, nodeById);
+  const prompt = fillInputPlaceholders(resolveNodePrompt(node, promptEdges, nodeById), typedInputs, nodeById);
   if (!prompt) throw new Error("Add a prompt to this step before generating it");
 
   const resolved = await resolveNodeInputs(admin, {
