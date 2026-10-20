@@ -97,7 +97,7 @@ export const BRAND_REPACKAGE = [
   "This is a full repackage, not a sticker: recolor each wrapper's, package's, sign's and machine panel's entire printed design (background, stripes, bands, name panels) to the brand's own color palette taken from its logo, and recolor any product visible through or printed on the packaging to match that palette.",
   "Print the logo into each surface so it follows every fold, crinkle, curve, gloss highlight and transparency of the material, with the same lighting, focus, motion blur and grain as its surroundings; never a flat overlay.",
   "Remove every other original brand name, product name and printed word; replace it with the brand name or leave the area as plain brand-colored design.",
-  "Apply this to every item in frame, including partly hidden, blurred, falling and background ones, so none keeps the original design.",
+  "Rebrand only items that already exist in image 1, including partly hidden, blurred and background ones, so none keeps the original design; never add new packages, products, signs or logos, and never place anything in mid-air.",
   "Keep each item's shape, count, position, layout, materials, lighting and perspective.",
   "Never put the brand logo on a hat; hats follow only the hat instructions.",
 ].join(" ");
