@@ -95,10 +95,95 @@ test('Outfit Swap page: hat slots, no Apply-to for hats, source-hat mapping, hat
   const page = readFileSync(new URL('../../src/pages/OutfitSwap.tsx', import.meta.url), 'utf8');
   const svc = readFileSync(new URL('../../src/services/outfitSwap.ts', import.meta.url), 'utf8');
   assert.match(page, /\{ slot: "underside", label: "Inside \/ underside", key: "undersideUrl" \}/);
-  assert.match(page, /\{garment\.type !== "Hat" \? \(<div>/, 'Apply to hidden for hats');
+  assert.match(page, /\{garment\.type !== "Hat" && !isBrandGarment\(garment\) \? \(<div>/, 'Apply to hidden for hats and brands');
   assert.match(page, /placeholder="Exact lettering on the hat \(optional\)"/);
-  assert.match(page, /value=\{hatMapping\[track\.hatId\] \?\? garments\[0\]\.id\}/, 'one hat replaces all by default');
+  assert.match(page, /value=\{hatMapping\[track\.hatId\] \?\? hatGarments\[0\]\.id\}/, 'one hat replaces all by default');
   assert.match(page, /\.\.\.\(hatSwap \? \{ hatSwap \} : \{\}\)/, 'non-hat requests unchanged');
   assert.match(page, /frames\.length && analysisStage !== "idle" && !hatMode/, 'no "0 SUBJECTS" chip in hat mode');
   assert.match(svc, /body: JSON\.stringify\(mode \? \{ frames, mode \} : \{ frames \}\)/);
+});
+
+const brand = { id: 'BR', type: 'Brand / logo', frontUrl: 'logo.png', lettering: 'APOSTOLZ' };
+
+test('scene swap: a frame with no hat (analyzed) only swaps branding and never invents a hat', () => {
+  const out = assembleHatSwap({ sourceFrameUrl: 'frame', garments: [hatA, brand], hatSwap: { hats: [], analyzed: true, defaultGarmentId: 'A' } });
+  assert.deepEqual(out.imageUrls, ['frame', 'logo.png']);
+  assert.match(out.prompt, /Every brand name and logo printed on signs[^.]*reference image 2/);
+  assert.match(out.prompt, /A-P-O-S-T-O-L-Z/);
+  assert.match(out.prompt, /Do not add a hat\./);
+  assert.doesNotMatch(out.prompt, /Every hat in image 1/);
+});
+
+test('scene swap: hat + brand in one frame keeps image numbering consistent', () => {
+  const out = assembleHatSwap({ sourceFrameUrl: 'frame', garments: [hatA, brand], hatSwap: { hats: [{ hatId: 'h1', view: 'back' }], analyzed: true } });
+  assert.deepEqual(out.imageUrls, ['frame', 'a/back', 'a/front', 'logo.png']);
+  assert.match(out.prompt, /reference images 2-3/);
+  assert.match(out.prompt, /reference image 4/);
+});
+
+test('scene swap: brand-only run is valid; template placeholders are spelled at run time', () => {
+  const out = assembleHatSwap({ sourceFrameUrl: 'frame', garments: [{ ...brand, lettering: '{{input:abc}}' }], hatSwap: { hats: [{ hatId: 'h1', view: 'front' }] } });
+  assert.deepEqual(out.imageUrls, ['frame', 'logo.png'], 'no hat product → source hats untouched');
+  assert.match(out.prompt, /reading exactly "\{\{input:abc\}\}" \(spelled \{\{spell:abc\}\}\)/);
+  assert.equal(isHatRun([{ type: 'Hat' }, { type: 'Brand / logo' }]), true);
+  assert.equal(isHatRun([{ type: 'Brand / logo' }, { type: 'Hoodie / Jacket' }]), false);
+});
+
+test('scene rebuild prompt mentions branding and hat only when present', async () => {
+  const { buildHatReconstructionPrompt } = await import('../../supabase/functions/_shared/hat-swap.ts');
+  const both = buildHatReconstructionPrompt([hatA, brand]);
+  assert.match(both, /reading exactly "APOSTOLZ"/);
+  assert.match(both, /new hat and branding\./);
+  assert.match(buildHatReconstructionPrompt([brand]), /new branding\./);
+  assert.doesNotMatch(buildHatReconstructionPrompt([brand]), /Every hat looks/);
+});
+
+test('runner fills customer text into prompts ({{input:id}} / {{spell:id}}) and leaves other prompts unchanged', async () => {
+  const { fillInputPlaceholders } = await import('../../supabase/functions/_shared/prompt-nodes.ts');
+  const id = '11111111-2222-3333-4444-555555555555';
+  const nodes = new Map([[id, { prompt_config: { sample_text: 'SAMPLE' } }]]);
+  assert.equal(fillInputPlaceholders('read "{{input:' + id + '}}" ({{spell:' + id + '}})', { [id]: 'NEW CO' }, nodes), 'read "NEW CO" (N-E-W-/-C-O)');
+  assert.equal(fillInputPlaceholders('{{input:' + id + '}}', {}, nodes), 'SAMPLE');
+  assert.equal(fillInputPlaceholders('plain prompt', {}, nodes), 'plain prompt');
+  const { readFileSync } = await import('node:fs');
+  const ex = readFileSync(new URL('../../supabase/functions/_shared/executor.ts', import.meta.url), 'utf8');
+  assert.equal((ex.match(/fillInputPlaceholders\(resolveNodePrompt\(node, promptEdgesByTarget\.get\(node\.id\) \?\? \[\], nodeMap\), jobInputs, nodeMap as any\)/g) ?? []).length, 2);
+});
+
+test('scene template plan: customer hat angles + logo + brand name; per-frame refs in prompt order; no-hat frames only brand', async () => {
+  const { planSceneTemplate } = await import('../../supabase/functions/_shared/hat-swap.ts');
+  let n = 0;
+  const newId = () => `00000000-0000-0000-0000-${String(++n).padStart(12, '0')}`;
+  const plan = planSceneTemplate({
+    garments: [{ id: 'A', type: 'Hat', frontUrl: 'a/front', backUrl: 'a/back' }, brand],
+    frames: [{ hats: [], analyzed: true }, { hats: [{ hatId: 'h1', view: 'back' }], analyzed: true }],
+    defaultGarmentId: 'A',
+    newId,
+  });
+  assert.deepEqual(plan.inputs.map((i) => [i.label, i.expected, i.required]), [
+    ['Hat · Front', 'image', true], ['Hat · Back', 'image', false], ['Brand logo', 'image', true], ['Brand name', 'text', true],
+  ]);
+  const [front, back, logo, name] = plan.inputs.map((i) => i.id);
+  assert.equal(plan.inputs[3].sampleText, 'APOSTOLZ');
+  assert.deepEqual(plan.frames[0].refInputIds, [logo], 'keypad-style frame: brand only');
+  assert.deepEqual(plan.frames[1].refInputIds, [back, front, logo]);
+  assert.match(plan.frames[0].prompt, new RegExp(`reading exactly "\\{\\{input:${name}\\}\\}" \\(spelled \\{\\{spell:${name}\\}\\}\\)`));
+  assert.match(plan.reconstructionPrompt, new RegExp(`\\{\\{input:${name}\\}\\}`));
+  const hatOnly = planSceneTemplate({ garments: [{ id: 'A', type: 'Hat', frontUrl: 'a/front' }], frames: [{ hats: [], analyzed: true }], newId });
+  assert.equal(hatOnly.frames[0], null, 'nothing to swap → frame passes through unchanged');
+});
+
+test('Make into template: scene runs become customer inputs + per-frame prompts; clothing runs unchanged', async () => {
+  const { readFileSync } = await import('node:fs');
+  const conv = readFileSync(new URL('../../supabase/functions/outfit-swap-to-template/index.ts', import.meta.url), 'utf8');
+  assert.match(conv, /const graphProducts = scenePlan \? \[\] : products;/);
+  assert.match(conv, /editor_mode: "upload",[\s\S]*outfit_swap_role: "scene_input"/);
+  assert.match(conv, /if \(scenePlanFrame === null\) \{/);
+  assert.match(conv, /prompt: scenePlanFrame \? scenePlanFrame\.prompt : UNIVERSAL_SWAP_PROMPT/);
+  assert.match(conv, /sourceMotionPrompt\(scenePlan \? scenePlan\.reconstructionPrompt : UNIVERSAL_RECONSTRUCTION_PROMPT\)/);
+  const page = readFileSync(new URL('../../src/pages/OutfitSwap.tsx', import.meta.url), 'utf8');
+  assert.match(page, /"Brand \/ logo",/);
+  assert.match(page, /placeholder="Exact brand name, as it should be spelled"/);
+  assert.match(page, /analyzed: !!hatAnalysis,\n        \}/);
+  assert.match(page, /\.\.\.\(hatMode\n          \? \{\n            scene: \{/);
 });
