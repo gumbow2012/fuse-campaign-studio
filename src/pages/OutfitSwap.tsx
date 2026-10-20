@@ -56,6 +56,7 @@ import {
   analyzeOutfitSwapHats,
   analyzeOutfitSwapLogo,
   isHatGarmentRun,
+  isBrandGarment,
   analyzeOutfitSwapQa,
   applyFrameOverrides,
   callOutfitSwap,
@@ -104,6 +105,7 @@ const GARMENT_TYPES = [
   "Shorts",
   "Shoes",
   "Hat",
+  "Brand / logo",
   "Sunglasses / Glasses",
   "Accessory",
   "Jewelry",
@@ -833,6 +835,8 @@ export default function OutfitSwap() {
   // Every product is a hat → find the distinct hats in the clip and let the user map
   // each to one of their hats. One uploaded hat replaces every hat in the video.
   const hatMode = useMemo(() => isHatGarmentRun(garments), [garments]);
+  // Hat products only (a scene run may also carry "Brand / logo" products).
+  const hatGarments = useMemo(() => garments.filter((garment) => garment.type === "Hat"), [garments]);
   const [hatAnalysis, setHatAnalysis] = useState<OutfitSwapHatAnalysis | null>(null);
   const [hatAnalysisState, setHatAnalysisState] = useState<"idle" | "loading" | "error">("idle");
   const [hatMapping, setHatMapping] = useState<Record<string, string>>({});
@@ -858,8 +862,8 @@ export default function OutfitSwap() {
   }, [frames]);
 
   useEffect(() => {
-    if (hatMode && frames.length && !hatAnalysis && hatAnalysisState === "idle") void runHatAnalysis();
-  }, [hatMode, frames, hatAnalysis, hatAnalysisState, runHatAnalysis]);
+    if (hatMode && hatGarments.length && frames.length && !hatAnalysis && hatAnalysisState === "idle") void runHatAnalysis();
+  }, [hatMode, hatGarments.length, frames, hatAnalysis, hatAnalysisState, runHatAnalysis]);
 
   /* ------------------------------ LOGO ------------------------------ */
   // The AI only removes the source logo; the customer's logo is drawn pixel-exact by the
@@ -954,7 +958,8 @@ export default function OutfitSwap() {
             description: hatAnalysis?.hatTracks.find((track) => track.hatId === hat.hatId)?.description ?? null,
           })),
           mapping: hatMapping,
-          defaultGarmentId: garments[0]?.id ?? null,
+          defaultGarmentId: hatGarments[0]?.id ?? null,
+          analyzed: !!hatAnalysis,
         }
         : null;
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
@@ -988,7 +993,7 @@ export default function OutfitSwap() {
         return next;
       });
     },
-    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment, frameOverrides, hatMode, hatAnalysis, hatMapping, removeSourceLogo],
+    [frames, garments, meta, extraPrompt, analysis, castAssignment, modelAssignment, frameOverrides, hatMode, hatAnalysis, hatMapping, hatGarments, removeSourceLogo],
   );
 
 
@@ -1527,6 +1532,24 @@ export default function OutfitSwap() {
           label: garment.label || garment.name,
           person: garment.person,
         })),
+        // Hat/scene runs: customer-replaceable hat angles, logo and brand name, per-frame hats.
+        ...(hatMode
+          ? {
+            scene: {
+              garments,
+              frames: approvedFrames.map((frame) => ({
+                hats: (hatAnalysis?.frames.find((entry) => entry.frameId === `frame-${frame.index}`)?.hats ?? []).map((hat) => ({
+                  hatId: hat.hatId,
+                  view: hat.view,
+                  description: hatAnalysis?.hatTracks.find((track) => track.hatId === hat.hatId)?.description ?? null,
+                })),
+                analyzed: !!hatAnalysis,
+              })),
+              mapping: hatMapping,
+              defaultGarmentId: hatGarments[0]?.id ?? null,
+            },
+          }
+          : {}),
         includeAnimation: clips.length > 0,
         previewUrl: approvedFrames[0]?.url ?? null,
         videoModel,
@@ -1555,6 +1578,10 @@ export default function OutfitSwap() {
     videoDuration,
     resolution,
     meta,
+    hatMode,
+    hatAnalysis,
+    hatMapping,
+    hatGarments,
   ]);
 
 
@@ -1705,7 +1732,7 @@ export default function OutfitSwap() {
                             ))}
                           </select>
                         </div>
-                        {garment.type !== "Hat" ? (<div>
+                        {garment.type !== "Hat" && !isBrandGarment(garment) ? (<div>
                           <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                             Apply to
                           </label>
@@ -1746,7 +1773,23 @@ export default function OutfitSwap() {
                       </button>
                     </div>
 
-                    {garment.type === "Hat" ? (
+                    {isBrandGarment(garment) ? (
+                      <div className="mt-2.5 space-y-2 border-t border-white/10 pt-2.5">
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
+                          Replaces branding on signs, machines, packaging and labels in the video
+                        </p>
+                        <Input
+                          value={garment.lettering ?? ""}
+                          onChange={(event) =>
+                            setGarments((prev) =>
+                              prev.map((item, i) => (i === index ? { ...item, lettering: event.target.value } : item)),
+                            )
+                          }
+                          placeholder="Exact brand name, as it should be spelled"
+                          className="h-8 rounded-lg border-white/12 bg-black/40 text-xs"
+                        />
+                      </div>
+                    ) : garment.type === "Hat" ? (
                       <div className="mt-2.5 space-y-2 border-t border-white/10 pt-2.5">
                         <p className="text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">
                           Hat angles · optional, more angles = closer match
@@ -2206,7 +2249,7 @@ export default function OutfitSwap() {
                 </div>
               ) : null}
 
-              {hatMode && frames.length ? (
+              {hatMode && hatGarments.length && frames.length ? (
                 <div className="mb-3 space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-[11px]">
                   {hatAnalysisState === "loading" ? (
                     <div className="flex items-center gap-2 text-muted-foreground">
@@ -2231,7 +2274,7 @@ export default function OutfitSwap() {
                         ✓ {hatAnalysis.hatCount === 1 ? "1 HAT" : `${hatAnalysis.hatCount} HATS`} IN THIS VIDEO
                       </p>
                       <p className="text-muted-foreground">
-                        {garments.length === 1
+                        {hatGarments.length === 1
                           ? hatAnalysis.hatCount > 1
                             ? "Your hat replaces every hat in the video. Add more hats to give each one its own replacement."
                             : "Your hat replaces the hat in every frame."
@@ -2248,14 +2291,14 @@ export default function OutfitSwap() {
                                 {track.frameCount} frame{track.frameCount === 1 ? "" : "s"}
                               </p>
                             </div>
-                            {garments.length > 1 ? (
+                            {hatGarments.length > 1 ? (
                               <select
                                 aria-label={`Replacement for ${track.description}`}
-                                value={hatMapping[track.hatId] ?? garments[0].id}
+                                value={hatMapping[track.hatId] ?? hatGarments[0].id}
                                 onChange={(event) => setHatMapping((prev) => ({ ...prev, [track.hatId]: event.target.value }))}
                                 className={cn(SELECT_CLASS, "w-40")}
                               >
-                                {garments.map((garment, index) => (
+                                {hatGarments.map((garment, index) => (
                                   <option key={garment.id} value={garment.id}>
                                     {garment.label || garment.name || `Hat ${index + 1}`}
                                   </option>

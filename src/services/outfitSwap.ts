@@ -209,9 +209,14 @@ export type OutfitSwapGarment = {
   lettering?: string | null;
 };
 
-/** Hat mode: every product in the run is a hat (product videos of hats). */
+/** "Brand / logo" products replace branding printed in the scene (signs, machines, packaging). */
+export function isBrandGarment(garment: { type: string }): boolean {
+  return /brand|logo/i.test(garment.type);
+}
+
+/** Hat/scene mode: every product is a hat or a brand/logo (product and branded-scene videos). */
 export function isHatGarmentRun(garments: OutfitSwapGarment[]): boolean {
-  return garments.length > 0 && garments.every((garment) => garment.type.trim().toLowerCase() === "hat");
+  return garments.length > 0 && garments.every((garment) => garment.type.trim().toLowerCase() === "hat" || isBrandGarment(garment));
 }
 
 export type OutfitSwapHatView = "front" | "right" | "left" | "back" | "underside" | "top" | "macro" | "multiple" | "uncertain";
