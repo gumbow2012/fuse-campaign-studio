@@ -114,6 +114,7 @@ test('scene swap: a frame with no hat (analyzed) only swaps branding and never i
   assert.doesNotMatch(out.prompt, /Every hat in image 1/);
   assert.match(out.prompt, /full repackage, not a sticker[^.]*color palette taken from its logo/);
   assert.doesNotMatch(out.prompt, /Keep each item's shape, layout, colors/, 'source colors must not be kept');
+  assert.match(out.prompt, /never add new packages, products, signs or logos/, 'rebranding must not invent items');
 });
 
 test('scene swap: hat + brand in one frame keeps image numbering consistent', () => {
