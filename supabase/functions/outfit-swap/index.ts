@@ -40,6 +40,7 @@ import {
   swapsAnyModel,
 } from "../_shared/outfit-swap-assembly.ts";
 import { assembleHatSwap, buildHatReconstructionPrompt, type HatGarment, type HatSwapRequest, isHatRun } from "../_shared/hat-swap.ts";
+import { withCleanPlate } from "../_shared/overlay-logo.ts";
 
 /**
  * Outfit Swap: per-frame nano-banana wardrobe edits + one Seedance
@@ -850,7 +851,7 @@ Deno.serve(async (req) => {
         frameTime: body.frameTime,
         aspectRatio: body.aspectRatio,
         resolution: body.resolution,
-        extraPrompt: body.extraPrompt,
+        extraPrompt: withCleanPlate(body.extraPrompt, body.removeSourceLogo),
         // PHASE 5 context (optional — omitted requests keep the legacy path).
         frameSubjects: Array.isArray(body.frameSubjects) ? body.frameSubjects : [],
         castAssignment: body.castAssignment ?? {},
@@ -873,7 +874,7 @@ Deno.serve(async (req) => {
         resolution: body.resolution,
         aspectRatio: body.aspectRatio,
         generateAudio: body.generateAudio,
-        extraPrompt: body.extraPrompt,
+        extraPrompt: withCleanPlate(body.extraPrompt, body.removeSourceLogo),
         // PHASE 7 context (optional — omitted requests keep the legacy prompt).
         frameSubjects: Array.isArray(body.frameSubjects) ? body.frameSubjects : [],
         castAssignment: body.castAssignment ?? {},

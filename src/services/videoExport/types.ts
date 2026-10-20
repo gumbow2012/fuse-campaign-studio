@@ -20,7 +20,12 @@ export type ExportTarget = {
   textLayers: TextLayer[];
   /** Signature of the text layers — part of the per-clip cache identity. */
   textSignature: string;
+  /** Image overlays (e.g. a brand logo) burned into every frame, aspect-correct inside their box. */
+  imageLayers?: ImageLayer[];
 };
+
+/** A still image drawn on every frame, fitted (contain, centered) inside a normalized 0–1 box. */
+export type ImageLayer = { id: string; url: string; x: number; y: number; w: number; h: number };
 
 /** One clip as the worker needs it (already resolved to a signed playback url). */
 export type WorkerSegment = {
@@ -62,6 +67,9 @@ export function segmentCacheKey(segment: WorkerSegment, target: ExportTarget) {
           segment.render.motion,
         ]),
     target.textLayers.length ? `t${Math.round(segment.timelineOffsetMs)}:${target.textSignature}` : "t0",
+    target.imageLayers?.length
+      ? `i:${target.imageLayers.map((layer) => [layer.id, layer.x, layer.y, layer.w, layer.h].join(",")).join(";")}`
+      : "i0",
   ].join("|");
 }
 

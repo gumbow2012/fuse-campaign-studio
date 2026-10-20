@@ -154,9 +154,37 @@ function textOverlaps(target: ExportTarget, segment: WorkerSegment) {
   );
 }
 
+/* ----------------------------- image layers ----------------------------- */
+
+const imageBitmaps = new Map<string, ImageBitmap>();
+
+async function loadImageLayers(target: ExportTarget) {
+  for (const layer of target.imageLayers ?? []) {
+    if (imageBitmaps.has(layer.id)) continue;
+    const response = await fetch(layer.url);
+    if (!response.ok) throw new Error(`Couldn't read the logo (${response.status})`);
+    imageBitmaps.set(layer.id, await createImageBitmap(await response.blob()));
+  }
+}
+
+/** Draws each image layer aspect-correct (contain, centered) in its normalized box — pixels never regenerated. */
+function drawImageLayers(ctx: OffscreenCanvasRenderingContext2D, target: ExportTarget) {
+  for (const layer of target.imageLayers ?? []) {
+    const bitmap = imageBitmaps.get(layer.id);
+    if (!bitmap) continue;
+    const boxW = layer.w * target.width;
+    const boxH = layer.h * target.height;
+    const scale = Math.min(boxW / bitmap.width, boxH / bitmap.height);
+    const w = bitmap.width * scale;
+    const h = bitmap.height * scale;
+    ctx.drawImage(bitmap, layer.x * target.width + (boxW - w) / 2, layer.y * target.height + (boxH - h) / 2, w, h);
+  }
+}
+
 function canStreamCopy(source: Demuxed, segment: WorkerSegment, target: ExportTarget) {
   const video = source.video;
   if (!video) return false;
+  if (target.imageLayers?.length) return false;
   if (textOverlaps(target, segment)) return false;
   if (!video.codec.startsWith("avc1")) return false;
   if (video.width !== target.width || video.height !== target.height) return false;
@@ -328,6 +356,7 @@ function paintFrame(
   if (target.textLayers.length) {
     drawTextLayers(ctx, target.textLayers, timing.timelineMs, target.width, target.height);
   }
+  drawImageLayers(ctx, target);
 
   if (motion.opacity < 0.999) {
     ctx.save();
@@ -580,6 +609,7 @@ async function renderSegment(segment: WorkerSegment, target: ExportTarget): Prom
   if (hit) return hit;
 
   const source = await demux(segment.url);
+  await loadImageLayers(target);
 
   let rendered: Rendered;
   if (canStreamCopy(source, segment, target)) {
