@@ -19,6 +19,7 @@ import {
   requireUser,
 } from "../_shared/supabase-admin.ts";
 import { buildHatAnalysisPrompt, HAT_ANALYSIS_VERSION, HAT_VIEWS, normalizeHatAnalysis } from "../_shared/hat-swap.ts";
+import { buildOverlayLogoPrompt, normalizeOverlayLogo, OVERLAY_LOGO_VERSION } from "../_shared/overlay-logo.ts";
 
 const ANALYSIS_VERSION = "outfit-swap-source-analysis-v1";
 const GEMINI_ANALYSIS_MODEL = Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-3.6-flash";
@@ -141,6 +142,18 @@ const HAT_RESPONSE_SCHEMA = {
     },
   },
   required: ["hat_tracks", "frames"],
+};
+
+/** LOGO MODE schema: is there an overlaid logo/watermark, and where. */
+const LOGO_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    present: { type: Type.BOOLEAN },
+    description: { type: Type.STRING },
+    box_2d: { type: Type.ARRAY, items: { type: Type.NUMBER } },
+    frame_ids: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ["present", "description", "box_2d", "frame_ids"],
 };
 
 /* ------------------------------------------------------------------ *
@@ -323,7 +336,9 @@ Deno.serve(async (req) => {
 
     // HAT MODE: product videos of hats — distinct source hats + per-frame view.
     const hatMode = body?.mode === "hats";
-    const version = hatMode ? HAT_ANALYSIS_VERSION : ANALYSIS_VERSION;
+    // LOGO MODE: the source video's overlaid logo/watermark (for remove / replace with the customer's logo).
+    const logoMode = body?.mode === "logo";
+    const version = hatMode ? HAT_ANALYSIS_VERSION : logoMode ? OVERLAY_LOGO_VERSION : ANALYSIS_VERSION;
     const fingerprint = await inputFingerprint(frames, version);
     const admin = createAdminClient();
 
@@ -359,11 +374,11 @@ Deno.serve(async (req) => {
     const response = await ai.models.generateContent({
       model: GEMINI_ANALYSIS_MODEL,
       contents: [
-        { role: "user", parts: [{ text: hatMode ? buildHatAnalysisPrompt(frames) : buildPrompt(frames) }, ...imageParts] },
+        { role: "user", parts: [{ text: hatMode ? buildHatAnalysisPrompt(frames) : logoMode ? buildOverlayLogoPrompt(frames) : buildPrompt(frames) }, ...imageParts] },
       ] as any,
       config: {
         responseMimeType: "application/json",
-        responseSchema: (hatMode ? HAT_RESPONSE_SCHEMA : RESPONSE_SCHEMA) as any,
+        responseSchema: (hatMode ? HAT_RESPONSE_SCHEMA : logoMode ? LOGO_RESPONSE_SCHEMA : RESPONSE_SCHEMA) as any,
         maxOutputTokens: Math.min(8192, 700 * frames.length + 1200),
         temperature: 0.1,
         thinkingConfig: { thinkingLevel: "low" },
@@ -371,7 +386,11 @@ Deno.serve(async (req) => {
     });
 
     const raw = JSON.parse((response.text ?? "").trim() || "{}");
-    const analysis = hatMode ? normalizeHatAnalysis(raw, frames) : normalizeAnalysis(raw, frames);
+    const analysis = hatMode
+      ? normalizeHatAnalysis(raw, frames)
+      : logoMode
+        ? normalizeOverlayLogo(raw, frames)
+        : normalizeAnalysis(raw, frames);
 
     const { error: saveError } = await admin
       .from("outfit_swap_analyses")

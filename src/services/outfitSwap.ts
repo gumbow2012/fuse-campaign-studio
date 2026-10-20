@@ -151,7 +151,7 @@ export type OutfitSwapAnalysisResult = {
  */
 export async function analyzeOutfitSwapSource(
   frames: { frameId: string; timestamp: number; imageUrl: string }[],
-  mode?: "hats",
+  mode?: "hats" | "logo",
 ): Promise<OutfitSwapAnalysisResult> {
   const {
     data: { session },
@@ -224,6 +224,24 @@ export type OutfitSwapHatAnalysis = {
   hatTracks: { hatId: string; description: string; firstFrameId: string | null; frameCount: number }[];
   frames: { frameId: string; timestamp: number; hats: { hatId: string; view: OutfitSwapHatView; confidence: number }[] }[];
 };
+
+/** Source video's overlaid logo/watermark (normalized 0–1 box, origin top-left). */
+export type OutfitSwapOverlayLogo = {
+  version: string;
+  mode: "logo";
+  present: boolean;
+  description: string;
+  box: { x: number; y: number; w: number; h: number } | null;
+  frameIds: string[];
+};
+
+/** Finds the source video's overlaid logo (one cached call) so it can be removed or replaced. */
+export async function analyzeOutfitSwapLogo(
+  frames: { frameId: string; timestamp: number; imageUrl: string }[],
+): Promise<OutfitSwapOverlayLogo> {
+  const result = await analyzeOutfitSwapSource(frames, "logo");
+  return result.analysis as unknown as OutfitSwapOverlayLogo;
+}
 
 /** Hat mode analysis: one cached call that finds every distinct hat and its view per frame. */
 export async function analyzeOutfitSwapHats(
