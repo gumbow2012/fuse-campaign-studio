@@ -18,6 +18,7 @@ import {
   json,
   requireUser,
 } from "../_shared/supabase-admin.ts";
+import { buildHatAnalysisPrompt, HAT_ANALYSIS_VERSION, HAT_VIEWS, normalizeHatAnalysis } from "../_shared/hat-swap.ts";
 
 const ANALYSIS_VERSION = "outfit-swap-source-analysis-v1";
 const GEMINI_ANALYSIS_MODEL = Deno.env.get("GEMINI_ANALYSIS_MODEL")?.trim() || "gemini-3.6-flash";
@@ -103,6 +104,45 @@ const RESPONSE_SCHEMA = {
   required: ["subject_count", "subject_tracks", "frames"],
 };
 
+/** HAT MODE schema: distinct source hats (stable ids) + per-frame view. */
+const HAT_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    hat_tracks: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: { hat_id: { type: Type.STRING }, description: { type: Type.STRING } },
+        required: ["hat_id", "description"],
+      },
+    },
+    frames: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          frame_id: { type: Type.STRING },
+          timestamp: { type: Type.NUMBER },
+          hats: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                hat_id: { type: Type.STRING },
+                view: { type: Type.STRING, enum: [...HAT_VIEWS] },
+                confidence: { type: Type.NUMBER },
+              },
+              required: ["hat_id", "view", "confidence"],
+            },
+          },
+        },
+        required: ["frame_id", "timestamp", "hats"],
+      },
+    },
+  },
+  required: ["hat_tracks", "frames"],
+};
+
 /* ------------------------------------------------------------------ *
  * Helpers
  * ------------------------------------------------------------------ */
@@ -139,9 +179,9 @@ async function inlineFrames(frames: SourceFrame[]) {
   return parts;
 }
 
-async function inputFingerprint(frames: SourceFrame[]) {
+async function inputFingerprint(frames: SourceFrame[], version: string) {
   const payload = JSON.stringify({
-    version: ANALYSIS_VERSION,
+    version,
     model: GEMINI_ANALYSIS_MODEL,
     frames: frames.map((frame) => [frame.frameId, frame.timestamp, frame.imageUrl]),
   });
@@ -281,7 +321,10 @@ Deno.serve(async (req) => {
 
     if (!frames.length) return json({ error: "No source frames to analyse" }, 400);
 
-    const fingerprint = await inputFingerprint(frames);
+    // HAT MODE: product videos of hats — distinct source hats + per-frame view.
+    const hatMode = body?.mode === "hats";
+    const version = hatMode ? HAT_ANALYSIS_VERSION : ANALYSIS_VERSION;
+    const fingerprint = await inputFingerprint(frames, version);
     const admin = createAdminClient();
 
     const { data: cached } = await admin
@@ -295,7 +338,7 @@ Deno.serve(async (req) => {
       return json({
         cached: true,
         fingerprint,
-        version: cached.version ?? ANALYSIS_VERSION,
+        version: cached.version ?? version,
         analyzedAt: cached.analyzed_at,
         analysis: cached.analysis,
         timings: { cacheHit: true, totalMs: Date.now() - startedAt },
@@ -316,11 +359,11 @@ Deno.serve(async (req) => {
     const response = await ai.models.generateContent({
       model: GEMINI_ANALYSIS_MODEL,
       contents: [
-        { role: "user", parts: [{ text: buildPrompt(frames) }, ...imageParts] },
+        { role: "user", parts: [{ text: hatMode ? buildHatAnalysisPrompt(frames) : buildPrompt(frames) }, ...imageParts] },
       ] as any,
       config: {
         responseMimeType: "application/json",
-        responseSchema: RESPONSE_SCHEMA as any,
+        responseSchema: (hatMode ? HAT_RESPONSE_SCHEMA : RESPONSE_SCHEMA) as any,
         maxOutputTokens: Math.min(8192, 700 * frames.length + 1200),
         temperature: 0.1,
         thinkingConfig: { thinkingLevel: "low" },
@@ -328,7 +371,7 @@ Deno.serve(async (req) => {
     });
 
     const raw = JSON.parse((response.text ?? "").trim() || "{}");
-    const analysis = normalizeAnalysis(raw, frames);
+    const analysis = hatMode ? normalizeHatAnalysis(raw, frames) : normalizeAnalysis(raw, frames);
 
     const { error: saveError } = await admin
       .from("outfit_swap_analyses")
@@ -336,7 +379,7 @@ Deno.serve(async (req) => {
         {
           user_id: user.id,
           fingerprint,
-          version: ANALYSIS_VERSION,
+          version,
           analysis,
           analyzed_at: new Date().toISOString(),
         },
@@ -347,7 +390,7 @@ Deno.serve(async (req) => {
     return json({
       cached: false,
       fingerprint,
-      version: ANALYSIS_VERSION,
+      version,
       analyzedAt: new Date().toISOString(),
       analysis,
       timings: { cacheHit: false, totalMs: Date.now() - startedAt },
