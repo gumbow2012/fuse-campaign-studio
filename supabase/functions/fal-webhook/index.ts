@@ -3,13 +3,10 @@ import { classifyProviderCallback } from "../_shared/provider-callback-guard.ts"
 import { HAT_FILM_QA_KEY, supersededRequestIds } from "../_shared/hat-film-qa.ts";
 import { HAT_FILM_CONTEXT_KEY } from "../_shared/hat-film-recipe.ts";
 
-/** Provider-refusal resubmits per Hat Brand Film still/clip before the shot fails. */
-const HAT_PROVIDER_RETRIES = 2;
-
 import nacl from "npm:tweetnacl";
 
 import { corsHeaders, createAdminClient, errorMessage, json } from "../_shared/supabase-admin.ts";
-import { finalizeJobIfTerminal, runGraphJob, uploadRemoteAsset } from "../_shared/executor.ts";
+import { finalizeJobIfTerminal, retryHatProviderRefusal, runGraphJob, uploadRemoteAsset } from "../_shared/executor.ts";
 import { getFalRequestTelemetry } from "../_shared/fal.ts";
 
 function decodeBase64Url(value: string) {
@@ -132,35 +129,12 @@ Deno.serve(async (req) => {
     }
 
     if (body.status === "ERROR") {
-      // Hat Brand Film: provider refusals are intermittent (same inputs succeed on resubmit), so a
-      // refused still/clip is resubmitted up to HAT_PROVIDER_RETRIES times before the shot fails.
-      // CAS on the current request id; the old id is recorded so its late callbacks are ignored.
+      // Hat Brand Film: provider refusals are intermittent; resubmit (bounded) before failing the shot.
       const isHatFilm = Boolean((jobRow as any)?.input_payload?.[HAT_FILM_CONTEXT_KEY]);
-      const nodeType = (step as any).nodes?.node_type;
-      const priorRetries = Number((step.output_payload as any)?.hat_provider_retries ?? 0);
-      if (isHatFilm && (nodeType === "image_gen" || nodeType === "video_gen") && priorRetries < HAT_PROVIDER_RETRIES) {
-        const prior = Array.isArray((step.output_payload as any)?.superseded_request_ids) ? (step.output_payload as any).superseded_request_ids : [];
-        const { data: reset } = await admin
-          .from("execution_steps")
-          .update({
-            status: "pending",
-            provider_request_id: null,
-            completed_at: null,
-            error_log: null,
-            output_payload: {
-              ...(step.output_payload ?? {}),
-              hat_provider_retries: priorRetries + 1,
-              last_provider_error: String(body.error ?? (body.payload as any)?.detail ?? "provider error").slice(0, 300),
-              superseded_request_ids: [...new Set([...prior, requestId])],
-            },
-          })
-          .eq("id", step.id)
-          .eq("provider_request_id", requestId)
-          .select("id");
-        if ((reset ?? []).length === 1) {
-          await runGraphJob(admin, step.job_id);
-          return json({ ok: true, status: "retrying", attempt: priorRetries + 1 });
-        }
+      const providerError = String(body.error ?? (body.payload as any)?.detail ?? "provider error");
+      if (isHatFilm && await retryHatProviderRefusal(admin, step as any, requestId, providerError)) {
+        await runGraphJob(admin, step.job_id);
+        return json({ ok: true, status: "retrying" });
       }
       const completedAt = new Date().toISOString();
       await admin

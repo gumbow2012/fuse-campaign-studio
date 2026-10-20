@@ -994,12 +994,20 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
   }
 
   let shouldResume = false;
+  const { data: jobRow } = await admin.from("execution_jobs").select("input_payload").eq("id", jobId).maybeSingle();
+  const isHatFilm = Boolean((jobRow as any)?.input_payload?.[HAT_FILM_CONTEXT_KEY]);
+  // Hat: a clip waiting on its product check is "running" with no request id on purpose; only a
+  // clip stuck past the check claim is treated as interrupted (the gate decides who submits it).
+  const interruptedAfterMs = isHatFilm ? QA_CLAIM_MS : 20_000;
+  // Hat: a provider refusal seen here (result lookup / failed status) gets the same bounded resubmit.
+  const hatRefusal = async (step: StepRow, detail: string) =>
+    isHatFilm && !!step.provider_request_id && await retryHatProviderRefusal(admin, step as any, step.provider_request_id, detail);
 
   for (const rawStep of runningSteps as StepRow[]) {
     if (!rawStep.provider_request_id) {
       const startedAt = rawStep.started_at ? new Date(rawStep.started_at).getTime() : null;
       const stalledMs = startedAt ? Date.now() - startedAt : 0;
-      if (startedAt && stalledMs >= 20_000) {
+      if (startedAt && stalledMs >= interruptedAfterMs) {
         await resetInterruptedSubmissionStep(
           admin,
           rawStep,
@@ -1017,6 +1025,7 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
       queueStatus = await getFalQueueStatus(rawStep.provider_model, rawStep.provider_request_id);
     } catch (error) {
       const normalized = normalizeProviderError(error);
+      if (await hatRefusal(rawStep, normalized.message)) { shouldResume = true; continue; }
       await admin
         .from("execution_steps")
         .update({
@@ -1051,6 +1060,7 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
         payload = await getFalQueueResult(rawStep.provider_model, rawStep.provider_request_id);
       } catch (error) {
         const normalized = normalizeProviderError(error);
+        if (await hatRefusal(rawStep, normalized.message)) { shouldResume = true; continue; }
         await admin
           .from("execution_steps")
           .update({
@@ -1085,6 +1095,7 @@ export async function reconcileRunningSteps(admin: AdminClient, jobId: string) {
     }
 
     if (normalizedStatus.includes("FAIL")) {
+      if (await hatRefusal(rawStep, `fal job failed (${normalizedStatus})`)) { shouldResume = true; continue; }
       await failAsyncStep(admin, rawStep, `fal job failed (${normalizedStatus})`);
     }
   }
@@ -1191,6 +1202,45 @@ function hatRetryState(step: { output_payload?: Record<string, unknown> | null }
   };
 }
 const hatProviderRetryFor = (step: any) => Number(step?.output_payload?.hat_provider_retries ?? 0);
+
+/** Provider-refusal resubmits per Hat Brand Film still/clip before the shot fails. */
+export const HAT_PROVIDER_RETRIES = 2;
+
+/**
+ * Hat Brand Film: provider refusals are intermittent (same inputs succeed on resubmit), so a refused
+ * still/clip goes back to pending, bounded by HAT_PROVIDER_RETRIES. CAS on the current request id; the
+ * old id is recorded so its late callbacks are ignored. Used by the webhook AND the reconciler, so a
+ * refusal is retried whichever path sees it first. Caller has already confirmed this is a Hat run.
+ */
+export async function retryHatProviderRefusal(
+  admin: AdminClient,
+  step: { id: string; output_payload?: Record<string, unknown> | null; nodes?: { node_type?: string } | null },
+  requestId: string,
+  providerError: string,
+): Promise<boolean> {
+  const nodeType = step.nodes?.node_type;
+  const priorRetries = hatProviderRetryFor(step);
+  if (!(nodeType === "image_gen" || nodeType === "video_gen") || priorRetries >= HAT_PROVIDER_RETRIES) return false;
+  const prior = Array.isArray((step.output_payload as any)?.superseded_request_ids) ? (step.output_payload as any).superseded_request_ids : [];
+  const { data: reset } = await admin
+    .from("execution_steps")
+    .update({
+      status: "pending",
+      provider_request_id: null,
+      completed_at: null,
+      error_log: null,
+      output_payload: {
+        ...(step.output_payload ?? {}),
+        hat_provider_retries: priorRetries + 1,
+        last_provider_error: providerError.slice(0, 300),
+        superseded_request_ids: [...new Set([...prior, requestId])],
+      },
+    })
+    .eq("id", step.id)
+    .eq("provider_request_id", requestId)
+    .select("id");
+  return (reset ?? []).length === 1;
+}
 
 /** Hat Brand Film: a failed/canceled run must never submit more paid work. */
 async function hatJobStopped(admin: AdminClient, jobId: string) {
