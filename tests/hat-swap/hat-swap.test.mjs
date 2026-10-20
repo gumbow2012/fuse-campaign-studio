@@ -196,3 +196,10 @@ test('cloning a template version points {{input:<id>}} prompt placeholders at th
   assert.match(s, /prompt_config: remapIds\(node\.prompt_config\),/);
   assert.match(s, /text\.split\(from\)\.join\(to\)/);
 });
+
+test('step previews accept typed text inputs and fill {{input:}} placeholders like a full run', async () => {
+  const { readFileSync } = await import('node:fs');
+  const s = readFileSync(new URL('../../supabase/functions/run-node/index.ts', import.meta.url), 'utf8');
+  assert.match(s, /if \(expected === "text" \|\| expected === "prompt"\) typedInputs\[key\] =/);
+  assert.match(s, /const prompt = fillInputPlaceholders\(resolveNodePrompt\(node, promptEdges, nodeById\), typedInputs, nodeById\);/);
+});
