@@ -50,11 +50,21 @@ test("product checks get enough output budget and retry malformed replies (prod 
 });
 
 test("hat provider refusals are resubmitted (bounded, CAS on request id, old id superseded)", () => {
-  const s = src("supabase/functions/fal-webhook/index.ts");
-  assert.match(s, /HAT_PROVIDER_RETRIES = 2/);
-  assert.match(s, /\.eq\("provider_request_id", requestId\)/);
-  assert.match(s, /superseded_request_ids: \[\.\.\.new Set\(\[\.\.\.prior, requestId\]\)\]/);
-  assert.match(s, /output_payload as any\)\.superseded_request_ids/);
+  const e = src("supabase/functions/_shared/executor.ts");
+  assert.match(e, /HAT_PROVIDER_RETRIES = 2/);
+  assert.match(e, /\.eq\("provider_request_id", requestId\)/);
+  assert.match(e, /superseded_request_ids: \[\.\.\.new Set\(\[\.\.\.prior, requestId\]\)\]/);
+  const w = src("supabase/functions/fal-webhook/index.ts");
+  assert.match(w, /retryHatProviderRefusal\(admin, step as any, requestId, providerError\)/);
+  assert.match(w, /output_payload as any\)\.superseded_request_ids/);
+});
+
+test("the reconciler retries Hat refusals and never resets a clip waiting on its product check", () => {
+  const e = src("supabase/functions/_shared/executor.ts");
+  const r = e.slice(e.indexOf("export async function reconcileRunningSteps"), e.indexOf("export async function finalizeJobIfTerminal"));
+  assert.match(r, /const interruptedAfterMs = isHatFilm \? QA_CLAIM_MS : 20_000;/);
+  assert.match(r, /stalledMs >= interruptedAfterMs/);
+  assert.equal((r.match(/if \(await hatRefusal\(rawStep, /g) ?? []).length, 3, "status error, result error and FAILED status");
 });
 
 test("a provider-retried clip skips the single-submission gate and the executor loads output_payload", () => {
