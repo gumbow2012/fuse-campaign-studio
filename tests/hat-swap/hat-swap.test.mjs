@@ -89,3 +89,16 @@ test('hat analysis normalization: stable tracks from frames only, deduped, unkno
   assert.equal(out.frames[1].hats[0].confidence, 1);
   assert.match(buildHatAnalysisPrompt(frames), /frameId "frame-1"/);
 });
+
+test('Outfit Swap page: hat slots, no Apply-to for hats, source-hat mapping, hatSwap only in hat mode', async () => {
+  const { readFileSync } = await import('node:fs');
+  const page = readFileSync(new URL('../../src/pages/OutfitSwap.tsx', import.meta.url), 'utf8');
+  const svc = readFileSync(new URL('../../src/services/outfitSwap.ts', import.meta.url), 'utf8');
+  assert.match(page, /\{ slot: "underside", label: "Inside \/ underside", key: "undersideUrl" \}/);
+  assert.match(page, /\{garment\.type !== "Hat" \? \(<div>/, 'Apply to hidden for hats');
+  assert.match(page, /placeholder="Exact lettering on the hat \(optional\)"/);
+  assert.match(page, /value=\{hatMapping\[track\.hatId\] \?\? garments\[0\]\.id\}/, 'one hat replaces all by default');
+  assert.match(page, /\.\.\.\(hatSwap \? \{ hatSwap \} : \{\}\)/, 'non-hat requests unchanged');
+  assert.match(page, /frames\.length && analysisStage !== "idle" && !hatMode/, 'no "0 SUBJECTS" chip in hat mode');
+  assert.match(svc, /body: JSON\.stringify\(mode \? \{ frames, mode \} : \{ frames \}\)/);
+});
