@@ -49,6 +49,9 @@ type TemplateInput = {
   defaultAssetUrl: string | null;
 };
 
+/** Text inputs (brand names, labels, vibes) are typed, not uploaded. */
+const isTextInput = (input: { expected: string }) => input.expected === "text" || input.expected === "prompt";
+
 type ActivationGate = {
   publishable: boolean;
   reasons: string[];
@@ -624,6 +627,12 @@ const TemplateCanvas = () => {
   const [savingNode, setSavingNode] = useState(false);
   const [positions, setPositions] = useState<Record<string, Point>>({});
   const [files, setFiles] = useState<Record<string, File | null>>({});
+  const [texts, setTexts] = useState<Record<string, string>>({});
+  /** Typed text inputs sent with a run (empty ones fall back to the template's sample text). */
+  const typedInputs = useMemo(
+    () => Object.fromEntries(Object.entries(texts).map(([id, value]) => [id, value.trim()]).filter(([, value]) => value)),
+    [texts],
+  );
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
@@ -1626,7 +1635,7 @@ const TemplateCanvas = () => {
   const handleRun = useCallback(async () => {
     if (!detail) return;
 
-    const missing = runInputs.find((input) => !input.defaultAssetUrl && !files[input.id]);
+    const missing = runInputs.find((input) => !isTextInput(input) && !input.defaultAssetUrl && !files[input.id]);
     if (missing) {
       toast({ title: "Missing input", description: `${missing.name} still needs an image.`, variant: "destructive" });
       return;
@@ -1664,7 +1673,7 @@ const TemplateCanvas = () => {
         },
         body: JSON.stringify({
           versionId: detail.versionId,
-          inputs: uploadedInputs,
+          inputs: { ...uploadedInputs, ...typedInputs },
           ...castBody,
         }),
       });
@@ -1687,7 +1696,7 @@ const TemplateCanvas = () => {
     } finally {
       setStartingRun(false);
     }
-  }, [buildAuthHeaders, detail, fetchJobStatus, files, pollJob, runInputs, selectedCastAvatarId]);
+  }, [buildAuthHeaders, detail, fetchJobStatus, files, pollJob, runInputs, selectedCastAvatarId, typedInputs]);
 
   const saveNode = useCallback(async () => {
     if (!detail || !selectedNode || !draft) return;
@@ -2558,7 +2567,7 @@ const TemplateCanvas = () => {
         action: "start",
         versionId: detail.versionId,
         nodeId,
-        inputs: uploadedInputs,
+        inputs: { ...uploadedInputs, ...typedInputs },
       });
       if (data.run) applyNodeRun(data.run);
       toast({ title: "Step generating", description: "This can take 10–60 seconds." });
@@ -2570,7 +2579,7 @@ const TemplateCanvas = () => {
       }));
       toast({ title: "Run failed", description: message, variant: "destructive" });
     }
-  }, [applyNodeRun, detail, files, invokeRunNode, runInputs]);
+  }, [applyNodeRun, detail, files, invokeRunNode, runInputs, typedInputs]);
 
   useEffect(() => {
     const pending = Object.values(nodeRuns).filter((run) => run.runId && (run.status === "queued" || run.status === "running"));
@@ -4152,7 +4161,14 @@ const TemplateCanvas = () => {
                       <Label>{input.name}</Label>
                       <span className="text-[11px] uppercase tracking-[0.15em] text-foreground/70">{input.expected}</span>
                     </div>
-                    {previews[input.id] ? (
+                    {isTextInput(input) ? (
+                      <Textarea
+                        value={texts[input.id] ?? ""}
+                        onChange={(event) => setTexts((prev) => ({ ...prev, [input.id]: event.target.value }))}
+                        placeholder={`Type ${input.name.toLowerCase()}`}
+                        className="min-h-[72px] rounded-2xl border-border/50 bg-background text-sm"
+                      />
+                    ) : previews[input.id] ? (
                       <img src={previews[input.id]} alt={input.name} className="h-28 w-full rounded-2xl border border-border/50 bg-background object-contain" />
                     ) : input.defaultAssetUrl ? (
                       <img src={input.defaultAssetUrl} alt={`${input.name} default`} className="h-28 w-full rounded-2xl border border-border/50 bg-background object-contain" />
@@ -4161,7 +4177,7 @@ const TemplateCanvas = () => {
                         Upload image
                       </div>
                     )}
-                    <div className="flex gap-2">
+                    {isTextInput(input) ? null : <div className="flex gap-2">
                       <label className="inline-flex h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-background px-3 text-sm font-medium transition hover:border-primary/50 hover:text-foreground">
                         <Upload className="h-4 w-4" />
                         {files[input.id] ? "Replace image" : "Upload image"}
@@ -4173,7 +4189,7 @@ const TemplateCanvas = () => {
                         />
                       </label>
                       <Button type="button" variant="outline" size="sm" onClick={() => handleFile(input.id, null)}>Clear</Button>
-                    </div>
+                    </div>}
                   </div>
                 ))}
                 {!runInputs.length ? (
