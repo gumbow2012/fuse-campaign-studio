@@ -112,6 +112,8 @@ test('scene swap: a frame with no hat (analyzed) only swaps branding and never i
   assert.match(out.prompt, /A-P-O-S-T-O-L-Z/);
   assert.match(out.prompt, /Do not add a hat\./);
   assert.doesNotMatch(out.prompt, /Every hat in image 1/);
+  assert.match(out.prompt, /full repackage, not a sticker[^.]*color palette taken from its logo/);
+  assert.doesNotMatch(out.prompt, /Keep each item's shape, layout, colors/, 'source colors must not be kept');
 });
 
 test('scene swap: hat + brand in one frame keeps image numbering consistent', () => {
@@ -186,4 +188,11 @@ test('Make into template: scene runs become customer inputs + per-frame prompts;
   assert.match(page, /placeholder="Exact brand name, as it should be spelled"/);
   assert.match(page, /analyzed: !!hatAnalysis,\n        \}/);
   assert.match(page, /\.\.\.\(hatMode\n          \? \{\n            scene: \{/);
+});
+
+test('cloning a template version points {{input:<id>}} prompt placeholders at the cloned nodes', async () => {
+  const { readFileSync } = await import('node:fs');
+  const s = readFileSync(new URL('../../supabase/functions/admin-template-workbench/index.ts', import.meta.url), 'utf8');
+  assert.match(s, /prompt_config: remapIds\(node\.prompt_config\),/);
+  assert.match(s, /text\.split\(from\)\.join\(to\)/);
 });

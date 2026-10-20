@@ -678,16 +678,18 @@ async function cloneVersion(args: {
     });
   if (insertVersionError) throw new Error(insertVersionError.message);
 
-  const idMap = new Map<string, string>();
+  const idMap = new Map<string, string>((nodes ?? []).map((node: any) => [node.id, crypto.randomUUID()]));
+  // Prompts reference nodes by id ({{input:<id>}}, {{spell:<id>}}); point them at the cloned nodes.
+  const remapIds = (config: unknown) =>
+    JSON.parse([...idMap].reduce((text, [from, to]) => text.split(from).join(to), JSON.stringify(config ?? {})));
   const nodeRows = (nodes ?? []).map((node: any) => {
-    const id = crypto.randomUUID();
-    idMap.set(node.id, id);
+    const id = idMap.get(node.id)!;
     return {
       id,
       version_id: versionId,
       node_type: node.node_type,
       model_id: node.model_id ?? null,
-      prompt_config: node.prompt_config ?? {},
+      prompt_config: remapIds(node.prompt_config),
       default_asset_id: node.default_asset_id ?? null,
       name: node.name,
     };
