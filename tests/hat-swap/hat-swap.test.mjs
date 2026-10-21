@@ -204,3 +204,11 @@ test('step previews accept typed text inputs and fill {{input:}} placeholders li
   assert.match(s, /if \(expected === "text" \|\| expected === "prompt"\) typedInputs\[key\] =/);
   assert.match(s, /const prompt = fillInputPlaceholders\(resolveNodePrompt\(node, promptEdges, nodeById\), typedInputs, nodeById\);/);
 });
+
+test('runner: an empty optional upload with no fallback image is skipped, never a failure or an author sample', async () => {
+  const { readFileSync } = await import('node:fs');
+  const s = readFileSync(new URL('../../supabase/functions/_shared/executor.ts', import.meta.url), 'utf8');
+  assert.match(s, /if \(node\.prompt_config\?\.required === false \|\| node\.prompt_config\?\.optional === true\) \{\n      skippedInputs\.add\(node\.id\);/);
+  assert.match(s, /resolved\.has\(edge\.source_node_id\) \|\| skippedInputs\.has\(edge\.source_node_id\)/);
+  assert.equal((s.match(/resolved, skippedInputs\)/g) ?? []).length, 2);
+});
