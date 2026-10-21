@@ -533,8 +533,15 @@ export async function loadOutputExposureByNodeId(
   );
 }
 
-function isStepReady(step: StepRow, incomingEdges: EdgeRow[], resolved: Map<string, ResolvedOutput>) {
-  return incomingEdges.length > 0 && incomingEdges.every((edge) => resolved.has(edge.source_node_id));
+function isStepReady(
+  step: StepRow,
+  incomingEdges: EdgeRow[],
+  resolved: Map<string, ResolvedOutput>,
+  skippedInputs: Set<string> = new Set(),
+) {
+  return incomingEdges.length > 0 &&
+    incomingEdges.some((edge) => resolved.has(edge.source_node_id)) &&
+    incomingEdges.every((edge) => resolved.has(edge.source_node_id) || skippedInputs.has(edge.source_node_id));
 }
 
 function pickPassthroughValue(entries: Array<[string, ResolvedOutput]>) {
@@ -1329,6 +1336,8 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
   }
 
   const resolved = new Map<string, ResolvedOutput>();
+  /** Optional uploads the customer left empty and that carry no fallback image: their references are simply omitted. */
+  const skippedInputs = new Set<string>();
   const jobInputs = (job.input_payload ?? {}) as Record<string, string>;
   // Hat Brand Film (opt-in by node metadata): one immutable compiled context per run.
   const hatFilm = await ensureHatFilmContext(admin, job as any, nodes as any);
@@ -1378,6 +1387,10 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
       }
     }
 
+    if (node.prompt_config?.required === false || node.prompt_config?.optional === true) {
+      skippedInputs.add(node.id);
+      continue;
+    }
     throw new Error(`Missing input for node ${node.name}`);
   }
 
@@ -1448,7 +1461,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
     }
 
     const readySteps = pendingSteps.filter((step) =>
-      !hatWaiting.has(step.id) && isStepReady(step, incomingByTarget.get(step.node_id) ?? [], resolved)
+      !hatWaiting.has(step.id) && isStepReady(step, incomingByTarget.get(step.node_id) ?? [], resolved, skippedInputs)
     );
 
     if (!readySteps.length) {
@@ -1481,7 +1494,7 @@ export async function runGraphJob(admin: AdminClient, jobId: string) {
       const node = nodeMap.get(step.node_id);
       if (!node) throw new Error(`Node missing for step ${step.id}`);
       // An earlier step in this pass can reset an input (Hat still retry); re-check, don't crash.
-      if (step.status !== "pending" || !isStepReady(step, incomingByTarget.get(step.node_id) ?? [], resolved)) continue;
+      if (step.status !== "pending" || !isStepReady(step, incomingByTarget.get(step.node_id) ?? [], resolved, skippedInputs)) continue;
       if (hatFilm && (node.node_type === "image_gen" || node.node_type === "video_gen") && await hatJobStopped(admin, job.id)) return;
 
       const incoming = sortEdgesByExecutionOrder(incomingByTarget.get(step.node_id) ?? []);
