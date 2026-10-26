@@ -1886,7 +1886,7 @@ export default function GenerationStudio() {
   return (
     <Shell>
       <PageMeta
-        title={isMadden ? "Create | MADDENAI" : "Generation Studio | FUSE"}
+        title={isMadden ? "Image & Video | MADDEN AI" : "Generation Studio | FUSE"}
         description="Generate campaign images and video clips from a prompt and reference frames."
         path={isMadden ? "/maddenai/create" : "/app/lab/studio"}
       />
@@ -1894,7 +1894,7 @@ export default function GenerationStudio() {
       <div className="mx-auto w-full max-w-[1600px] px-4 py-10 sm:px-6">
         <header className="mb-9 space-y-3">
           <p className="font-display text-[12px] font-semibold tracking-[0.16em] text-[hsl(var(--electric-cyan))]">
-            {isMadden ? "MADDENAI / CREATE" : "FUSE LAB / GENERATION STUDIO"}
+            {isMadden ? "MADDEN AI / IMAGE & VIDEO" : "FUSE LAB / GENERATION STUDIO"}
           </p>
           <h1 className="font-display text-[36px] font-bold leading-[1.05] tracking-[0.01em] text-foreground sm:text-[44px]">
             Generation Studio

@@ -159,7 +159,7 @@ export default function HeroCampaignTiles({
             <div
               className={cn(
                 SQUARE_CLASS,
-                "ring-1 ring-white/10 transition-transform duration-300 group-hover:scale-[1.03] group-focus-visible:ring-2 group-focus-visible:ring-cyan-300 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
+                "ring-1 ring-white/10 transition-transform duration-300 group-hover:scale-[1.03] group-focus-visible:ring-2 group-focus-visible:ring-sky-300 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
               )}
             >
               <TileMedia entry={entry} eager={index < 2} reduced={reduced} />

@@ -12,6 +12,8 @@ export const FEATURE_FLAGS = {
   croPricingDefault: true,
   croCampaignPagesDefault: true,
   croPostPurchaseTourDefault: true,
+  /** MADDEN AI spotlight section directly under the homepage hero. */
+  maddenAIHomeHero: true,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;

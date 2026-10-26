@@ -10,7 +10,7 @@ import { track } from "@/lib/analytics/track";
 
 type Stage = 0 | 1 | 2 | 3;
 
-const CYAN = "#22d3ee";
+const CYAN = "#4DA8FF";
 const MUTED = "rgba(148,163,184,0.45)";
 
 const IMAGE_YS = [34, 66, 98, 130];
@@ -83,7 +83,7 @@ export default function HeroWorkflowAnimation({
 
   const on = (min: Stage) => stage >= min;
 
-  const nodeFill = (active: boolean) => (active ? "rgba(34,211,238,0.16)" : "rgba(148,163,184,0.06)");
+  const nodeFill = (active: boolean) => (active ? "rgba(77,168,255,0.16)" : "rgba(148,163,184,0.06)");
   const nodeStroke = (active: boolean) => (active ? CYAN : MUTED);
   const lineStroke = (active: boolean) => (active ? CYAN : "rgba(148,163,184,0.25)");
 
@@ -93,7 +93,7 @@ export default function HeroWorkflowAnimation({
         className={cn(
           "relative overflow-hidden rounded-[1.25rem] border bg-[#0B1120]",
           grand
-            ? "border-cyan-200/25 p-4 shadow-[0_28px_70px_-38px_rgba(34,211,238,0.65),inset_0_1px_0_rgba(255,255,255,0.06)]"
+            ? "border-sky-200/25 p-4 shadow-[0_28px_70px_-38px_rgba(77,168,255,0.65),inset_0_1px_0_rgba(255,255,255,0.06)]"
             : "border-white/10",
           compact ? "px-3 py-3" : grand ? "" : "p-4 sm:p-5",
         )}
@@ -113,7 +113,7 @@ export default function HeroWorkflowAnimation({
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                "radial-gradient(60% 70% at 50% 45%, rgba(34,211,238,0.12), transparent 70%)",
+                "radial-gradient(60% 70% at 50% 45%, rgba(77,168,255,0.12), transparent 70%)",
             }}
           />
         ) : null}

@@ -23,6 +23,7 @@ import JSZip from "jszip";
 
 import SiteShell from "@/components/mvp/SiteShell";
 import MaddenAIShell from "@/components/maddenai/MaddenAIShell";
+import { ps2Panel } from "@/components/maddenai/ps2";
 import { useLocation } from "react-router-dom";
 import PageMeta from "@/components/mvp/PageMeta";
 import { Button } from "@/components/ui/button";
@@ -143,7 +144,7 @@ const DEFAULT_LOGO_BOX = { x: 0.38, y: 0.84, w: 0.24, h: 0.09 };
 type LogoChoice = "keep" | "remove" | "replace";
 
 const SELECT_CLASS =
-  "w-full rounded-lg border border-white/12 bg-black/40 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
+  "w-full rounded-lg border border-white/12 bg-[#020a24]/70 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors hover:border-cyan-200/40 focus:border-cyan-200/60";
 
 function SectionCard({
   step,
@@ -157,9 +158,9 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl sm:p-5">
+    <section className={`${ps2Panel} p-4 sm:p-5`}>
       <header className="mb-4 flex items-start gap-3">
-        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-cyan-200/40 bg-cyan-400/10 text-[11px] font-semibold text-cyan-100">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-sky-100/60 bg-[linear-gradient(180deg,#8FD0FF,#2F6FF0)] font-display text-[11px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_0_14px_rgba(77,168,255,0.6)]">
           {step}
         </span>
         <div className="min-w-0">
@@ -388,7 +389,7 @@ function VideoProgress({
   return (
     <div
       className={cn(
-        "space-y-2.5 rounded-2xl border border-white/10 bg-black/30",
+        "space-y-2.5 rounded-2xl border border-sky-300/20 bg-[#020a24]/60",
         compact ? "p-3" : "p-4",
       )}
     >
@@ -1588,16 +1589,16 @@ export default function OutfitSwap() {
   return (
     <Shell>
       <PageMeta
-        title={isMadden ? "Outfit Swap | MADDENAI" : "Outfit Swap | FUSE"}
+        title={isMadden ? "Pro editor | MADDEN AI" : "Outfit Swap | FUSE"}
         description="Swap the wardrobe in any clip: extract source frames, restyle them, and rebuild the video."
-        path={isMadden ? "/maddenai/outfit-swap" : "/app/lab/outfit-swap"}
+        path={isMadden ? "/maddenai/pro" : "/app/lab/outfit-swap"}
       />
 
-      <div className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6">
-        <header className="mb-6 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/70">{isMadden ? "MADDENAI" : "FUSE Lab"}</p>
-          <h1 className="font-heading text-2xl font-semibold text-foreground sm:text-3xl">Outfit Swap</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
+      <div className="ps2-scope mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6">
+        <header className="mb-6 space-y-2">
+          <p className="font-display text-[11px] font-bold uppercase tracking-[0.35em] text-sky-300">{isMadden ? "MADDEN AI · PRO EDITOR" : "FUSE LAB · MADDEN AI"}</p>
+          <h1 className="font-display text-3xl font-black uppercase tracking-[0.04em] text-white [text-shadow:0_0_28px_rgba(77,168,255,0.5)] sm:text-4xl">Outfit Swap</h1>
+          <p className="max-w-2xl text-sm text-sky-100/65">
             Upload a clip, restyle the frames you pick with your product references, then rebuild the
             same video in the new wardrobe.
           </p>
@@ -1760,7 +1761,7 @@ export default function OutfitSwap() {
                             )
                           }
                           placeholder="Optional label"
-                          className="h-8 rounded-lg border-white/12 bg-black/40 text-xs"
+                          className="h-8 rounded-lg border-white/12 bg-[#020a24]/70 text-xs"
                         />
                       </div>
                       <button
@@ -1786,7 +1787,7 @@ export default function OutfitSwap() {
                             )
                           }
                           placeholder="Exact brand name, as it should be spelled"
-                          className="h-8 rounded-lg border-white/12 bg-black/40 text-xs"
+                          className="h-8 rounded-lg border-white/12 bg-[#020a24]/70 text-xs"
                         />
                       </div>
                     ) : garment.type === "Hat" ? (
@@ -1816,7 +1817,7 @@ export default function OutfitSwap() {
                             )
                           }
                           placeholder="Exact lettering on the hat (optional)"
-                          className="h-8 rounded-lg border-white/12 bg-black/40 text-xs"
+                          className="h-8 rounded-lg border-white/12 bg-[#020a24]/70 text-xs"
                         />
                       </div>
                     ) : (
@@ -1918,13 +1919,13 @@ export default function OutfitSwap() {
                   value={extraPrompt}
                   onChange={(event) => setExtraPrompt(event.target.value)}
                   placeholder="Optional extra direction (styling notes, fit, how the garment sits)"
-                  className="min-h-[70px] rounded-xl border-white/12 bg-black/40 text-xs"
+                  className="min-h-[70px] rounded-xl border-white/12 bg-[#020a24]/70 text-xs"
                 />
               </div>
             </SectionCard>
 
             {frames.length ? (
-              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl sm:p-5">
+              <div className={`${ps2Panel} p-4 sm:p-5`}>
                 <h2 className="font-heading text-sm font-semibold text-foreground sm:text-base">Logo</h2>
                 <p className="mb-3 mt-0.5 text-xs text-muted-foreground">
                   {sourceLogoState === "loading"
@@ -1998,7 +1999,7 @@ export default function OutfitSwap() {
             {/* PHASE 4 — single-subject runs get ONE simple model control.
                 "Keep original" (the default) is exactly today's behaviour. */}
             {subjectTracks.length > 1 ? null : (
-              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl sm:p-5">
+              <div className={`${ps2Panel} p-4 sm:p-5`}>
                 <h2 className="font-heading text-sm font-semibold text-foreground sm:text-base">Model swap (optional)</h2>
                 <p className="mb-3 mt-0.5 text-xs text-muted-foreground">
                   Replace the person too. Pick a model and every frame gets the new person — with your clothing if you added any, or their original outfit if you didn&apos;t.
@@ -2462,7 +2463,7 @@ export default function OutfitSwap() {
                           className="group grid w-full grid-cols-2 gap-2 text-left"
                           aria-label="Open full-size comparison"
                         >
-                          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                          <div className="overflow-hidden rounded-xl border border-white/10 bg-[#020a24]/70">
                             {frame ? (
                               <img src={frame.url} alt="Original frame" className="h-32 w-full object-cover" />
                             ) : null}
@@ -2470,7 +2471,7 @@ export default function OutfitSwap() {
                               Original
                             </p>
                           </div>
-                          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#020a24]/70">
                             {swap.status === "complete" && swap.outputUrl ? (
                               <img src={swap.outputUrl} alt="Swapped frame" className="h-32 w-full object-cover" />
                             ) : swap.status === "failed" || swap.status === "canceled" ? (
@@ -2663,7 +2664,7 @@ export default function OutfitSwap() {
                                   download
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="flex items-center justify-center gap-2 rounded-lg border border-white/15 bg-black/40 px-2.5 py-1.5 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                                  className="flex items-center justify-center gap-2 rounded-lg border border-white/15 bg-[#020a24]/70 px-2.5 py-1.5 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
                                 >
                                   <Download size={12} />
                                 </a>
@@ -2753,7 +2754,7 @@ export default function OutfitSwap() {
                                 download
                                 target="_blank"
                                 rel="noreferrer"
-                                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/15 bg-black/40 py-1.5 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/15 bg-[#020a24]/70 py-1.5 text-[11px] text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
                               >
                                 <Download size={12} /> Download
                               </a>
@@ -2898,7 +2899,7 @@ export default function OutfitSwap() {
                         download
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-black/40 py-2 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                        className="flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-[#020a24]/70 py-2 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
                       >
                         <Download size={13} /> Download
                       </a>
@@ -2962,7 +2963,7 @@ export default function OutfitSwap() {
                         download
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
+                        className="flex items-center gap-2 rounded-xl border border-white/15 bg-[#020a24]/70 px-3 py-2 text-xs text-foreground/85 transition-colors hover:border-cyan-200/50 hover:text-cyan-100"
                       >
                         <Download size={13} /> Download
                       </a>
@@ -3064,7 +3065,7 @@ export default function OutfitSwap() {
                 <Input
                   value={templateName}
                   onChange={(event) => setTemplateName(event.target.value)}
-                  className="rounded-xl border-white/12 bg-black/40"
+                  className="rounded-xl border-white/12 bg-[#020a24]/70"
                 />
               </div>
               <div className="space-y-1.5">
@@ -3075,7 +3076,7 @@ export default function OutfitSwap() {
                   value={templateDescription}
                   onChange={(event) => setTemplateDescription(event.target.value)}
                   rows={3}
-                  className="rounded-xl border-white/12 bg-black/40"
+                  className="rounded-xl border-white/12 bg-[#020a24]/70"
                 />
               </div>
               <p className="text-[11px] text-muted-foreground">
