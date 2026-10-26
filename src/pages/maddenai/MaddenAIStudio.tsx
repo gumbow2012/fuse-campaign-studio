@@ -7,6 +7,7 @@ import PageMeta from "@/components/mvp/PageMeta";
 import MaddenAIShell from "@/components/maddenai/MaddenAIShell";
 import { OptionCycler, Ps2Glyph, ps2Button, ps2Ghost, ps2Panel, ps2Well } from "@/components/maddenai/ps2";
 import SubjectModelSelector from "@/components/outfitswap/SubjectModelSelector";
+import { createUserAvatar } from "@/services/avatarProfiles";
 import ResultStage from "@/components/maddenai/ResultStage";
 import { useAuth } from "@/contexts/AuthContext";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
@@ -14,6 +15,7 @@ import { IMAGE_FLAT_USD, creditsFromUsd, resolutionMultiplier } from "@/lib/cost
 import { compressImageFile } from "@/lib/imageCompress";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { createOutfitSwapFolder, uploadToStorage, uploadWithConcurrency } from "@/services/storageUpload";
+import { renderPiecesToBlob } from "@/services/videoExport/renderClip";
 import {
   KEEP_ORIGINAL_MODEL,
   analyzeOutfitSwapSource,
@@ -48,18 +50,52 @@ const VIDEO_MODEL = "seedance-2.0";
 const VIDEO_USD_PER_SECOND = 0.3024; // matches the Pro editor's Seedance 2.0 rate
 const VIDEO_RESOLUTION = "1080p";
 const MAX_PIECES = 4;
+const MAX_CLIP_SECONDS = 60;
+const PART_MAX_SECONDS = 15; // Seedance's per-render limit
+const FRAMES_PER_PART = 2;
 const BACK_CREDITS = creditsFromUsd(IMAGE_FLAT_USD); // one 1K Nano Banana Pro image
+const SHEET_CREDITS = creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K")); // one 2K sheet
+const CHARACTER_SHEET_PROMPT =
+  "CHARACTER REFERENCE SHEET of the EXACT same person shown in the reference photos — identical face, facial structure, skin tone, hair (style, length, color, texture), facial hair, tattoos, body type and height proportions. Do not beautify, slim, age, de-age or change ethnicity. Layout on one plain light-gray studio background, evenly spaced, no text or labels: full-body front view, full-body three-quarter view, full-body side profile, full-body back view, plus a large front face close-up and a three-quarter face close-up. Neutral relaxed standing pose, neutral expression, plain fitted black t-shirt and plain black pants, barefoot or plain black sneakers, no jewelry, hats or props (so outfits can be swapped later). Even soft studio lighting, photorealistic, sharp detail.";
 /** Appended to the swap + render prompts when Low Poly Mode is on. */
-const LOW_POLY_PROMPT =
-  "STYLE OVERRIDE — LOW POLY MODE: render the ENTIRE image (person, clothing, environment, lighting) as a PlayStation 2-era low-poly 3D video game scene: visible flat-shaded polygons, faceted angular geometry, low-resolution textures with slight pixelation, simple baked lighting, early-2000s console cutscene look. Keep the same composition, pose, camera angle and framing, and keep the garments' exact colors, graphics and logos (rendered as low-res game textures). Not photorealistic.";
+const LOW_POLY_PROMPT = [
+  "STYLE OVERRIDE — LOW POLY MODE (Madden Media PS2 look). Re-render the ENTIRE frame as an in-engine screenshot from a 2000s third-person console game (PS2 / early PS3 era), NOT a photo and NOT a filter over a photo.",
+  "CHARACTER: rebuild the person as a stylized low-poly game character model — chunky simplified proportions, faceted angular geometry you can see, blocky voxel-like hair (braids/twists/afro become stacked cubes or chunky polygon clumps), mitten-simple hands, smooth matte skin with flat painted shading, no pores or photo skin detail.",
+  "CLOTHING: keep the exact garments, colors, prints and logos from the references, but rendered as low-res game textures on simple low-poly cloth meshes (slightly stiff folds, crisp texture edges).",
+  "ENVIRONMENT: rebuild the same location as a game level — simplified modeled walls, props and shelves, glossy reflective tile or polished floors with visible low-res texture stepping, bright clean fluorescent / neon game lighting with soft bloom, baked shadows, slight texture pixelation.",
+  "Keep the same camera angle, framing, pose and composition as the source frame. No added text, UI or watermarks.",
+].join(" ");
 const TIPS = [
   "Clean product photos on a plain background give the sharpest fit.",
   "One person facing the camera swaps best.",
   "Add the back of a piece so turns and walk-aways stay right.",
   "You can leave this page. Your video lands in Your videos.",
+  "Clips over 15 seconds render in parts and get stitched back together.",
 ];
 
 type Frame = { time: number; url: string };
+type PartRange = { start: number; end: number };
+type PartJob = { range: PartRange; generationId: string };
+
+/** Equal parts of at most 15s (a 60s clip -> 4 x 15s, 20s -> 2 x 10s). */
+function splitParts(duration: number): PartRange[] {
+  const n = Math.max(1, Math.ceil(duration / PART_MAX_SECONDS - 1e-6));
+  const len = duration / n;
+  return Array.from({ length: n }, (_, k) => ({ start: k * len, end: k === n - 1 ? duration : (k + 1) * len }));
+}
+
+/** Frames to style: 4 spread over a short clip, or 2 per part (at 25% / 75%) for a long one. */
+function pickFrameIndices(frames: Frame[], duration: number): number[] {
+  if (!frames.length) return [];
+  const parts = splitParts(duration);
+  if (parts.length === 1) {
+    const step = Math.max(1, Math.ceil(frames.length / FRAME_COUNT));
+    return frames.map((_, i) => i).filter((i) => i % step === 0).slice(0, FRAME_COUNT);
+  }
+  const nearest = (t: number) => frames.reduce((best, f, i) => (Math.abs(f.time - t) < Math.abs(frames[best].time - t) ? i : best), 0);
+  const picks = parts.flatMap((p) => [0.25, 0.75].slice(0, FRAMES_PER_PART).map((q) => nearest(p.start + (p.end - p.start) * q)));
+  return [...new Set(picks)];
+}
 type SourceVideo = { path: string; duration: number; width: number; height: number };
 type Screen = "title" | "menu" | "setup";
 type Piece = OutfitSwapGarment & { backState?: "generating" | "uploading" | null };
@@ -75,9 +111,9 @@ function StepLabel({ glyph, title, hint, done }: { glyph: "□" | "△" | "○" 
       <Ps2Glyph glyph={glyph} className={done ? "shadow-[0_0_14px_rgba(124,227,255,0.9)]" : ""} />
       <h2 className="font-display text-[13px] font-bold uppercase tracking-[0.14em] text-white">{title}</h2>
       {done ? (
-        <span className="ml-auto font-display text-[10px] font-bold uppercase tracking-[0.2em] text-sky-300">Ready</span>
+        <span className="ml-auto rounded-md border border-sky-200/50 bg-sky-400/15 px-2 py-0.5 font-display text-xs font-bold uppercase tracking-[0.14em] text-sky-200">Ready</span>
       ) : hint ? (
-        <span className="ml-auto text-[11px] text-sky-100/45">{hint}</span>
+        <span className="ml-auto rounded-md border border-sky-300/30 bg-sky-400/10 px-2 py-0.5 font-display text-xs font-bold uppercase tracking-[0.14em] text-sky-100">{hint}</span>
       ) : null}
     </div>
   );
@@ -138,6 +174,10 @@ export default function MaddenAIStudio() {
   const [note, setNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
   const [lowPoly, setLowPoly] = useState(false);
+  const [sheetUrl, setSheetUrl] = useState<string | null>(null);
+  const [buildingSheet, setBuildingSheet] = useState(false);
+  const [characterName, setCharacterName] = useState("");
+  const [savingCharacter, setSavingCharacter] = useState(false);
 
   const [swaps, setSwaps] = useState<Record<number, SwapGeneration>>({});
   const [auto, setAuto] = useState(false);
@@ -146,6 +186,11 @@ export default function MaddenAIStudio() {
   const [rendering, setRendering] = useState(false);
   const [stageVideoId, setStageVideoId] = useState<string | null>(null);
   const [sessionVideoIds, setSessionVideoIds] = useState<string[]>([]);
+  const [runFolder, setRunFolder] = useState<string | null>(null);
+  const [partJobs, setPartJobs] = useState<PartJob[]>([]);
+  const [stitched, setStitched] = useState<string | null>(null);
+  const [stitching, setStitching] = useState(false);
+  const [partStage, setPartStage] = useState<string | null>(null);
 
   /* ----------------------------- title / menu ----------------------------- */
   const MENU = useMemo(
@@ -186,14 +231,13 @@ export default function MaddenAIStudio() {
   }, [screen, menuIndex, MENU, choose, start]);
 
   /* ----------------------------- cost preview ----------------------------- */
-  const pickedFrames = useMemo(() => {
-    if (!frames.length) return [];
-    const step = Math.max(1, Math.ceil(frames.length / FRAME_COUNT));
-    return frames.map((_, i) => i).filter((i) => i % step === 0).slice(0, FRAME_COUNT);
-  }, [frames]);
-  const duration = Math.min(15, Math.max(4, Math.round(meta?.duration ?? 5)));
+  const clipSeconds = meta?.duration ?? 5;
+  const parts = useMemo(() => splitParts(clipSeconds), [clipSeconds]);
+  const pickedFrames = useMemo(() => pickFrameIndices(frames, clipSeconds), [frames, clipSeconds]);
+  const partSeconds = (range: PartRange) => Math.min(PART_MAX_SECONDS, Math.max(4, Math.round(range.end - range.start)));
+  const duration = partSeconds(parts[0]);
   const styleCredits = creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K") * (pickedFrames.length || FRAME_COUNT));
-  const videoCredits = creditsFromUsd(VIDEO_USD_PER_SECOND * duration * resolutionMultiplier(VIDEO_RESOLUTION));
+  const videoCredits = parts.reduce((sum, range) => sum + creditsFromUsd(VIDEO_USD_PER_SECOND * partSeconds(range) * resolutionMultiplier(VIDEO_RESOLUTION)), 0);
   const totalCredits = styleCredits + videoCredits;
   const balance = profile?.credits_balance ?? 0;
   const canAfford = (credits: number) => isAdmin || balance >= credits;
@@ -241,6 +285,8 @@ export default function MaddenAIStudio() {
     const url = URL.createObjectURL(file);
     setClipPreview(url);
     setStageVideoId(null);
+    setPartJobs([]);
+    setStitched(null);
     setFrames([]);
     setSourceVideo(null);
     setSwaps({});
@@ -250,9 +296,10 @@ export default function MaddenAIStudio() {
     try {
       const el = await loadVideo(url);
       const m = readMeta(el);
-      if (!Number.isFinite(m.duration) || m.duration < 2 || m.duration > 15) throw new Error("Use a clip between 2 and 15 seconds");
+      if (!Number.isFinite(m.duration) || m.duration < 2 || m.duration > MAX_CLIP_SECONDS) throw new Error("Use a clip between 2 and 60 seconds");
       setMeta(m);
       const folder = await createOutfitSwapFolder();
+      setRunFolder(folder);
       const stored = await uploadToStorage(folder, file, file.name);
       const captured = await extractFrames(el, frameTimestamps(m.duration), (d, t) => setClipProgress(Math.round((d / t) * 50)));
       const uploaded = await uploadWithConcurrency(
@@ -265,7 +312,7 @@ export default function MaddenAIStudio() {
       setSourceVideo({ path: stored.path, duration: m.duration, width: m.width, height: m.height });
       // Same detection pass as the Pro editor: who is in each frame and which way they face.
       setAnalysisState("running");
-      analyzeOutfitSwapSource(uploaded.map((f, i) => ({ frameId: `frame-${i}`, timestamp: f.time, imageUrl: f.url })))
+      analyzeOutfitSwapSource(pickFrameIndices(uploaded, m.duration).map((i) => ({ frameId: `frame-${i}`, timestamp: uploaded[i].time, imageUrl: uploaded[i].url })))
         .then((result) => {
           setAnalysis(result.analysis);
           setAnalysisState("done");
@@ -362,41 +409,83 @@ export default function MaddenAIStudio() {
     }
   }, []);
 
-  /** △ — make the back view from the front photo with Nano Banana Pro (generate-studio). */
+  /** One Nano Banana Pro image through generate-studio (charges + refunds live there). */
+  const studioImage = useCallback(async (args: { prompt: string; imageUrls: string[]; resolution: string; aspectRatio: string }) => {
+    const { data, error } = await supabase.functions.invoke("generate-studio", {
+      body: { action: "start", kind: "image", model: "nano-banana-pro", ...args },
+    });
+    if (error) throw new Error(error.message);
+    const generationId = String(data?.generation?.id ?? "");
+    if (!generationId) throw new Error("Couldn't start that image");
+    for (let i = 0; i < 75; i++) {
+      await new Promise((r) => setTimeout(r, 4000));
+      const status = await supabase.functions.invoke("generate-studio", { body: { action: "status", generationId } });
+      const g = status.data?.generation;
+      if (g?.status === "complete" && g.outputUrl) return String(g.outputUrl);
+      if (g?.status === "failed") throw new Error(g.error ?? "That image failed. Credits were refunded.");
+    }
+    throw new Error("That image is taking too long. Try again.");
+  }, []);
+
+  /** △ — make the back view from the front photo. */
   const generateBack = useCallback(async (piece: Piece) => {
     patchPiece(piece.id, { backState: "generating" });
     try {
-      const { data, error } = await supabase.functions.invoke("generate-studio", {
-        body: {
-          action: "start",
-          kind: "image",
-          model: "nano-banana-pro",
-          resolution: "1K",
-          aspectRatio: "1:1",
-          imageUrls: [piece.frontUrl],
-          prompt:
-            "Product photo of the BACK of this exact garment, laid flat and centered on a plain light-gray background, same framing and lighting as the reference. Keep the exact fabric, color, fit and construction. Do not copy the front graphics onto the back unless the reference clearly shows they wrap around; if the back design is unknown, keep the back plain. No person, no hanger, no text added.",
-        },
+      const url = await studioImage({
+        resolution: "1K",
+        aspectRatio: "1:1",
+        imageUrls: [piece.frontUrl],
+        prompt:
+          "Product photo of the BACK of this exact garment, laid flat and centered on a plain light-gray background, same framing and lighting as the reference. Keep the exact fabric, color, fit and construction. Do not copy the front graphics onto the back unless the reference clearly shows they wrap around; if the back design is unknown, keep the back plain. No person, no hanger, no text added.",
       });
-      if (error) throw new Error(error.message);
-      const generationId = String(data?.generation?.id ?? "");
-      if (!generationId) throw new Error("Couldn't start the back view");
-      for (let i = 0; i < 60; i++) {
-        await new Promise((r) => setTimeout(r, 4000));
-        const status = await supabase.functions.invoke("generate-studio", { body: { action: "status", generationId } });
-        const g = status.data?.generation;
-        if (g?.status === "complete" && g.outputUrl) {
-          patchPiece(piece.id, { backUrl: String(g.outputUrl), hasBackDesign: true, backState: null });
-          return;
-        }
-        if (g?.status === "failed") throw new Error(g.error ?? "The back view failed. Credits were refunded.");
-      }
-      throw new Error("The back view is taking too long. Try again.");
+      patchPiece(piece.id, { backUrl: url, hasBackDesign: true, backState: null });
     } catch (error) {
       patchPiece(piece.id, { backState: null });
       toast.error(error instanceof Error ? error.message : "Couldn't make the back view");
     }
-  }, []);
+  }, [studioImage]);
+
+  /* ---------------------------- character sheet ---------------------------- */
+  const modelPhotos = (model.uploadedRefUrls ?? []).filter((u) => u !== sheetUrl);
+  // A sheet only belongs to the photos it was built from.
+  useEffect(() => {
+    if (sheetUrl && !(model.uploadedRefUrls ?? []).includes(sheetUrl)) setSheetUrl(null);
+  }, [model.uploadedRefUrls, sheetUrl]);
+
+  /** △ — turn the uploaded model photo(s) into a multi-view sheet so the identity can't drift. */
+  const buildSheet = useCallback(async () => {
+    if (!modelPhotos.length) return;
+    setBuildingSheet(true);
+    try {
+      const url = await studioImage({ prompt: CHARACTER_SHEET_PROMPT, imageUrls: modelPhotos, resolution: "2K", aspectRatio: "16:9" });
+      setSheetUrl(url);
+      setModel({ modelSource: "upload", avatarId: null, uploadedRefUrls: [url, ...modelPhotos].slice(0, 5) });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't build the character sheet");
+    } finally {
+      setBuildingSheet(false);
+    }
+  }, [modelPhotos.join("|"), studioImage]);
+
+  /** ○ — keep the character (sheet + photos) in My avatars for next time. */
+  const saveCharacter = useCallback(async () => {
+    if (!sheetUrl) return;
+    setSavingCharacter(true);
+    try {
+      const created = await createUserAvatar({
+        name: characterName.trim() || "My character",
+        thumbnail_url: modelPhotos[0] ?? sheetUrl,
+        reference_assets: [sheetUrl, ...modelPhotos].slice(0, 5),
+        consistency_profile: { character_sheet: sheetUrl, source: "maddenai" },
+      });
+      toast.success("Character saved to My avatars");
+      if (created) setModel({ modelSource: "avatar", avatarId: created.id, uploadedRefUrls: [] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't save the character");
+    } finally {
+      setSavingCharacter(false);
+    }
+  }, [sheetUrl, characterName, modelPhotos.join("|")]);
 
   /* ------------------------------ generation ------------------------------ */
   const subjectId = primarySubjectId(analysis);
@@ -448,8 +537,59 @@ export default function MaddenAIStudio() {
   const readyUrls = swapList.filter((e) => e.swap?.status === "complete" && e.swap.outputUrl).map((e) => e.swap!.outputUrl as string);
   const stylingLive = swapList.some((e) => isLive(e.swap));
 
+  /** Long clips: cut each ≤15s part in the browser, upload it, render it with that part's styled frames. */
+  const renderParts = useCallback(async (only?: number[]) => {
+    if (!sourceVideo || !clipPreview || !runFolder) return;
+    setRendering(true);
+    setStitched(null);
+    try {
+      const seen = new Map<string, OutfitSwapFrameSubject>();
+      for (const f of analysis?.frames ?? []) for (const s of f.subjects ?? []) if (!seen.has(s.subjectId)) seen.set(s.subjectId, s);
+      const styledAt = (i: number) => (swaps[i]?.status === "complete" ? swaps[i]?.outputUrl ?? null : null);
+      const jobs: PartJob[] = [...partJobs];
+      for (let k = 0; k < parts.length; k++) {
+        if (only && !only.includes(k)) continue;
+        const range = parts[k];
+        setPartStage(`Cutting part ${k + 1} of ${parts.length}`);
+        const blob = await renderPiecesToBlob([{ url: clipPreview, startMs: range.start * 1000, endMs: range.end * 1000 }], { width: sourceVideo.width, height: sourceVideo.height });
+        const stored = await uploadToStorage(runFolder, blob, `part-${k + 1}.mp4`);
+        const own = pickedFrames.filter((i) => frames[i] && frames[i].time >= range.start && frames[i].time <= range.end).map(styledAt).filter((u): u is string => !!u);
+        setPartStage(`Starting part ${k + 1} of ${parts.length}`);
+        const data = await callOutfitSwap<{ generation: SwapGeneration }>({
+          action: "reconstruct",
+          sourceVideo: { path: stored.path, duration: range.end - range.start, width: sourceVideo.width, height: sourceVideo.height },
+          frameUrls: own.length ? own : readyUrls.slice(0, FRAMES_PER_PART),
+          garments: cleanPieces,
+          model: VIDEO_MODEL,
+          duration: partSeconds(range),
+          resolution: VIDEO_RESOLUTION,
+          aspectRatio: meta?.aspectRatio,
+          generateAudio: false,
+          extraPrompt: prompt,
+          frameSubjects: Array.from(seen.values()),
+          castAssignment: {},
+          modelAssignment,
+        });
+        jobs[k] = { range, generationId: data.generation.id };
+        setVideos((prev) => [data.generation, ...prev]);
+        setSessionVideoIds((prev) => [...prev, data.generation.id]);
+        setPartJobs([...jobs]);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't start the video");
+    } finally {
+      setPartStage(null);
+      setRendering(false);
+    }
+  }, [sourceVideo, clipPreview, runFolder, analysis, swaps, partJobs, parts, pickedFrames, frames, readyUrls, cleanPieces, meta, prompt, modelAssignment]);
+
   const makeVideo = useCallback(async () => {
     if (!sourceVideo || !readyUrls.length) return;
+    if (parts.length > 1) {
+      setStageVideoId(null);
+      setPartJobs([]);
+      return renderParts();
+    }
     setRendering(true);
     try {
       const seen = new Map<string, OutfitSwapFrameSubject>();
@@ -477,7 +617,7 @@ export default function MaddenAIStudio() {
     } finally {
       setRendering(false);
     }
-  }, [sourceVideo, readyUrls, cleanPieces, duration, meta, prompt, analysis, modelAssignment]);
+  }, [sourceVideo, readyUrls, parts.length, renderParts, cleanPieces, duration, meta, prompt, analysis, modelAssignment]);
 
   // One click: style the frames, then render as soon as they're all back.
   useEffect(() => {
@@ -487,18 +627,48 @@ export default function MaddenAIStudio() {
     else toast.error("Styling didn't work on this clip. Try another clip or photo. Failed steps are refunded.");
   }, [auto, styling, stylingLive, swapList.length, pickedFrames.length, readyUrls.length, makeVideo]);
 
+  const partGens = partJobs.map((job) => videos.find((v) => v.id === job?.generationId) ?? null);
+  const partsLive = partGens.some((g) => isLive(g));
+  const failedParts = partJobs.map((job, k) => (partGens[k]?.status === "failed" || partGens[k]?.status === "canceled" ? k : -1)).filter((k) => k >= 0);
+  const partsDone = partJobs.length === parts.length && parts.length > 1 && partGens.every((g) => g?.status === "complete" && g.outputUrl);
+
+  useEffect(() => {
+    if (!partsDone || stitched || stitching || !runFolder || !sourceVideo) return;
+    setStitching(true);
+    (async () => {
+      try {
+        const pieces = await Promise.all(
+          partGens.map(async (g) => {
+            const meta = readMeta(await loadVideo(g!.outputUrl as string));
+            return { url: g!.outputUrl as string, startMs: 0, endMs: Math.round(meta.duration * 1000) };
+          }),
+        );
+        const blob = await renderPiecesToBlob(pieces, { width: sourceVideo.width, height: sourceVideo.height });
+        const { url } = await uploadToStorage(runFolder, blob, "madden-ai-full.mp4");
+        setStitched(url);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Couldn't join the parts");
+      } finally {
+        setStitching(false);
+      }
+    })();
+  }, [partsDone, stitched, stitching, runFolder, sourceVideo, partGens]);
+
   const stageVideo = videos.find((v) => v.id === stageVideoId) ?? null;
   const stageFromSession = !!stageVideoId && sessionVideoIds.includes(stageVideoId);
   const clipReady = !!sourceVideo;
   const modelPicked = !!(model.uploadedRefUrls?.length || model.avatarId);
   const outfitReady = pieces.length > 0 || (replacing && modelPicked);
-  const modelReady = !replacing || (modelPicked && analysisState !== "running" && analysisState !== "idle");
+  const needsSheet = model.modelSource === "upload" && !sheetUrl;
+  const modelReady = !replacing || (modelPicked && !needsSheet && analysisState !== "running" && analysisState !== "idle");
   const backsBusy = pieces.some((p) => p.backState);
-  const loading = auto || styling || rendering || (!!stageVideo && isLive(stageVideo));
+  const loading = auto || styling || rendering || stitching || partsLive || (!!stageVideo && isLive(stageVideo));
   const canStart = clipReady && outfitReady && modelReady && !backsBusy && !loading && !stylingLive;
 
   const begin = useCallback(() => {
     setStageVideoId(null);
+    setPartJobs([]);
+    setStitched(null);
     setSwaps({});
     setAuto(true);
     void styleAll();
@@ -557,9 +727,47 @@ export default function MaddenAIStudio() {
                 tiles={pickedFrames.map((i) => ({ source: frames[i]?.url ?? null, done: swaps[i]?.status === "complete" ? swaps[i]?.outputUrl ?? null : null }))}
                 stylingDone={swapList.filter((e) => e.swap?.status === "complete").length}
                 total={pickedFrames.length || FRAME_COUNT}
-                renderingVideo={rendering || (!!stageVideo && isLive(stageVideo))}
+                renderingVideo={rendering || stitching || partsLive || (!!stageVideo && isLive(stageVideo))}
                 lowPoly={lowPoly}
+                status={
+                  partStage ??
+                  (stitching
+                    ? `Stitching ${parts.length} parts`
+                    : partsLive
+                      ? `Rendering parts · ${partGens.filter((g) => g?.status === "complete").length}/${parts.length} done`
+                      : null)
+                }
               />
+            ) : stitched || failedParts.length ? (
+              <div className="flex h-full min-h-[420px] flex-col items-center justify-center">
+                {failedParts.length ? (
+                  <div className="flex flex-col items-center gap-4 p-6 text-center">
+                    <p className="max-w-sm text-sky-100/75">
+                      Part {failedParts.map((k) => k + 1).join(", ")} of {parts.length} didn't render. Credits for failed parts go back to your account.
+                    </p>
+                    <button type="button" className={ps2Button} onClick={() => void renderParts(failedParts)}>
+                      <Ps2Glyph /> Retry {failedParts.length > 1 ? "those parts" : "that part"}
+                    </button>
+                  </div>
+                ) : (
+                  <ResultStage
+                    videoUrl={stitched as string}
+                    breakdown={pickedFrames.map((i) => ({
+                      index: i,
+                      time: frames[i]?.time ?? 0,
+                      source: frames[i]?.url ?? null,
+                      styled: swaps[i]?.outputUrl ?? null,
+                      live: isLive(swaps[i]),
+                      failed: swaps[i]?.status === "failed",
+                    }))}
+                    onRedoFrame={(i) => void styleFrame(i).catch((e) => toast.error(e instanceof Error ? e.message : "Couldn't redo that frame"))}
+                    onRerender={() => void makeVideo()}
+                    rerenderCredits={videoCredits}
+                    frameCredits={creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K"))}
+                    rerenderDisabled={stylingLive || rendering || !readyUrls.length || !canAfford(videoCredits)}
+                  />
+                )}
+              </div>
             ) : stageVideo ? (
               <div className="flex h-full min-h-[420px] flex-col items-center justify-center">
                 {stageVideo.status === "complete" && stageVideo.outputUrl ? (
@@ -606,7 +814,7 @@ export default function MaddenAIStudio() {
 
             {/* □ CLIP */}
             <div className={`${ps2Panel} p-4`}>
-              <StepLabel glyph="□" title="Your clip" done={clipReady} hint="2–15 sec" />
+              <StepLabel glyph="□" title="Your clip" done={clipReady} hint={meta && parts.length > 1 ? `${Math.round(meta.duration)}s · ${parts.length} parts` : "2–60 sec"} />
               {clipProgress !== null ? (
                 <div className="mt-3">
                   <div className="h-2 overflow-hidden rounded-full border border-sky-300/30 bg-[#020a24]">
@@ -722,7 +930,40 @@ export default function MaddenAIStudio() {
               </div>
               {replacing ? (
                 <div className="ps2-scope mt-3">
-                  <SubjectModelSelector userId={user?.id ?? null} model={model} onChange={setModel} compact hideSourcePicker />
+                  <SubjectModelSelector userId={user?.id ?? null} model={model} onChange={setModel} compact hideSourcePicker hideSave={model.modelSource === "upload"} />
+                  {model.modelSource === "upload" && modelPhotos.length ? (
+                    <div className={`${ps2Well} mt-3 p-3`}>
+                      <p className="font-display text-[11px] font-bold uppercase tracking-[0.16em] text-white">Character sheet</p>
+                      {sheetUrl ? (
+                        <>
+                          <img src={sheetUrl} alt="Character sheet" className="mt-2 w-full rounded-lg border border-sky-200/40 bg-white" />
+                          <p className="mt-2 text-xs text-sky-100/60">Locked in. Every frame uses this sheet so the face and body stay the same.</p>
+                          <div className="mt-3 flex gap-2">
+                            <input
+                              value={characterName}
+                              onChange={(e) => setCharacterName(e.target.value)}
+                              placeholder="Name this character"
+                              aria-label="Character name"
+                              className="min-w-0 flex-1 rounded-lg border border-sky-300/25 bg-[#020a24]/70 px-3 py-2 text-sm text-white placeholder:text-sky-100/35"
+                            />
+                            <button type="button" disabled={savingCharacter} onClick={() => void saveCharacter()} className={`${ps2Ghost} px-3 py-2 text-[10px]`}>
+                              {savingCharacter ? <Loader2 size={13} className="animate-spin" /> : <Ps2Glyph glyph="○" className="h-5 w-5 text-[10px]" />} Save character
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <p className="mt-1 text-xs text-sky-100/60">
+                            Builds a front / side / back / face sheet from your photo so the AI keeps the same person instead of guessing. Required before you start.
+                          </p>
+                          <button type="button" disabled={buildingSheet || !canAfford(SHEET_CREDITS)} onClick={() => void buildSheet()} className={`${ps2Button} mt-3 w-full`}>
+                            {buildingSheet ? <Loader2 size={16} className="animate-spin" /> : <Ps2Glyph glyph="△" />}
+                            {buildingSheet ? "Building character sheet…" : `Build character sheet · ≈ ${SHEET_CREDITS} cr`}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
                   {analysisState === "running" ? <p className="mt-2 text-xs text-sky-100/55">Finding the person in your clip…</p> : null}
                 </div>
               ) : (
@@ -818,7 +1059,7 @@ function TitleScreen({ onStart }: { onStart: () => void }) {
 
 /* ----------------------------- loading screen ----------------------------- */
 
-function LoadingScreen({ tiles, stylingDone, total, renderingVideo, lowPoly }: { tiles: { source: string | null; done: string | null }[]; stylingDone: number; total: number; renderingVideo: boolean; lowPoly?: boolean }) {
+function LoadingScreen({ tiles, stylingDone, total, renderingVideo, lowPoly, status }: { tiles: { source: string | null; done: string | null }[]; stylingDone: number; total: number; renderingVideo: boolean; lowPoly?: boolean; status?: string | null }) {
   const [tick, setTick] = useState(0);
   const renderStart = useRef<number | null>(null);
   if (renderingVideo && renderStart.current === null) renderStart.current = Date.now();
@@ -834,7 +1075,7 @@ function LoadingScreen({ tiles, stylingDone, total, renderingVideo, lowPoly }: {
 
   return (
     <div className="relative flex h-full min-h-[520px] flex-col items-center justify-center gap-6 p-6">
-      <p className="font-display text-[11px] font-bold uppercase tracking-[0.45em] text-sky-300">{renderingVideo ? "Rendering stage" : "Styling outfit"}{lowPoly ? " · Low poly" : ""}</p>
+      <p className="font-display text-[11px] font-bold uppercase tracking-[0.45em] text-sky-300">{status ?? (renderingVideo ? "Rendering stage" : "Styling outfit")}{lowPoly ? " · Low poly" : ""}</p>
 
       {/* featured "character select" card: locked silhouette until its frame is styled */}
       <div className="relative aspect-[9/16] w-[min(260px,60vw)] overflow-hidden rounded-2xl border border-sky-200/40 bg-[#020a24] shadow-[0_0_60px_-12px_rgba(77,168,255,0.85)]">

@@ -190,9 +190,10 @@ export async function uploadAvatarReference(file: File): Promise<string> {
   });
   if (error) throw new Error(error.message || "Upload failed — please try again.");
 
-  const url = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl;
-  if (!url) throw new Error("Upload succeeded but no public URL was returned.");
-  return url;
+  // fuse-assets is private: hand back a long-lived signed link (the server resolves the path from it).
+  const { data, error: signError } = await supabase.storage.from(AVATAR_BUCKET).createSignedUrl(path, 60 * 60 * 24 * 365);
+  if (signError || !data?.signedUrl) throw new Error(signError?.message ?? "Upload succeeded but the image couldn't be linked.");
+  return data.signedUrl;
 }
 
 export const AVATAR_UPLOAD_TIPS = [
