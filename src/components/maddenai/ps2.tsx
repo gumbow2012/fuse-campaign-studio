@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 /**
  * MADDEN AI "PS2" look: deep-blue fog, glossy translucent panels with a lit
@@ -71,3 +72,31 @@ export function Ps2Backdrop({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+/** Video-game option cycler: ◀ VALUE ▶ (also arrow keys when focused). */
+export function OptionCycler({ options, value, onChange, label }: { options: { label: string; value: string }[]; value: string; onChange: (v: string) => void; label: string }) {
+  const index = Math.max(0, options.findIndex((o) => o.value === value));
+  const step = (d: number) => onChange(options[(index + d + options.length) % options.length].value);
+  return (
+    <div
+      role="spinbutton"
+      tabIndex={0}
+      aria-label={label}
+      aria-valuetext={options[index].label}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
+        if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
+      }}
+      className="flex items-center gap-1 rounded-lg border border-sky-300/30 bg-[#020a24]/80 p-1 outline-none focus-visible:border-sky-200 focus-visible:shadow-[0_0_0_2px_rgba(124,227,255,0.35)]"
+    >
+      <button type="button" tabIndex={-1} aria-label="Previous" onClick={() => step(-1)} className="grid h-7 w-7 place-items-center rounded-md text-sky-200 hover:bg-sky-400/15 hover:text-white">
+        <ChevronLeft size={16} />
+      </button>
+      <span className="min-w-0 flex-1 truncate text-center font-display text-[11px] font-bold uppercase tracking-[0.14em] text-white">{options[index].label}</span>
+      <button type="button" tabIndex={-1} aria-label="Next" onClick={() => step(1)} className="grid h-7 w-7 place-items-center rounded-md text-sky-200 hover:bg-sky-400/15 hover:text-white">
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+}
+

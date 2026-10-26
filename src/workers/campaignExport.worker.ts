@@ -754,6 +754,8 @@ async function runExport(request: Extract<WorkerRequest, { type: "export" }>) {
       ? { codec: "aac", numberOfChannels: audioRef.channels, sampleRate: audioRef.sampleRate }
       : undefined,
     fastStart: "in-memory",
+    // Some sources (B-frames / edit lists) decode with a first PTS > 0; shift all tracks together instead of failing.
+    firstTimestampBehavior: "cross-track-offset",
   });
 
   let offsetUs = 0;

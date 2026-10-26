@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Download, Link2, Loader2, Plus, Upload, X } from "lucide-react";
+import { Link2, Loader2, Plus, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import PageMeta from "@/components/mvp/PageMeta";
 import MaddenAIShell from "@/components/maddenai/MaddenAIShell";
-import { Ps2Glyph, ps2Button, ps2Ghost, ps2Panel, ps2Well } from "@/components/maddenai/ps2";
+import { OptionCycler, Ps2Glyph, ps2Button, ps2Ghost, ps2Panel, ps2Well } from "@/components/maddenai/ps2";
 import SubjectModelSelector from "@/components/outfitswap/SubjectModelSelector";
+import ResultStage from "@/components/maddenai/ResultStage";
 import { useAuth } from "@/contexts/AuthContext";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { IMAGE_FLAT_USD, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
@@ -48,6 +49,9 @@ const VIDEO_USD_PER_SECOND = 0.3024; // matches the Pro editor's Seedance 2.0 ra
 const VIDEO_RESOLUTION = "1080p";
 const MAX_PIECES = 4;
 const BACK_CREDITS = creditsFromUsd(IMAGE_FLAT_USD); // one 1K Nano Banana Pro image
+/** Appended to the swap + render prompts when Low Poly Mode is on. */
+const LOW_POLY_PROMPT =
+  "STYLE OVERRIDE — LOW POLY MODE: render the ENTIRE image (person, clothing, environment, lighting) as a PlayStation 2-era low-poly 3D video game scene: visible flat-shaded polygons, faceted angular geometry, low-resolution textures with slight pixelation, simple baked lighting, early-2000s console cutscene look. Keep the same composition, pose, camera angle and framing, and keep the garments' exact colors, graphics and logos (rendered as low-res game textures). Not photorealistic.";
 const TIPS = [
   "Clean product photos on a plain background give the sharpest fit.",
   "One person facing the camera swaps best.",
@@ -75,33 +79,6 @@ function StepLabel({ glyph, title, hint, done }: { glyph: "□" | "△" | "○" 
       ) : hint ? (
         <span className="ml-auto text-[11px] text-sky-100/45">{hint}</span>
       ) : null}
-    </div>
-  );
-}
-
-/** Video-game option cycler: ◀ VALUE ▶ (also arrow keys when focused). */
-function OptionCycler({ options, value, onChange, label }: { options: { label: string; value: string }[]; value: string; onChange: (v: string) => void; label: string }) {
-  const index = Math.max(0, options.findIndex((o) => o.value === value));
-  const step = (d: number) => onChange(options[(index + d + options.length) % options.length].value);
-  return (
-    <div
-      role="spinbutton"
-      tabIndex={0}
-      aria-label={label}
-      aria-valuetext={options[index].label}
-      onKeyDown={(e) => {
-        if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
-        if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
-      }}
-      className="flex items-center gap-1 rounded-lg border border-sky-300/30 bg-[#020a24]/80 p-1 outline-none focus-visible:border-sky-200 focus-visible:shadow-[0_0_0_2px_rgba(124,227,255,0.35)]"
-    >
-      <button type="button" tabIndex={-1} aria-label="Previous" onClick={() => step(-1)} className="grid h-7 w-7 place-items-center rounded-md text-sky-200 hover:bg-sky-400/15 hover:text-white">
-        <ChevronLeft size={16} />
-      </button>
-      <span className="min-w-0 flex-1 truncate text-center font-display text-[11px] font-bold uppercase tracking-[0.14em] text-white">{options[index].label}</span>
-      <button type="button" tabIndex={-1} aria-label="Next" onClick={() => step(1)} className="grid h-7 w-7 place-items-center rounded-md text-sky-200 hover:bg-sky-400/15 hover:text-white">
-        <ChevronRight size={16} />
-      </button>
     </div>
   );
 }
@@ -160,6 +137,7 @@ export default function MaddenAIStudio() {
   const [model, setModel] = useState<OutfitSwapSubjectModel>(KEEP_ORIGINAL_MODEL);
   const [note, setNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
+  const [lowPoly, setLowPoly] = useState(false);
 
   const [swaps, setSwaps] = useState<Record<number, SwapGeneration>>({});
   const [auto, setAuto] = useState(false);
@@ -167,6 +145,7 @@ export default function MaddenAIStudio() {
   const [videos, setVideos] = useState<SwapGeneration[]>([]);
   const [rendering, setRendering] = useState(false);
   const [stageVideoId, setStageVideoId] = useState<string | null>(null);
+  const [sessionVideoIds, setSessionVideoIds] = useState<string[]>([]);
 
   /* ----------------------------- title / menu ----------------------------- */
   const MENU = useMemo(
@@ -428,6 +407,7 @@ export default function MaddenAIStudio() {
     [analysis],
   );
   const cleanPieces = useMemo(() => pieces.map(({ backState: _ignored, ...garment }) => garment), [pieces]);
+  const prompt = useMemo(() => [note.trim(), lowPoly ? LOW_POLY_PROMPT : ""].filter(Boolean).join("\n\n"), [note, lowPoly]);
 
   const styleFrame = useCallback(
     async (index: number) => {
@@ -441,7 +421,7 @@ export default function MaddenAIStudio() {
         frameIndex: index,
         frameTime: frame.time,
         aspectRatio: meta?.aspectRatio,
-        extraPrompt: note,
+        extraPrompt: prompt,
         resolution: "2K",
         frameSubjects: subjectsFor(index),
         castAssignment: {},
@@ -449,7 +429,7 @@ export default function MaddenAIStudio() {
       });
       setSwaps((prev) => ({ ...prev, [index]: data.generation }));
     },
-    [frames, cleanPieces, meta, note, subjectsFor, modelAssignment],
+    [frames, cleanPieces, meta, prompt, subjectsFor, modelAssignment],
   );
 
   const styleAll = useCallback(async () => {
@@ -484,19 +464,20 @@ export default function MaddenAIStudio() {
         resolution: VIDEO_RESOLUTION,
         aspectRatio: meta?.aspectRatio,
         generateAudio: false,
-        extraPrompt: note,
+        extraPrompt: prompt,
         frameSubjects: Array.from(seen.values()),
         castAssignment: {},
         modelAssignment,
       });
       setVideos((prev) => [data.generation, ...prev]);
+      setSessionVideoIds((prev) => [...prev, data.generation.id]);
       setStageVideoId(data.generation.id);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't start the video");
     } finally {
       setRendering(false);
     }
-  }, [sourceVideo, readyUrls, cleanPieces, duration, meta, note, analysis, modelAssignment]);
+  }, [sourceVideo, readyUrls, cleanPieces, duration, meta, prompt, analysis, modelAssignment]);
 
   // One click: style the frames, then render as soon as they're all back.
   useEffect(() => {
@@ -507,13 +488,14 @@ export default function MaddenAIStudio() {
   }, [auto, styling, stylingLive, swapList.length, pickedFrames.length, readyUrls.length, makeVideo]);
 
   const stageVideo = videos.find((v) => v.id === stageVideoId) ?? null;
+  const stageFromSession = !!stageVideoId && sessionVideoIds.includes(stageVideoId);
   const clipReady = !!sourceVideo;
   const modelPicked = !!(model.uploadedRefUrls?.length || model.avatarId);
   const outfitReady = pieces.length > 0 || (replacing && modelPicked);
   const modelReady = !replacing || (modelPicked && analysisState !== "running" && analysisState !== "idle");
   const backsBusy = pieces.some((p) => p.backState);
-  const loading = auto || styling || stylingLive || rendering || (!!stageVideo && isLive(stageVideo));
-  const canStart = clipReady && outfitReady && modelReady && !backsBusy && !loading;
+  const loading = auto || styling || rendering || (!!stageVideo && isLive(stageVideo));
+  const canStart = clipReady && outfitReady && modelReady && !backsBusy && !loading && !stylingLive;
 
   const begin = useCallback(() => {
     setStageVideoId(null);
@@ -569,24 +551,34 @@ export default function MaddenAIStudio() {
       ) : (
         <div className="mx-auto grid max-w-[1400px] gap-5 px-4 pb-16 pt-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_440px] lg:pt-8">
           {/* STAGE */}
-          <section className={`${ps2Panel} order-2 overflow-hidden lg:order-1 lg:min-h-[680px]`}>
+          <section className={`${ps2Panel} z-[2] order-2 overflow-hidden lg:order-1 lg:min-h-[680px]`}>
             {loading ? (
               <LoadingScreen
                 tiles={pickedFrames.map((i) => ({ source: frames[i]?.url ?? null, done: swaps[i]?.status === "complete" ? swaps[i]?.outputUrl ?? null : null }))}
                 stylingDone={swapList.filter((e) => e.swap?.status === "complete").length}
                 total={pickedFrames.length || FRAME_COUNT}
                 renderingVideo={rendering || (!!stageVideo && isLive(stageVideo))}
+                lowPoly={lowPoly}
               />
             ) : stageVideo ? (
-              <div className="flex h-full min-h-[420px] flex-col items-center justify-center gap-4 p-6">
+              <div className="flex h-full min-h-[420px] flex-col items-center justify-center">
                 {stageVideo.status === "complete" && stageVideo.outputUrl ? (
-                  <>
-                    <p className="crt-text font-display text-2xl font-black uppercase tracking-[0.12em] text-white">Outfit unlocked</p>
-                    <video src={stageVideo.outputUrl} className="max-h-[540px] rounded-2xl border border-sky-200/40 shadow-[0_0_60px_-10px_rgba(77,168,255,0.8)]" controls autoPlay loop muted playsInline />
-                    <a href={stageVideo.outputUrl} target="_blank" rel="noreferrer" className={ps2Ghost}>
-                      <Download size={15} /> Download
-                    </a>
-                  </>
+                  <ResultStage
+                    videoUrl={stageVideo.outputUrl}
+                    breakdown={stageFromSession ? pickedFrames.map((i) => ({
+                      index: i,
+                      time: frames[i]?.time ?? 0,
+                      source: frames[i]?.url ?? null,
+                      styled: swaps[i]?.outputUrl ?? null,
+                      live: isLive(swaps[i]),
+                      failed: swaps[i]?.status === "failed",
+                    })) : []}
+                    onRedoFrame={(i) => void styleFrame(i).catch((e) => toast.error(e instanceof Error ? e.message : "Couldn't redo that frame"))}
+                    onRerender={() => void makeVideo()}
+                    rerenderCredits={videoCredits}
+                    frameCredits={creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K"))}
+                    rerenderDisabled={stylingLive || rendering || !readyUrls.length || !canAfford(videoCredits)}
+                  />
                 ) : (
                   <p className="max-w-sm text-center text-sky-100/75">{stageVideo.error ?? "That render didn't finish."} Credits for failed renders go back to your account.</p>
                 )}
@@ -740,6 +732,34 @@ export default function MaddenAIStudio() {
 
             {/* ✕ START */}
             <div className={`${ps2Panel} p-4`}>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={lowPoly}
+                onClick={() => setLowPoly((v) => !v)}
+                className={`mb-3 flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
+                  lowPoly
+                    ? "border-sky-200/70 bg-[linear-gradient(90deg,rgba(77,168,255,0.35),rgba(20,60,180,0.25))] shadow-[0_0_24px_-4px_rgba(77,168,255,0.8)]"
+                    : "border-sky-300/25 bg-[#020a24]/60 hover:border-sky-200/50"
+                }`}
+              >
+                <span aria-hidden className="grid h-8 w-8 place-items-center">
+                  <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke={lowPoly ? "#7CE3FF" : "#6f8fbf"} strokeWidth="1.5" strokeLinejoin="round">
+                    <path d="M16 3 28 10v12L16 29 4 22V10z" />
+                    <path d="M16 3v26M4 10l24 12M28 10 4 22" opacity=".6" />
+                  </svg>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 font-display text-[12px] font-bold uppercase tracking-[0.14em] text-white">
+                    Low Poly Mode
+                    <span className="rounded border border-[#FF8C9A]/60 bg-[#FF8C9A]/15 px-1.5 py-px text-[9px] tracking-[0.2em] text-[#FFB3BE]">New</span>
+                  </span>
+                  <span className="block text-[11px] text-sky-100/55">Swaps the outfit and remakes the whole video in PS2 low-poly style.</span>
+                </span>
+                <span className={`h-5 w-9 shrink-0 rounded-full border p-0.5 transition ${lowPoly ? "border-sky-200 bg-sky-400/60" : "border-sky-300/30 bg-[#020a24]"}`}>
+                  <span className={`block h-3.5 w-3.5 rounded-full bg-white transition ${lowPoly ? "translate-x-4" : ""}`} />
+                </span>
+              </button>
               {canAfford(totalCredits) ? (
                 <button type="button" className={`${ps2Button} w-full py-4 text-[14px]`} disabled={!canStart} onClick={begin}>
                   {loading ? <Loader2 size={16} className="animate-spin" /> : <Ps2Glyph />}
@@ -798,7 +818,7 @@ function TitleScreen({ onStart }: { onStart: () => void }) {
 
 /* ----------------------------- loading screen ----------------------------- */
 
-function LoadingScreen({ tiles, stylingDone, total, renderingVideo }: { tiles: { source: string | null; done: string | null }[]; stylingDone: number; total: number; renderingVideo: boolean }) {
+function LoadingScreen({ tiles, stylingDone, total, renderingVideo, lowPoly }: { tiles: { source: string | null; done: string | null }[]; stylingDone: number; total: number; renderingVideo: boolean; lowPoly?: boolean }) {
   const [tick, setTick] = useState(0);
   const renderStart = useRef<number | null>(null);
   if (renderingVideo && renderStart.current === null) renderStart.current = Date.now();
@@ -814,7 +834,7 @@ function LoadingScreen({ tiles, stylingDone, total, renderingVideo }: { tiles: {
 
   return (
     <div className="relative flex h-full min-h-[520px] flex-col items-center justify-center gap-6 p-6">
-      <p className="font-display text-[11px] font-bold uppercase tracking-[0.45em] text-sky-300">{renderingVideo ? "Rendering stage" : "Styling outfit"}</p>
+      <p className="font-display text-[11px] font-bold uppercase tracking-[0.45em] text-sky-300">{renderingVideo ? "Rendering stage" : "Styling outfit"}{lowPoly ? " · Low poly" : ""}</p>
 
       {/* featured "character select" card: locked silhouette until its frame is styled */}
       <div className="relative aspect-[9/16] w-[min(260px,60vw)] overflow-hidden rounded-2xl border border-sky-200/40 bg-[#020a24] shadow-[0_0_60px_-12px_rgba(77,168,255,0.85)]">
