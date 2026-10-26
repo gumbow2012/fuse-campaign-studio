@@ -59,11 +59,12 @@ const CHARACTER_SHEET_PROMPT =
   "CHARACTER REFERENCE SHEET of the EXACT same person shown in the reference photos — identical face, facial structure, skin tone, hair (style, length, color, texture), facial hair, tattoos, body type and height proportions. Do not beautify, slim, age, de-age or change ethnicity. Layout on one plain light-gray studio background, evenly spaced, no text or labels: full-body front view, full-body three-quarter view, full-body side profile, full-body back view, plus a large front face close-up and a three-quarter face close-up. Neutral relaxed standing pose, neutral expression, plain fitted black t-shirt and plain black pants, barefoot or plain black sneakers, no jewelry, hats or props (so outfits can be swapped later). Even soft studio lighting, photorealistic, sharp detail.";
 /** Appended to the swap + render prompts when Low Poly Mode is on. */
 const LOW_POLY_PROMPT = [
-  "STYLE OVERRIDE — LOW POLY MODE (Madden Media PS2 look). Re-render the ENTIRE frame as an in-engine screenshot from a 2000s third-person console game (PS2 / early PS3 era), NOT a photo and NOT a filter over a photo.",
-  "CHARACTER: rebuild the person as a stylized low-poly game character model — chunky simplified proportions, faceted angular geometry you can see, blocky voxel-like hair (braids/twists/afro become stacked cubes or chunky polygon clumps), mitten-simple hands, smooth matte skin with flat painted shading, no pores or photo skin detail.",
-  "CLOTHING: keep the exact garments, colors, prints and logos from the references, but rendered as low-res game textures on simple low-poly cloth meshes (slightly stiff folds, crisp texture edges).",
-  "ENVIRONMENT: rebuild the same location as a game level — simplified modeled walls, props and shelves, glossy reflective tile or polished floors with visible low-res texture stepping, bright clean fluorescent / neon game lighting with soft bloom, baked shadows, slight texture pixelation.",
-  "Keep the same camera angle, framing, pose and composition as the source frame. No added text, UI or watermarks.",
+  "STYLE OVERRIDE — LOW POLY MODE. PlayStation 2 era low-poly video game screenshot.",
+  "Re-create the source frame as a screenshot from a 2001 PS2 game: the person becomes a low-poly player avatar wearing the outfit described in this request (exact garment colors, prints and logos as low-res textures), with the same hairstyle and hair color, same pose, same camera angle and framing.",
+  "Keep only the accessories that are actually in the source frame (hoods stay as they are) and never add any, such as sunglasses, that are not there.",
+  "The background becomes a matching empty liminal game room.",
+  "Rendered entirely as 2001 PlayStation 2 low-poly 3D graphics: chunky visible polygons, blurry low-resolution textures, dithered gradients, hard aliased edges with no anti-aliasing, flat vertex lighting, nostalgic uncanny quiet, faint CRT phosphor tint.",
+  "Translate everything into crude low-poly geometry, never photorealism. No text, no UI, no watermark.",
 ].join(" ");
 const TIPS = [
   "Clean product photos on a plain background give the sharpest fit.",
