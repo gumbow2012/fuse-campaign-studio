@@ -451,3 +451,7 @@
 @media (prefers-reduced-motion: reduce) {
   .maddenai-glow, .crt-overlay::before, .crt-overlay::after { animation: none; }
 }
+
+@keyframes ps2-blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0.15; } }
+.ps2-blink { animation: ps2-blink 1.1s steps(1) infinite; }
+@media (prefers-reduced-motion: reduce) { .ps2-blink { animation: none; } }
