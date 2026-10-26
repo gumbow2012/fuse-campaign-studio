@@ -47,6 +47,7 @@ export default function SubjectModelSelector({
   onChange,
   compact = false,
   hideSourcePicker = false,
+  hideSave = false,
 }: {
   userId?: string | null;
   model: OutfitSwapSubjectModel | null;
@@ -54,6 +55,8 @@ export default function SubjectModelSelector({
   compact?: boolean;
   /** The host page renders its own source picker (MADDEN AI Quick Swap). */
   hideSourcePicker?: boolean;
+  /** The host page offers its own "save character" flow. */
+  hideSave?: boolean;
 }) {
   const source = model?.modelSource ?? "keep_original";
   const [picking, setPicking] = useState(false);
@@ -230,7 +233,7 @@ export default function SubjectModelSelector({
             <p className="text-[10px] text-muted-foreground">
               {refs.length}/{MAX_MODEL_REFERENCES} photos · used only in this project
             </p>
-            {refs.length ? (
+            {refs.length && !hideSave ? (
               <Button
                 type="button"
                 size="sm"

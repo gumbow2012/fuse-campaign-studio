@@ -48,6 +48,7 @@ class CampaignExportController {
   private listeners = new Set<(status: ExportStatus) => void>();
   private status: ExportStatus = INITIAL;
   private jobId: string | null = null;
+  private autoDownload = true;
   private supported = true;
 
   subscribe(listener: (status: ExportStatus) => void) {
@@ -112,7 +113,7 @@ class CampaignExportController {
           durationMs: message.durationMs,
           error: null,
         });
-        triggerDownload(url, message.fileName);
+        if (this.autoDownload) triggerDownload(url, message.fileName);
         return;
       }
       case "export-error":
@@ -148,6 +149,7 @@ class CampaignExportController {
     target: ExportTarget,
     projectName: string | null,
     mixedAudio?: MixedAudioPayload | null,
+    options?: { download?: boolean },
   ) {
     const worker = this.ensureWorker();
     if (!worker || !this.supported) {
@@ -156,6 +158,7 @@ class CampaignExportController {
     }
     if (this.status.downloadUrl) URL.revokeObjectURL(this.status.downloadUrl);
     this.jobId = `export-${Date.now()}`;
+    this.autoDownload = options?.download ?? true;
     this.emit({
       phase: "preparing",
       progress: 0,
