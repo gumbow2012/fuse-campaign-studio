@@ -46,11 +46,14 @@ export default function SubjectModelSelector({
   model,
   onChange,
   compact = false,
+  hideSourcePicker = false,
 }: {
   userId?: string | null;
   model: OutfitSwapSubjectModel | null;
   onChange: (next: OutfitSwapSubjectModel) => void;
   compact?: boolean;
+  /** The host page renders its own source picker (MADDEN AI Quick Swap). */
+  hideSourcePicker?: boolean;
 }) {
   const source = model?.modelSource ?? "keep_original";
   const [picking, setPicking] = useState(false);
@@ -131,7 +134,7 @@ export default function SubjectModelSelector({
 
   return (
     <div className="space-y-2">
-      <div>
+      <div className={hideSourcePicker ? "hidden" : undefined}>
         <label className="mb-1 block text-[10px] uppercase tracking-[0.14em] text-cyan-200/70">Model</label>
         <select
           value={source}

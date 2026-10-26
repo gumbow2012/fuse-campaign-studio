@@ -17,6 +17,9 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       : "border-transparent text-sky-100/60 hover:text-white"
   }`;
 
+const chip =
+  "items-center gap-1.5 whitespace-nowrap rounded-lg border border-sky-300/25 bg-sky-400/[0.06] px-3 py-1.5 font-display text-[10px] font-bold uppercase tracking-[0.16em] text-sky-100/80 transition hover:border-sky-200/60 hover:text-white";
+
 const NAV = [
   { to: "/maddenai", label: "Outfit Swap", end: true },
   { to: "/maddenai/create", label: "Image & Video" },
@@ -42,8 +45,10 @@ export default function MaddenAIShell({ children }: { children: ReactNode }) {
                       {(profile.credits_balance ?? 0).toLocaleString()} CR
                     </Link>
                   ) : null}
-                  <Link to="/account" className="hidden text-sky-100/60 hover:text-white sm:inline">Account</Link>
-                  <button type="button" onClick={() => void signOut()} className="hidden text-sky-100/60 hover:text-white sm:inline">Sign out</button>
+                  <Link to="/account" className={`${chip} hidden sm:inline-flex`}>Account</Link>
+                  <button type="button" onClick={() => void signOut()} className={`${chip} hidden sm:inline-flex`}>
+                    <span aria-hidden className="text-[#FF8C9A]">○</span> Sign out
+                  </button>
                 </>
               ) : (
                 <Link

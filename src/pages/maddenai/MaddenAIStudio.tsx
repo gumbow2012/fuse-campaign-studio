@@ -1,23 +1,36 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowRight, Check, Download, Link2, Loader2, Plus, Shirt, Upload, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { ChevronLeft, ChevronRight, Download, Link2, Loader2, Plus, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import PageMeta from "@/components/mvp/PageMeta";
-import MaddenAIShell, { MADDENAI } from "@/components/maddenai/MaddenAIShell";
+import MaddenAIShell from "@/components/maddenai/MaddenAIShell";
 import { Ps2Glyph, ps2Button, ps2Ghost, ps2Panel, ps2Well } from "@/components/maddenai/ps2";
+import SubjectModelSelector from "@/components/outfitswap/SubjectModelSelector";
 import { useAuth } from "@/contexts/AuthContext";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { IMAGE_FLAT_USD, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
 import { compressImageFile } from "@/lib/imageCompress";
 import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
 import { createOutfitSwapFolder, uploadToStorage, uploadWithConcurrency } from "@/services/storageUpload";
-import { callOutfitSwap, type OutfitSwapGarment, type SwapGeneration } from "@/services/outfitSwap";
-import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
+import {
+  KEEP_ORIGINAL_MODEL,
+  analyzeOutfitSwapSource,
+  callOutfitSwap,
+  isKeepOriginal,
+  primarySubjectId,
+  type OutfitSwapFrameSubject,
+  type OutfitSwapGarment,
+  type OutfitSwapSourceAnalysis,
+  type OutfitSwapSubjectModel,
+  type SwapGeneration,
+} from "@/services/outfitSwap";
 
 /**
- * MADDEN AI — the guided, one-screen version of Outfit Swap.
+ * MADDEN AI — the guided, game-styled version of Outfit Swap.
  * Same `outfit-swap` edge function and credits as the Pro editor, with the
  * choices made for you: 4 evenly spread frames, 2K swaps, Seedance 2.0 at 1080p.
+ * Flow: title screen -> mode select -> setup (clip, outfit, player) -> loading screen -> result.
  */
 
 const PIECE_TYPES = [
@@ -34,55 +47,164 @@ const VIDEO_MODEL = "seedance-2.0";
 const VIDEO_USD_PER_SECOND = 0.3024; // matches the Pro editor's Seedance 2.0 rate
 const VIDEO_RESOLUTION = "1080p";
 const MAX_PIECES = 4;
+const BACK_CREDITS = creditsFromUsd(IMAGE_FLAT_USD); // one 1K Nano Banana Pro image
+const TIPS = [
+  "Clean product photos on a plain background give the sharpest fit.",
+  "One person facing the camera swaps best.",
+  "Add the back of a piece so turns and walk-aways stay right.",
+  "You can leave this page. Your video lands in Your videos.",
+];
 
 type Frame = { time: number; url: string };
 type SourceVideo = { path: string; duration: number; width: number; height: number };
+type Screen = "title" | "menu" | "setup";
+type Piece = OutfitSwapGarment & { backState?: "generating" | "uploading" | null };
 
 const isLive = (g?: SwapGeneration | null) => g?.status === "queued" || g?.status === "running";
 const display = { fontFamily: '"Orbitron Variable", Orbitron, system-ui, sans-serif', fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.02em" } as const;
 
-const STEP_GLYPHS = ["□", "△", "✕"] as const;
+/* ------------------------------ small parts ------------------------------ */
 
-function StepLabel({ n, title, done }: { n: number; title: string; done?: boolean }) {
+function StepLabel({ glyph, title, hint, done }: { glyph: "□" | "△" | "○" | "✕"; title: string; hint?: string; done?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
-      {done ? (
-        <span className="grid h-6 w-6 place-items-center rounded-full border border-sky-100/70 bg-[linear-gradient(180deg,#8FD0FF,#2F6FF0)] text-white shadow-[0_0_14px_rgba(77,168,255,0.8)]">
-          <Check size={13} />
-        </span>
-      ) : (
-        <Ps2Glyph glyph={STEP_GLYPHS[n - 1]} />
-      )}
+      <Ps2Glyph glyph={glyph} className={done ? "shadow-[0_0_14px_rgba(124,227,255,0.9)]" : ""} />
       <h2 className="font-display text-[13px] font-bold uppercase tracking-[0.14em] text-white">{title}</h2>
+      {done ? (
+        <span className="ml-auto font-display text-[10px] font-bold uppercase tracking-[0.2em] text-sky-300">Ready</span>
+      ) : hint ? (
+        <span className="ml-auto text-[11px] text-sky-100/45">{hint}</span>
+      ) : null}
     </div>
   );
 }
 
+/** Video-game option cycler: ◀ VALUE ▶ (also arrow keys when focused). */
+function OptionCycler({ options, value, onChange, label }: { options: { label: string; value: string }[]; value: string; onChange: (v: string) => void; label: string }) {
+  const index = Math.max(0, options.findIndex((o) => o.value === value));
+  const step = (d: number) => onChange(options[(index + d + options.length) % options.length].value);
+  return (
+    <div
+      role="spinbutton"
+      tabIndex={0}
+      aria-label={label}
+      aria-valuetext={options[index].label}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
+        if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
+      }}
+      className="flex items-center gap-1 rounded-lg border border-sky-300/30 bg-[#020a24]/80 p-1 outline-none focus-visible:border-sky-200 focus-visible:shadow-[0_0_0_2px_rgba(124,227,255,0.35)]"
+    >
+      <button type="button" tabIndex={-1} aria-label="Previous" onClick={() => step(-1)} className="grid h-7 w-7 place-items-center rounded-md text-sky-200 hover:bg-sky-400/15 hover:text-white">
+        <ChevronLeft size={16} />
+      </button>
+      <span className="min-w-0 flex-1 truncate text-center font-display text-[11px] font-bold uppercase tracking-[0.14em] text-white">{options[index].label}</span>
+      <button type="button" tabIndex={-1} aria-label="Next" onClick={() => step(1)} className="grid h-7 w-7 place-items-center rounded-md text-sky-200 hover:bg-sky-400/15 hover:text-white">
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+}
+
+/** Click-or-drop zone. */
+function DropZone({ accept, multiple, onFiles, disabled, children, className = "" }: { accept: string; multiple?: boolean; onFiles: (files: File[]) => void; disabled?: boolean; children: ReactNode; className?: string }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setOver(false);
+    if (!disabled) onFiles(Array.from(e.dataTransfer.files ?? []));
+  };
+  return (
+    <>
+      <input ref={input} type="file" accept={accept} multiple={multiple} className="hidden" onChange={(e) => { onFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => input.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+        onDragLeave={() => setOver(false)}
+        onDrop={onDrop}
+        className={`flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-4 py-5 text-center transition disabled:opacity-50 ${
+          over ? "border-sky-200 bg-sky-400/15 shadow-[0_0_24px_rgba(77,168,255,0.5)]" : "border-sky-300/35 bg-[#020a24]/60 hover:border-sky-200/70"
+        } ${className}`}
+      >
+        {children}
+      </button>
+    </>
+  );
+}
+
+/* --------------------------------- page ---------------------------------- */
+
 export default function MaddenAIStudio() {
   const { user, profile, isAdmin } = useAuth();
-  const videoInput = useRef<HTMLInputElement>(null);
-  const pieceInput = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
   const busyUpload = useRef(false);
+
+  const [screen, setScreen] = useState<Screen>(() => (sessionStorageGet("maddenai-started") ? "menu" : "title"));
+  const [menuIndex, setMenuIndex] = useState(0);
 
   const [clipPreview, setClipPreview] = useState<string | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [sourceVideo, setSourceVideo] = useState<SourceVideo | null>(null);
   const [frames, setFrames] = useState<Frame[]>([]);
   const [clipProgress, setClipProgress] = useState<number | null>(null);
+  const [igUrl, setIgUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [analysis, setAnalysis] = useState<OutfitSwapSourceAnalysis | null>(null);
+  const [analysisState, setAnalysisState] = useState<"idle" | "running" | "done" | "error">("idle");
 
-  const [pieces, setPieces] = useState<OutfitSwapGarment[]>([]);
+  const [pieces, setPieces] = useState<Piece[]>([]);
   const [uploadingPiece, setUploadingPiece] = useState(false);
+  const [model, setModel] = useState<OutfitSwapSubjectModel>(KEEP_ORIGINAL_MODEL);
   const [note, setNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
 
   const [swaps, setSwaps] = useState<Record<number, SwapGeneration>>({});
   const [auto, setAuto] = useState(false);
-  const [igUrl, setIgUrl] = useState("");
-  const [importing, setImporting] = useState(false);
   const [styling, setStyling] = useState(false);
   const [videos, setVideos] = useState<SwapGeneration[]>([]);
   const [rendering, setRendering] = useState(false);
   const [stageVideoId, setStageVideoId] = useState<string | null>(null);
+
+  /* ----------------------------- title / menu ----------------------------- */
+  const MENU = useMemo(
+    () => [
+      { key: "quick", title: "Quick Swap", body: "Drop a clip and your clothes. One button does the rest.", glyph: "✕" as const },
+      { key: "pro", title: "Pro Editor", body: "Pick frames yourself, multiple people, hats and logos, per-frame fixes.", glyph: "○" as const },
+      { key: "create", title: "Image & Video", body: "Make images and video from a prompt or your photos.", glyph: "△" as const },
+    ],
+    [],
+  );
+  const choose = useCallback(
+    (key: string) => {
+      if (key === "pro") return navigate("/maddenai/pro");
+      if (key === "create") return navigate("/maddenai/create");
+      if (!user) return navigate("/auth?returnTo=/maddenai");
+      setScreen("setup");
+    },
+    [navigate, user],
+  );
+  const start = useCallback(() => {
+    sessionStorageSet("maddenai-started", "1");
+    setScreen("menu");
+  }, []);
+
+  useEffect(() => {
+    if (screen === "setup") return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest("input,textarea,select")) return;
+      if (screen === "title" && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); start(); }
+      if (screen === "menu") {
+        if (e.key === "ArrowDown") { e.preventDefault(); setMenuIndex((i) => (i + 1) % MENU.length); }
+        if (e.key === "ArrowUp") { e.preventDefault(); setMenuIndex((i) => (i - 1 + MENU.length) % MENU.length); }
+        if (e.key === "Enter") { e.preventDefault(); choose(MENU[menuIndex].key); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [screen, menuIndex, MENU, choose, start]);
 
   /* ----------------------------- cost preview ----------------------------- */
   const pickedFrames = useMemo(() => {
@@ -93,6 +215,7 @@ export default function MaddenAIStudio() {
   const duration = Math.min(15, Math.max(4, Math.round(meta?.duration ?? 5)));
   const styleCredits = creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K") * (pickedFrames.length || FRAME_COUNT));
   const videoCredits = creditsFromUsd(VIDEO_USD_PER_SECOND * duration * resolutionMultiplier(VIDEO_RESOLUTION));
+  const totalCredits = styleCredits + videoCredits;
   const balance = profile?.credits_balance ?? 0;
   const canAfford = (credits: number) => isAdmin || balance >= credits;
 
@@ -104,10 +227,7 @@ export default function MaddenAIStudio() {
       .catch(() => null);
   }, [user]);
 
-  const inFlight = useMemo(
-    () => [...Object.values(swaps), ...videos].filter(isLive).map((g) => g.id),
-    [swaps, videos],
-  );
+  const inFlight = useMemo(() => [...Object.values(swaps), ...videos].filter(isLive).map((g) => g.id), [swaps, videos]);
   useEffect(() => {
     if (!inFlight.length) return;
     let cancelled = false;
@@ -131,7 +251,7 @@ export default function MaddenAIStudio() {
     };
   }, [inFlight.join(",")]);
 
-  /* -------------------------------- step 1 -------------------------------- */
+  /* ------------------------------- the clip ------------------------------- */
   const onClip = useCallback(async (file?: File) => {
     if (!file || busyUpload.current) return;
     if (!/\.(mp4|mov)$/i.test(file.name) || file.size >= 50_000_000) {
@@ -145,6 +265,8 @@ export default function MaddenAIStudio() {
     setFrames([]);
     setSourceVideo(null);
     setSwaps({});
+    setAnalysis(null);
+    setAnalysisState("idle");
     setClipProgress(0);
     try {
       const el = await loadVideo(url);
@@ -162,6 +284,14 @@ export default function MaddenAIStudio() {
       );
       setFrames(uploaded);
       setSourceVideo({ path: stored.path, duration: m.duration, width: m.width, height: m.height });
+      // Same detection pass as the Pro editor: who is in each frame and which way they face.
+      setAnalysisState("running");
+      analyzeOutfitSwapSource(uploaded.map((f, i) => ({ frameId: `frame-${i}`, timestamp: f.time, imageUrl: f.url })))
+        .then((result) => {
+          setAnalysis(result.analysis);
+          setAnalysisState("done");
+        })
+        .catch(() => setAnalysisState("error"));
     } catch (error) {
       setClipPreview(null);
       setMeta(null);
@@ -171,123 +301,6 @@ export default function MaddenAIStudio() {
       setClipProgress(null);
     }
   }, []);
-
-  /* -------------------------------- step 2 -------------------------------- */
-  const onPieces = useCallback(async (files: File[]) => {
-    if (!files.length) return;
-    setUploadingPiece(true);
-    try {
-      const folder = await createOutfitSwapFolder();
-      const added: OutfitSwapGarment[] = [];
-      for (const file of files.slice(0, MAX_PIECES)) {
-        const compressed = await compressImageFile(file);
-        const { url } = await uploadToStorage(folder, compressed, compressed.name);
-        added.push({
-          id: crypto.randomUUID(),
-          url,
-          frontUrl: url,
-          hasBackDesign: false,
-          backUrl: null,
-          detailUrl: null,
-          sideUrl: null,
-          name: file.name,
-          type: PIECE_TYPES[0].type,
-          label: "",
-          person: "Main Subject",
-        });
-      }
-      setPieces((prev) => [...prev, ...added].slice(0, MAX_PIECES));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't upload that photo");
-    } finally {
-      setUploadingPiece(false);
-    }
-  }, []);
-
-  /* -------------------------------- step 3 -------------------------------- */
-  const styleFrame = useCallback(
-    async (index: number) => {
-      const frame = frames[index];
-      if (!frame) return;
-      const data = await callOutfitSwap<{ generation: SwapGeneration }>({
-        action: "swap_frame",
-        sourceFrameUrl: frame.url,
-        garments: pieces,
-        person: "Main Subject",
-        frameIndex: index,
-        frameTime: frame.time,
-        aspectRatio: meta?.aspectRatio,
-        extraPrompt: note,
-        resolution: "2K",
-        frameSubjects: [],
-        castAssignment: {},
-        modelAssignment: {},
-      });
-      setSwaps((prev) => ({ ...prev, [index]: data.generation }));
-    },
-    [frames, pieces, meta, note],
-  );
-
-  const styleAll = useCallback(async () => {
-    setStyling(true);
-    try {
-      for (const index of pickedFrames) await styleFrame(index);
-    } catch (error) {
-      setAuto(false);
-      toast.error(error instanceof Error ? error.message : "Couldn't start styling");
-    } finally {
-      setStyling(false);
-    }
-  }, [pickedFrames, styleFrame]);
-
-  const swapList = pickedFrames.map((i) => ({ index: i, swap: swaps[i] })).filter((e) => e.swap);
-  const readyUrls = swapList
-    .filter((e) => e.swap?.status === "complete" && e.swap.outputUrl)
-    .map((e) => e.swap!.outputUrl as string);
-  const stylingLive = swapList.some((e) => isLive(e.swap));
-
-  /* -------------------------------- step 4 -------------------------------- */
-  const makeVideo = useCallback(async () => {
-    if (!sourceVideo || !readyUrls.length) return;
-    setRendering(true);
-    try {
-      const data = await callOutfitSwap<{ generation: SwapGeneration }>({
-        action: "reconstruct",
-        sourceVideo,
-        frameUrls: readyUrls,
-        garments: pieces,
-        model: VIDEO_MODEL,
-        duration,
-        resolution: VIDEO_RESOLUTION,
-        aspectRatio: meta?.aspectRatio,
-        generateAudio: false,
-        extraPrompt: note,
-        frameSubjects: [],
-        castAssignment: {},
-        modelAssignment: {},
-      });
-      setVideos((prev) => [data.generation, ...prev]);
-      setStageVideoId(data.generation.id);
-      toast.success("Your video is rendering. It usually takes a few minutes.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't start the video");
-    } finally {
-      setRendering(false);
-    }
-  }, [sourceVideo, readyUrls, pieces, duration, meta, note]);
-
-  // One click: style the frames, then render as soon as they're all back.
-  useEffect(() => {
-    if (!auto || styling || stylingLive || swapList.length < pickedFrames.length) return;
-    setAuto(false);
-    if (readyUrls.length) void makeVideo();
-    else toast.error("Styling didn't work on this clip. Try another clip or photo. Failed steps are refunded.");
-  }, [auto, styling, stylingLive, swapList.length, pickedFrames.length, readyUrls.length, makeVideo]);
-
-  const makeIt = useCallback(() => {
-    setAuto(true);
-    void styleAll();
-  }, [styleAll]);
 
   /** Paste an Instagram link -> the server fetches the reel -> same path as an upload. */
   const importInstagram = useCallback(async () => {
@@ -318,14 +331,198 @@ export default function MaddenAIStudio() {
     }
   }, [igUrl, importing, onClip]);
 
+  /* ------------------------------- the outfit ------------------------------ */
+  const onPieces = useCallback(async (files: File[]) => {
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    if (!images.length) {
+      if (files.length) toast.error("Drop photos of your clothes (JPG, PNG or WEBP)");
+      return;
+    }
+    setUploadingPiece(true);
+    try {
+      const folder = await createOutfitSwapFolder();
+      const added: Piece[] = [];
+      for (const file of images.slice(0, MAX_PIECES)) {
+        const compressed = await compressImageFile(file);
+        const { url } = await uploadToStorage(folder, compressed, compressed.name);
+        added.push({
+          id: crypto.randomUUID(),
+          url,
+          frontUrl: url,
+          hasBackDesign: false,
+          backUrl: null,
+          detailUrl: null,
+          sideUrl: null,
+          name: file.name,
+          type: PIECE_TYPES[0].type,
+          label: "",
+          person: "Main Subject",
+        });
+      }
+      setPieces((prev) => [...prev, ...added].slice(0, MAX_PIECES));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't upload that photo");
+    } finally {
+      setUploadingPiece(false);
+    }
+  }, []);
+
+  const patchPiece = (id: string, patch: Partial<Piece>) => setPieces((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+
+  const uploadBack = useCallback(async (id: string, file?: File) => {
+    if (!file?.type.startsWith("image/")) return;
+    patchPiece(id, { backState: "uploading" });
+    try {
+      const folder = await createOutfitSwapFolder();
+      const compressed = await compressImageFile(file);
+      const { url } = await uploadToStorage(folder, compressed, compressed.name);
+      patchPiece(id, { backUrl: url, hasBackDesign: true, backState: null });
+    } catch (error) {
+      patchPiece(id, { backState: null });
+      toast.error(error instanceof Error ? error.message : "Couldn't upload the back");
+    }
+  }, []);
+
+  /** △ — make the back view from the front photo with Nano Banana Pro (generate-studio). */
+  const generateBack = useCallback(async (piece: Piece) => {
+    patchPiece(piece.id, { backState: "generating" });
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-studio", {
+        body: {
+          action: "start",
+          kind: "image",
+          model: "nano-banana-pro",
+          resolution: "1K",
+          aspectRatio: "1:1",
+          imageUrls: [piece.frontUrl],
+          prompt:
+            "Product photo of the BACK of this exact garment, laid flat and centered on a plain light-gray background, same framing and lighting as the reference. Keep the exact fabric, color, fit and construction. Do not copy the front graphics onto the back unless the reference clearly shows they wrap around; if the back design is unknown, keep the back plain. No person, no hanger, no text added.",
+        },
+      });
+      if (error) throw new Error(error.message);
+      const generationId = String(data?.generation?.id ?? "");
+      if (!generationId) throw new Error("Couldn't start the back view");
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 4000));
+        const status = await supabase.functions.invoke("generate-studio", { body: { action: "status", generationId } });
+        const g = status.data?.generation;
+        if (g?.status === "complete" && g.outputUrl) {
+          patchPiece(piece.id, { backUrl: String(g.outputUrl), hasBackDesign: true, backState: null });
+          return;
+        }
+        if (g?.status === "failed") throw new Error(g.error ?? "The back view failed. Credits were refunded.");
+      }
+      throw new Error("The back view is taking too long. Try again.");
+    } catch (error) {
+      patchPiece(piece.id, { backState: null });
+      toast.error(error instanceof Error ? error.message : "Couldn't make the back view");
+    }
+  }, []);
+
+  /* ------------------------------ generation ------------------------------ */
+  const subjectId = primarySubjectId(analysis);
+  const replacing = !isKeepOriginal(model);
+  const modelAssignment = useMemo(() => (replacing ? { [subjectId]: model } : {}), [replacing, subjectId, model]);
+  const subjectsFor = useCallback(
+    (index: number): OutfitSwapFrameSubject[] => analysis?.frames.find((f) => f.frameId === `frame-${index}`)?.subjects ?? [],
+    [analysis],
+  );
+  const cleanPieces = useMemo(() => pieces.map(({ backState: _ignored, ...garment }) => garment), [pieces]);
+
+  const styleFrame = useCallback(
+    async (index: number) => {
+      const frame = frames[index];
+      if (!frame) return;
+      const data = await callOutfitSwap<{ generation: SwapGeneration }>({
+        action: "swap_frame",
+        sourceFrameUrl: frame.url,
+        garments: cleanPieces,
+        person: "Main Subject",
+        frameIndex: index,
+        frameTime: frame.time,
+        aspectRatio: meta?.aspectRatio,
+        extraPrompt: note,
+        resolution: "2K",
+        frameSubjects: subjectsFor(index),
+        castAssignment: {},
+        modelAssignment,
+      });
+      setSwaps((prev) => ({ ...prev, [index]: data.generation }));
+    },
+    [frames, cleanPieces, meta, note, subjectsFor, modelAssignment],
+  );
+
+  const styleAll = useCallback(async () => {
+    setStyling(true);
+    try {
+      for (const index of pickedFrames) await styleFrame(index);
+    } catch (error) {
+      setAuto(false);
+      toast.error(error instanceof Error ? error.message : "Couldn't start styling");
+    } finally {
+      setStyling(false);
+    }
+  }, [pickedFrames, styleFrame]);
+
+  const swapList = pickedFrames.map((i) => ({ index: i, swap: swaps[i] })).filter((e) => e.swap);
+  const readyUrls = swapList.filter((e) => e.swap?.status === "complete" && e.swap.outputUrl).map((e) => e.swap!.outputUrl as string);
+  const stylingLive = swapList.some((e) => isLive(e.swap));
+
+  const makeVideo = useCallback(async () => {
+    if (!sourceVideo || !readyUrls.length) return;
+    setRendering(true);
+    try {
+      const seen = new Map<string, OutfitSwapFrameSubject>();
+      for (const f of analysis?.frames ?? []) for (const s of f.subjects ?? []) if (!seen.has(s.subjectId)) seen.set(s.subjectId, s);
+      const data = await callOutfitSwap<{ generation: SwapGeneration }>({
+        action: "reconstruct",
+        sourceVideo,
+        frameUrls: readyUrls,
+        garments: cleanPieces,
+        model: VIDEO_MODEL,
+        duration,
+        resolution: VIDEO_RESOLUTION,
+        aspectRatio: meta?.aspectRatio,
+        generateAudio: false,
+        extraPrompt: note,
+        frameSubjects: Array.from(seen.values()),
+        castAssignment: {},
+        modelAssignment,
+      });
+      setVideos((prev) => [data.generation, ...prev]);
+      setStageVideoId(data.generation.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't start the video");
+    } finally {
+      setRendering(false);
+    }
+  }, [sourceVideo, readyUrls, cleanPieces, duration, meta, note, analysis, modelAssignment]);
+
+  // One click: style the frames, then render as soon as they're all back.
+  useEffect(() => {
+    if (!auto || styling || stylingLive || swapList.length < pickedFrames.length) return;
+    setAuto(false);
+    if (readyUrls.length) void makeVideo();
+    else toast.error("Styling didn't work on this clip. Try another clip or photo. Failed steps are refunded.");
+  }, [auto, styling, stylingLive, swapList.length, pickedFrames.length, readyUrls.length, makeVideo]);
+
   const stageVideo = videos.find((v) => v.id === stageVideoId) ?? null;
   const clipReady = !!sourceVideo;
-  const step2Done = pieces.length > 0;
-  const totalCredits = styleCredits + videoCredits;
-  const working = auto || styling || stylingLive || rendering;
+  const modelPicked = !!(model.uploadedRefUrls?.length || model.avatarId);
+  const outfitReady = pieces.length > 0 || (replacing && modelPicked);
+  const modelReady = !replacing || (modelPicked && analysisState !== "running" && analysisState !== "idle");
+  const backsBusy = pieces.some((p) => p.backState);
+  const loading = auto || styling || stylingLive || rendering || (!!stageVideo && isLive(stageVideo));
+  const canStart = clipReady && outfitReady && modelReady && !backsBusy && !loading;
+
+  const begin = useCallback(() => {
+    setStageVideoId(null);
+    setSwaps({});
+    setAuto(true);
+    void styleAll();
+  }, [styleAll]);
 
   /* --------------------------------- view --------------------------------- */
-
   return (
     <MaddenAIShell>
       <PageMeta
@@ -334,194 +531,232 @@ export default function MaddenAIStudio() {
         path="/maddenai"
       />
 
-      <div className="mx-auto grid max-w-[1400px] gap-5 px-4 pb-16 pt-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:pt-8">
-        {/* STAGE */}
-        <section className={`${ps2Panel} order-2 overflow-hidden lg:order-1 lg:min-h-[640px]`}>
-          {stageVideo ? (
-            <div className="flex h-full min-h-[420px] flex-col items-center justify-center gap-4 p-6">
-              {stageVideo.status === "complete" && stageVideo.outputUrl ? (
-                <video src={stageVideo.outputUrl} className="max-h-[560px] rounded-2xl" controls autoPlay loop muted playsInline />
-              ) : stageVideo.status === "failed" || stageVideo.status === "canceled" ? (
-                <p className="max-w-sm text-center text-white/70">{stageVideo.error ?? "That render didn't finish."} Credits for failed renders go back to your account.</p>
-              ) : (
-                <div className="flex flex-col items-center gap-3 text-white/70">
-                  <Loader2 className="animate-spin" style={{ color: MADDENAI.accent }} size={32} />
-                  <p>Rendering your video…</p>
-                  <p className="text-xs text-sky-100/45">You can leave this page. It'll be under "Your videos".</p>
-                </div>
-              )}
-              {stageVideo.outputUrl ? (
-                <a href={stageVideo.outputUrl} target="_blank" rel="noreferrer" className={ps2Ghost}>
-                  <Download size={15} /> Download
-                </a>
-              ) : null}
-            </div>
-          ) : clipPreview ? (
-            <div className="flex h-full min-h-[420px] items-center justify-center p-6">
-              <video src={clipPreview} className="max-h-[560px] rounded-2xl" autoPlay loop muted playsInline />
-            </div>
-          ) : (
-            <div className="grid h-full min-h-[420px] place-items-center p-8">
-              <div className="max-w-xl text-center">
-                <img src="/maddenai/wordmark.png" alt="MADDEN AI" className="maddenai-glow mx-auto h-9 w-auto sm:h-11" />
-                <p className="mt-4 font-display text-[11px] font-bold uppercase tracking-[0.35em]" style={{ color: MADDENAI.glow }}>Press ✕ to start</p>
-                <h1 className="crt-text mt-4 text-balance text-3xl leading-[1.02] text-white sm:text-5xl" style={display}>
-                  Put your clothes on anyone. In any video.
-                </h1>
-                <p className="mx-auto mt-4 max-w-md text-sky-100/65">
-                  Drop a clip, add a photo of your piece, and MADDEN AI restyles the video. No set, no model, no prompts.
-                </p>
-                <div className="mx-auto mt-8 flex max-w-sm items-center justify-center gap-3">
-                  <img src="/cro-preview/pairs/changing-room-input.jpg" alt="Product photo of pink shorts" className="w-28 rounded-xl border border-sky-200/30 bg-white" />
-                  <ArrowRight className="shrink-0 text-sky-100/45" />
-                  <img src="/cro-preview/pairs/changing-room-output.jpg" alt="The same shorts worn in a generated scene" className="w-44 rounded-xl border border-sky-200/40 shadow-[0_20px_50px_-20px_rgba(60,150,255,0.8)]" />
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* CONTROLS */}
-        <aside className="order-1 flex flex-col gap-3 lg:order-2">
-          {!user ? (
-            <div className={`${ps2Panel} p-6`}>
-              <h2 className="text-2xl text-white" style={display}>Make your first swap</h2>
-              <p className="mt-2 text-sm text-sky-100/65">Sign in to upload your clip and your clothes. You'll see the credit cost before anything runs.</p>
-              <Link to="/auth?returnTo=/maddenai" className={`${ps2Button} mt-5 w-full`}>
-                <Ps2Glyph /> Sign in to start
-              </Link>
-            </div>
-          ) : (
-            <>
-              {/* 1 · clip */}
-              <div className={`${ps2Panel} p-4`}>
-                <StepLabel n={1} title="Your clip" done={clipReady} />
-                <input ref={videoInput} type="file" accept="video/mp4,video/quicktime,.mp4,.mov" className="hidden" onChange={(e) => { void onClip(e.target.files?.[0]); e.target.value = ""; }} />
-                {clipProgress !== null ? (
-                  <div className="mt-3">
-                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full transition-all" style={{ width: `${clipProgress}%`, background: MADDENAI.accent }} /></div>
-                    <p className="mt-2 text-xs text-sky-100/55">Reading your clip… {clipProgress}%</p>
-                  </div>
-                ) : clipReady ? (
-                  <button type="button" onClick={() => videoInput.current?.click()} className="mt-3 text-sm text-sky-100/65 underline-offset-4 hover:text-white hover:underline">
-                    {Math.round(meta?.duration ?? 0)}s clip ready · Change clip
+      {screen === "title" ? (
+        <TitleScreen onStart={start} />
+      ) : screen === "menu" ? (
+        <section className="mx-auto flex min-h-[calc(100vh-7rem)] max-w-[720px] flex-col justify-center px-4 py-12">
+          <img src="/maddenai/wordmark.png" alt="MADDEN AI" className="maddenai-glow mx-auto h-10 w-auto sm:h-14" />
+          <p className="mt-5 text-center font-display text-[11px] font-bold uppercase tracking-[0.4em] text-sky-300">Select mode</p>
+          <ul className="mt-8 flex flex-col gap-3" role="listbox" aria-label="Mode">
+            {MENU.map((item, i) => {
+              const active = i === menuIndex;
+              return (
+                <li key={item.key} role="option" aria-selected={active}>
+                  <button
+                    type="button"
+                    onMouseEnter={() => setMenuIndex(i)}
+                    onFocus={() => setMenuIndex(i)}
+                    onClick={() => choose(item.key)}
+                    className={`group flex w-full items-center gap-4 rounded-2xl border px-5 py-4 text-left transition ${
+                      active
+                        ? "border-sky-200/70 bg-[linear-gradient(90deg,rgba(77,168,255,0.35),rgba(20,60,180,0.25))] shadow-[inset_0_1px_0_rgba(200,235,255,0.5),0_0_34px_-6px_rgba(77,168,255,0.8)]"
+                        : "border-sky-300/15 bg-[#030c2c]/70 hover:border-sky-300/40"
+                    }`}
+                  >
+                    <span className={`font-display text-lg text-sky-200 transition ${active ? "ps2-blink opacity-100" : "opacity-0"}`}>▶</span>
+                    <Ps2Glyph glyph={item.glyph} />
+                    <span className="min-w-0 flex-1">
+                      <span className={`block font-display text-lg font-black uppercase tracking-[0.08em] ${active ? "crt-text text-white" : "text-sky-100/75"}`}>{item.title}</span>
+                      <span className="mt-0.5 block text-sm text-sky-100/60">{item.body}</span>
+                    </span>
                   </button>
-                ) : (
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-6 text-center font-display text-[10px] font-bold uppercase tracking-[0.25em] text-sky-100/40">↑ ↓ choose · Enter select</p>
+        </section>
+      ) : (
+        <div className="mx-auto grid max-w-[1400px] gap-5 px-4 pb-16 pt-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_440px] lg:pt-8">
+          {/* STAGE */}
+          <section className={`${ps2Panel} order-2 overflow-hidden lg:order-1 lg:min-h-[680px]`}>
+            {loading ? (
+              <LoadingScreen
+                tiles={pickedFrames.map((i) => ({ source: frames[i]?.url ?? null, done: swaps[i]?.status === "complete" ? swaps[i]?.outputUrl ?? null : null }))}
+                stylingDone={swapList.filter((e) => e.swap?.status === "complete").length}
+                total={pickedFrames.length || FRAME_COUNT}
+                renderingVideo={rendering || (!!stageVideo && isLive(stageVideo))}
+              />
+            ) : stageVideo ? (
+              <div className="flex h-full min-h-[420px] flex-col items-center justify-center gap-4 p-6">
+                {stageVideo.status === "complete" && stageVideo.outputUrl ? (
                   <>
-                    <button type="button" onClick={() => videoInput.current?.click()} className="mt-3 flex w-full flex-col items-center gap-1.5 rounded-xl border border-dashed border-sky-300/35 bg-[#020a24]/60 px-4 py-6 text-center hover:border-sky-200/70">
-                      <Upload size={20} className="text-white/70" />
-                      <span className="text-sm font-semibold text-white">Upload a video</span>
-                      <span className="text-xs text-sky-100/50">MP4 or MOV · 2–15 seconds · one person works best</span>
-                    </button>
-                    <div className="my-3 flex items-center gap-3 font-display text-[10px] font-bold uppercase tracking-[0.25em] text-sky-100/40">
-                      <span className="h-px flex-1 bg-sky-300/20" /> or <span className="h-px flex-1 bg-sky-300/20" />
-                    </div>
-                    <form onSubmit={(e) => { e.preventDefault(); void importInstagram(); }} className="flex gap-2">
-                      <label className={`${ps2Well} flex min-w-0 flex-1 items-center gap-2 px-3`}>
-                        <Link2 size={15} className="shrink-0 text-sky-200/70" />
-                        <input
-                          value={igUrl}
-                          onChange={(e) => setIgUrl(e.target.value)}
-                          inputMode="url"
-                          placeholder="Paste an Instagram reel link"
-                          aria-label="Instagram reel link"
-                          className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-white outline-none placeholder:text-sky-100/35"
-                        />
-                      </label>
-                      <button type="submit" disabled={!igUrl.trim() || importing} className={`${ps2Ghost} px-4`}>
-                        {importing ? <Loader2 size={15} className="animate-spin" /> : "Import"}
-                      </button>
-                    </form>
-                    {importing ? <p className="mt-2 text-xs text-sky-100/55">Grabbing the reel from Instagram… this takes about 20 seconds.</p> : null}
+                    <p className="crt-text font-display text-2xl font-black uppercase tracking-[0.12em] text-white">Outfit unlocked</p>
+                    <video src={stageVideo.outputUrl} className="max-h-[540px] rounded-2xl border border-sky-200/40 shadow-[0_0_60px_-10px_rgba(77,168,255,0.8)]" controls autoPlay loop muted playsInline />
+                    <a href={stageVideo.outputUrl} target="_blank" rel="noreferrer" className={ps2Ghost}>
+                      <Download size={15} /> Download
+                    </a>
                   </>
+                ) : (
+                  <p className="max-w-sm text-center text-sky-100/75">{stageVideo.error ?? "That render didn't finish."} Credits for failed renders go back to your account.</p>
                 )}
               </div>
+            ) : clipPreview ? (
+              <div className="flex h-full min-h-[420px] items-center justify-center p-6">
+                <video src={clipPreview} className="max-h-[600px] rounded-2xl border border-sky-200/30" autoPlay loop muted playsInline />
+              </div>
+            ) : (
+              <div className="grid h-full min-h-[420px] place-items-center p-8 text-center">
+                <div>
+                  <img src="/maddenai/wordmark.png" alt="MADDEN AI" className="maddenai-glow mx-auto h-9 w-auto sm:h-11" />
+                  <p className="crt-text mt-6 text-balance text-3xl leading-[1.02] text-white sm:text-5xl" style={display}>Put your clothes on anyone.</p>
+                  <p className="mx-auto mt-4 max-w-md text-sky-100/65">Drop your clip to begin.</p>
+                </div>
+              </div>
+            )}
+          </section>
 
-              {/* 2 · clothes */}
-              <div className={`${ps2Panel} p-4`}>
-                <StepLabel n={2} title="Your clothes" done={step2Done} />
-                <input ref={pieceInput} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { void onPieces(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
-                <div className="mt-3 flex flex-col gap-2">
-                  {pieces.map((piece) => (
-                    <div key={piece.id} className={`${ps2Well} flex items-center gap-3 p-2`}>
-                      <img src={piece.url} alt="" className="h-14 w-14 rounded-lg bg-white object-contain" />
-                      <select
-                        aria-label="What is this piece?"
-                        value={piece.type}
-                        onChange={(e) => setPieces((prev) => prev.map((p) => (p.id === piece.id ? { ...p, type: e.target.value } : p)))}
-                        className="min-w-0 flex-1 rounded-lg border border-sky-300/25 bg-[#020a24]/70 px-2.5 py-2 text-sm text-white"
-                      >
-                        {PIECE_TYPES.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
-                      </select>
+          {/* CONTROLS */}
+          <aside className="order-1 flex flex-col gap-3 lg:order-2">
+            <button type="button" onClick={() => setScreen("menu")} className="self-start font-display text-[10px] font-bold uppercase tracking-[0.25em] text-sky-200/70 hover:text-white">
+              ◀ Mode select
+            </button>
+
+            {/* □ CLIP */}
+            <div className={`${ps2Panel} p-4`}>
+              <StepLabel glyph="□" title="Your clip" done={clipReady} hint="2–15 sec" />
+              {clipProgress !== null ? (
+                <div className="mt-3">
+                  <div className="h-2 overflow-hidden rounded-full border border-sky-300/30 bg-[#020a24]">
+                    <div className="h-full bg-[linear-gradient(90deg,#3C8CFF,#7CE3FF)] transition-all" style={{ width: `${clipProgress}%` }} />
+                  </div>
+                  <p className="mt-2 font-display text-[10px] font-bold uppercase tracking-[0.2em] text-sky-100/55">Loading clip… {clipProgress}%</p>
+                </div>
+              ) : clipReady ? (
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <p className="text-sm text-sky-100/75">{Math.round(meta?.duration ?? 0)}s clip loaded</p>
+                  <DropZone accept="video/mp4,video/quicktime,.mp4,.mov" onFiles={(f) => void onClip(f[0])} className="w-auto px-3 py-1.5">
+                    <span className="font-display text-[10px] font-bold uppercase tracking-[0.18em] text-sky-100">Change</span>
+                  </DropZone>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-3">
+                    <DropZone accept="video/mp4,video/quicktime,.mp4,.mov" onFiles={(f) => void onClip(f[0])}>
+                      <Upload size={20} className="text-sky-200" />
+                      <span className="text-sm font-semibold text-white">Drop a video or click to upload</span>
+                      <span className="text-xs text-sky-100/50">MP4 or MOV · one person facing camera works best</span>
+                    </DropZone>
+                  </div>
+                  <div className="my-3 flex items-center gap-3 font-display text-[10px] font-bold uppercase tracking-[0.25em] text-sky-100/40">
+                    <span className="h-px flex-1 bg-sky-300/20" /> or <span className="h-px flex-1 bg-sky-300/20" />
+                  </div>
+                  <form onSubmit={(e) => { e.preventDefault(); void importInstagram(); }} className="flex gap-2">
+                    <label className={`${ps2Well} flex min-w-0 flex-1 items-center gap-2 px-3`}>
+                      <Link2 size={15} className="shrink-0 text-sky-200/70" />
+                      <input value={igUrl} onChange={(e) => setIgUrl(e.target.value)} inputMode="url" placeholder="Paste an Instagram reel link" aria-label="Instagram reel link" className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-white outline-none placeholder:text-sky-100/35" />
+                    </label>
+                    <button type="submit" disabled={!igUrl.trim() || importing} className={`${ps2Ghost} px-4`}>
+                      {importing ? <Loader2 size={15} className="animate-spin" /> : "Import"}
+                    </button>
+                  </form>
+                  {importing ? <p className="mt-2 text-xs text-sky-100/55">Grabbing the reel from Instagram… about 20 seconds.</p> : null}
+                </>
+              )}
+            </div>
+
+            {/* △ OUTFIT */}
+            <div className={`${ps2Panel} p-4`}>
+              <StepLabel glyph="△" title="Your outfit" done={pieces.length > 0} hint={`${pieces.length}/${MAX_PIECES}`} />
+              <div className="mt-3 flex flex-col gap-2">
+                {pieces.map((piece) => (
+                  <div key={piece.id} className={`${ps2Well} p-2`}>
+                    <div className="flex items-center gap-2">
+                      <img src={piece.frontUrl} alt="Front" className="h-14 w-14 shrink-0 rounded-lg bg-white object-contain" />
+                      <div className="min-w-0 flex-1">
+                        <OptionCycler label="What is this piece?" options={PIECE_TYPES.map((t) => ({ label: t.label, value: t.type }))} value={piece.type} onChange={(type) => patchPiece(piece.id, { type })} />
+                      </div>
                       <button type="button" aria-label="Remove piece" onClick={() => setPieces((prev) => prev.filter((p) => p.id !== piece.id))} className="p-1.5 text-sky-100/45 hover:text-white">
                         <X size={16} />
                       </button>
                     </div>
-                  ))}
-                  {pieces.length < MAX_PIECES ? (
-                    <button type="button" disabled={uploadingPiece} onClick={() => pieceInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-sky-300/35 bg-[#020a24]/60 px-4 py-4 text-sm font-semibold text-white hover:border-sky-200/70 disabled:opacity-50">
-                      {uploadingPiece ? <Loader2 size={16} className="animate-spin" /> : pieces.length ? <Plus size={16} /> : <Shirt size={16} />}
-                      {pieces.length ? "Add another piece" : "Add a photo of your piece"}
-                    </button>
-                  ) : null}
-                  <p className="text-xs text-sky-100/45">A clean product photo on a plain background works best.</p>
-                </div>
-                {noteOpen ? (
-                  <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Anything to keep in mind? e.g. tuck the shirt in" className="mt-3 w-full rounded-lg border border-sky-300/25 bg-[#020a24]/70 px-3 py-2 text-sm text-white placeholder:text-white/30" />
-                ) : (
-                  <button type="button" onClick={() => setNoteOpen(true)} className="mt-2 text-xs text-sky-100/55 hover:text-white">+ Add a note</button>
-                )}
-              </div>
-
-              {/* 3 · make it */}
-              <div className={`${ps2Panel} p-4`}>
-                <StepLabel n={3} title="Make it" done={!!stageVideo && stageVideo.status === "complete"} />
-                {swapList.length ? (
-                  <div className="mt-3 grid grid-cols-4 gap-2">
-                    {swapList.map(({ index, swap }) => (
-                      <div key={index} className="aspect-[9/16] overflow-hidden rounded-lg border border-sky-300/25 bg-[#020a24]/70">
-                        {swap!.outputUrl ? (
-                          <img src={swap!.outputUrl} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                          <span className="grid h-full place-items-center">
-                            {isLive(swap) ? <Loader2 size={16} className="animate-spin text-sky-100/65" /> : <X size={16} className="text-sky-100/55" />}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                    <div className="mt-2 flex items-center gap-2">
+                      {piece.backUrl ? (
+                        <>
+                          <img src={piece.backUrl} alt="Back" className="h-10 w-10 rounded-md bg-white object-contain" />
+                          <span className="font-display text-[10px] font-bold uppercase tracking-[0.18em] text-sky-200">Back ready</span>
+                          <button type="button" onClick={() => patchPiece(piece.id, { backUrl: null, hasBackDesign: false })} className="ml-auto text-xs text-sky-100/50 hover:text-white">Remove</button>
+                        </>
+                      ) : piece.backState ? (
+                        <span className="flex items-center gap-2 text-xs text-sky-100/65">
+                          <Loader2 size={13} className="animate-spin" /> {piece.backState === "generating" ? "Generating the back…" : "Uploading the back…"}
+                        </span>
+                      ) : (
+                        <>
+                          <label className={`${ps2Ghost} flex-1 cursor-pointer px-2 py-2 text-[10px]`}>
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => { void uploadBack(piece.id, e.target.files?.[0]); e.target.value = ""; }} />
+                            <Ps2Glyph glyph="□" className="h-5 w-5 text-[10px]" /> Upload back
+                          </label>
+                          <button type="button" disabled={!canAfford(BACK_CREDITS)} onClick={() => void generateBack(piece)} className={`${ps2Ghost} flex-1 px-2 py-2 text-[10px]`} title={`About ${BACK_CREDITS} credits`}>
+                            <Ps2Glyph glyph="△" className="h-5 w-5 text-[10px]" /> Generate back
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
+                ))}
+                {pieces.length < MAX_PIECES ? (
+                  <DropZone accept="image/*" multiple disabled={uploadingPiece} onFiles={(f) => void onPieces(f)}>
+                    {uploadingPiece ? <Loader2 size={18} className="animate-spin text-sky-200" /> : <Plus size={18} className="text-sky-200" />}
+                    <span className="text-sm font-semibold text-white">{pieces.length ? "Drop another piece" : "Drop your clothes here"}</span>
+                    <span className="text-xs text-sky-100/50">Front photo first. Add the back, or press △ to generate it (≈{BACK_CREDITS} cr).</span>
+                  </DropZone>
                 ) : null}
-                <p className="mt-2 text-xs text-sky-100/50">
-                  {rendering || (stageVideo && isLive(stageVideo))
-                    ? "Rendering your video…"
-                    : auto || styling || stylingLive
-                      ? `Styling your outfit… ${swapList.filter((e) => e.swap?.status === "complete").length}/${pickedFrames.length || FRAME_COUNT}`
-                      : "One click. MADDEN AI dresses your clip and renders the video."}
-                </p>
-                <div className="mt-3">
-                  {canAfford(totalCredits) ? (
-                    <button type="button" className={`${ps2Button} w-full`} disabled={!clipReady || !step2Done || working} onClick={makeIt}>
-                      {working ? <Loader2 size={16} className="animate-spin" /> : <Ps2Glyph />}
-                      Make my video · ≈ {totalCredits} credits
-                    </button>
-                  ) : (
-                    <Link to="/pricing" className={`${ps2Button} w-full`}>Get credits ({totalCredits} needed)</Link>
-                  )}
-                </div>
-                <p className="mt-2 text-xs text-sky-100/45">
-                  {isAdmin ? "Admin · free" : `${balance.toLocaleString()} credits on your account`} · failed steps are refunded
-                </p>
               </div>
+              {noteOpen ? (
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Anything to keep in mind? e.g. tuck the shirt in" className="mt-3 w-full rounded-lg border border-sky-300/25 bg-[#020a24]/70 px-3 py-2 text-sm text-white placeholder:text-white/30" />
+              ) : (
+                <button type="button" onClick={() => setNoteOpen(true)} className="mt-2 text-xs text-sky-100/55 hover:text-white">+ Add a note</button>
+              )}
+            </div>
 
-              <Link to="/maddenai/pro" className="px-1 text-xs text-sky-100/45 hover:text-white">
-                Want to pick frames yourself? Open the Pro editor →
-              </Link>
-            </>
-          )}
-        </aside>
-      </div>
+            {/* ○ PLAYER (model replace) */}
+            <div className={`${ps2Panel} p-4`}>
+              <StepLabel glyph="○" title="Player" hint={replacing ? "Replacing" : "Keep original"} />
+              <div className="mt-3">
+                <OptionCycler
+                  label="Who wears it?"
+                  options={[
+                    { label: "Keep the person", value: "keep_original" },
+                    { label: "Upload a model", value: "upload" },
+                    { label: "My avatars", value: "avatar" },
+                    { label: "FUSE Cast", value: "cast" },
+                  ]}
+                  value={model.modelSource}
+                  onChange={(v) =>
+                    setModel(v === "keep_original" ? KEEP_ORIGINAL_MODEL : { modelSource: v as OutfitSwapSubjectModel["modelSource"], avatarId: null, uploadedRefUrls: [] })
+                  }
+                />
+              </div>
+              {replacing ? (
+                <div className="ps2-scope mt-3">
+                  <SubjectModelSelector userId={user?.id ?? null} model={model} onChange={setModel} compact hideSourcePicker />
+                  {analysisState === "running" ? <p className="mt-2 text-xs text-sky-100/55">Finding the person in your clip…</p> : null}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-sky-100/50">Same person, new outfit. Switch to replace them with a model or one of your avatars.</p>
+              )}
+            </div>
 
-      {user && videos.length ? (
+            {/* ✕ START */}
+            <div className={`${ps2Panel} p-4`}>
+              {canAfford(totalCredits) ? (
+                <button type="button" className={`${ps2Button} w-full py-4 text-[14px]`} disabled={!canStart} onClick={begin}>
+                  {loading ? <Loader2 size={16} className="animate-spin" /> : <Ps2Glyph />}
+                  Start · ≈ {totalCredits} credits
+                </button>
+              ) : (
+                <Link to="/pricing" className={`${ps2Button} w-full py-4`}>Get credits ({totalCredits} needed)</Link>
+              )}
+              <p className="mt-2 text-center text-xs text-sky-100/45">
+                {isAdmin ? "Admin · free" : `${balance.toLocaleString()} credits`} · failed steps are refunded
+              </p>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {screen === "setup" && user && videos.length ? (
         <section className="mx-auto max-w-[1400px] px-4 pb-24 sm:px-6">
           <h2 className="text-xl text-white" style={display}>Your videos</h2>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
@@ -530,9 +765,7 @@ export default function MaddenAIStudio() {
                 {v.status === "complete" && v.outputUrl ? (
                   <video src={v.outputUrl} className="h-full w-full object-cover" muted playsInline loop onMouseEnter={(e) => void e.currentTarget.play()} onMouseLeave={(e) => e.currentTarget.pause()} />
                 ) : (
-                  <span className="grid h-full place-items-center text-xs text-sky-100/55">
-                    {isLive(v) ? <Loader2 size={18} className="animate-spin" /> : "Didn't finish"}
-                  </span>
+                  <span className="grid h-full place-items-center text-xs text-sky-100/55">{isLive(v) ? <Loader2 size={18} className="animate-spin" /> : "Didn't finish"}</span>
                 )}
               </button>
             ))}
@@ -541,4 +774,117 @@ export default function MaddenAIStudio() {
       ) : null}
     </MaddenAIShell>
   );
+}
+
+/* ------------------------------ title screen ------------------------------ */
+
+function TitleScreen({ onStart }: { onStart: () => void }) {
+  return (
+    <button type="button" onClick={onStart} className="relative grid min-h-[calc(100vh-7rem)] w-full place-items-center px-4 text-center" aria-label="Press start">
+      <div>
+        <img src="/maddenai/wordmark.png" alt="MADDEN AI" className="maddenai-glow mx-auto h-14 w-auto sm:h-24" />
+        <p className="crt-text mx-auto mt-8 max-w-2xl text-balance text-2xl leading-tight text-white sm:text-4xl" style={display}>
+          Put your clothes on anyone. In any video.
+        </p>
+        <p className="ps2-blink mt-14 font-display text-sm font-bold uppercase tracking-[0.5em] text-sky-200">Press start</p>
+        <p className="mt-3 inline-flex items-center gap-2 font-display text-[10px] font-bold uppercase tracking-[0.3em] text-sky-100/40">
+          <Ps2Glyph className="h-5 w-5 text-[10px]" /> or Enter
+        </p>
+      </div>
+      <p className="absolute bottom-6 left-0 right-0 font-display text-[9px] font-bold uppercase tracking-[0.3em] text-sky-100/30">© Madden Media · Powered by FUSE</p>
+    </button>
+  );
+}
+
+/* ----------------------------- loading screen ----------------------------- */
+
+function LoadingScreen({ tiles, stylingDone, total, renderingVideo }: { tiles: { source: string | null; done: string | null }[]; stylingDone: number; total: number; renderingVideo: boolean }) {
+  const [tick, setTick] = useState(0);
+  const renderStart = useRef<number | null>(null);
+  if (renderingVideo && renderStart.current === null) renderStart.current = Date.now();
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1800);
+    return () => clearInterval(t);
+  }, []);
+  // Styling fills 0-55%; the video render eases toward 97% over ~4 minutes.
+  const renderPct = renderStart.current ? Math.min(42, ((Date.now() - renderStart.current) / 240_000) * 42) : 0;
+  const pct = Math.round((stylingDone / Math.max(1, total)) * 55 + renderPct);
+  const featuredIndex = tiles.length ? tick % tiles.length : -1;
+  const featured = featuredIndex >= 0 ? tiles[featuredIndex] : null;
+
+  return (
+    <div className="relative flex h-full min-h-[520px] flex-col items-center justify-center gap-6 p-6">
+      <p className="font-display text-[11px] font-bold uppercase tracking-[0.45em] text-sky-300">{renderingVideo ? "Rendering stage" : "Styling outfit"}</p>
+
+      {/* featured "character select" card: locked silhouette until its frame is styled */}
+      <div className="relative aspect-[9/16] w-[min(260px,60vw)] overflow-hidden rounded-2xl border border-sky-200/40 bg-[#020a24] shadow-[0_0_60px_-12px_rgba(77,168,255,0.85)]">
+        {tiles.map((tile, i) => {
+          const src = tile.done ?? tile.source;
+          return src ? (
+            <img
+              key={i}
+              src={src}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover transition-all duration-1000"
+              style={{
+                opacity: i === featuredIndex ? 1 : 0,
+                filter: tile.done ? "none" : "brightness(0.18) saturate(0) sepia(1) hue-rotate(180deg) saturate(4) blur(1px)",
+              }}
+            />
+          ) : null;
+        })}
+        {featured && !featured.done ? (
+          <span className="absolute inset-0 grid place-items-center">
+            <span className="rounded-md border border-sky-200/40 bg-[#020820]/70 px-3 py-1 font-display text-[10px] font-bold uppercase tracking-[0.3em] text-sky-100">Locked</span>
+          </span>
+        ) : null}
+      </div>
+
+      {/* roster strip */}
+      <div className="flex gap-2">
+        {tiles.map((tile, i) => (
+          <div key={i} className={`relative h-16 w-10 overflow-hidden rounded-md border ${tile.done ? "border-sky-200/70 shadow-[0_0_14px_rgba(124,227,255,0.7)]" : "border-sky-300/20"}`}>
+            {tile.done ? (
+              <img src={tile.done} alt="" className="h-full w-full object-cover" />
+            ) : tile.source ? (
+              <img src={tile.source} alt="" className="h-full w-full object-cover" style={{ filter: "brightness(0.15) saturate(0)" }} />
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      {/* segmented progress */}
+      <div className="w-[min(420px,85%)]">
+        <div className="flex gap-1">
+          {Array.from({ length: 20 }, (_, i) => (
+            <span key={i} className={`h-3 flex-1 rounded-sm ${i < Math.round(pct / 5) ? "bg-[linear-gradient(180deg,#9FE0FF,#3C8CFF)] shadow-[0_0_8px_rgba(124,227,255,0.8)]" : "bg-sky-300/10"}`} />
+          ))}
+        </div>
+        <p className="mt-2 flex justify-between font-display text-[10px] font-bold uppercase tracking-[0.25em] text-sky-100/60">
+          <span className="ps2-blink">Now loading</span>
+          <span>{pct}%</span>
+        </p>
+      </div>
+
+      <p className="max-w-sm text-center text-sm text-sky-100/60">
+        <span className="font-display text-[10px] font-bold uppercase tracking-[0.25em] text-sky-300">Tip · </span>
+        {TIPS[tick % TIPS.length]}
+      </p>
+    </div>
+  );
+}
+
+function sessionStorageGet(key: string) {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function sessionStorageSet(key: string, value: string) {
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    // remembered start screen is a convenience only
+  }
 }
