@@ -19,7 +19,7 @@ import {
   Wind,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { uploadToStorage } from "@/services/storageUpload";
+import { cinemaReferenceFolder, uploadToStorage } from "@/services/storageUpload";
 import { detectReferenceRoles, fileToDataUrl } from "@/services/cinemaStudio";
 import type { CinemaReference, ReferenceRole } from "@/lib/cinema/types";
 
@@ -50,7 +50,6 @@ const ROLE_ICON = ROLE_META.reduce(
   {} as Record<ReferenceRole, typeof User>,
 );
 
-const CINEMA_REFERENCE_FOLDER = "system/cinema/references";
 const DEFAULT_STRENGTH = 70;
 
 export interface ReferenceBoardProps {
@@ -97,7 +96,7 @@ export default function ReferenceBoard({ references, onChange, advanced }: Refer
       const added: CinemaReference[] = [];
       for (const file of Array.from(files).slice(0, 12)) {
         if (!file.type.startsWith("image/")) continue;
-        const { path, url } = await uploadToStorage(CINEMA_REFERENCE_FOLDER, file, file.name);
+        const { path, url } = await uploadToStorage(await cinemaReferenceFolder(), file, file.name);
         added.push({
           id: crypto.randomUUID(),
           url,

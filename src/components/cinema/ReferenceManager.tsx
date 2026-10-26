@@ -6,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Sparkles, Trash2, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { uploadToStorage } from "@/services/storageUpload";
+import { cinemaReferenceFolder, uploadToStorage } from "@/services/storageUpload";
 import { detectReferenceRoles, fileToDataUrl } from "@/services/cinemaStudio";
 import type { CinemaReference, ReferenceRole } from "@/lib/cinema/types";
 
@@ -29,7 +29,6 @@ const ALL_ROLES: ReferenceRole[] = [
   "Motion",
 ];
 
-const CINEMA_REFERENCE_FOLDER = "system/cinema/references";
 
 export interface ReferenceManagerProps {
   references: CinemaReference[];
@@ -59,7 +58,7 @@ export default function ReferenceManager({
       const added: CinemaReference[] = [];
       for (const file of Array.from(files).slice(0, 12)) {
         if (!file.type.startsWith("image/")) continue;
-        const { path, url } = await uploadToStorage(CINEMA_REFERENCE_FOLDER, file, file.name);
+        const { path, url } = await uploadToStorage(await cinemaReferenceFolder(), file, file.name);
         added.push({
           id: crypto.randomUUID(),
           url,
