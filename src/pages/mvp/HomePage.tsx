@@ -36,6 +36,8 @@ import FreeSampleSection from "@/components/cro/FreeSampleSection";
 import { croEnabled } from "@/config/featureFlags";
 import { templateDetailPath } from "@/lib/templateSlug";
 import HeroWorkflowAnimation from "@/components/mvp/HeroWorkflowAnimation";
+import MaddenAIHero from "@/components/maddenai/MaddenAIHero";
+import { Ps2Glyph } from "@/components/maddenai/ps2";
 import FeaturedCollabSection from "@/components/mvp/FeaturedCollabSection";
 
 import { track } from "@/lib/analytics/track";
@@ -721,13 +723,25 @@ export default function HomePage() {
         path="/"
       />
 
-      {/* 1 · TEMPLATE-FIRST HERO */}
+      {/* 1 · TEMPLATE-FIRST HERO (PS2 blue) */}
       <section className="relative overflow-hidden border-b border-white/10">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-[-20%] bottom-0 h-[50%] origin-bottom opacity-30"
+          style={{
+            transform: "perspective(600px) rotateX(62deg)",
+            backgroundImage:
+              "linear-gradient(rgba(110,180,255,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(110,180,255,0.4) 1px, transparent 1px)",
+            backgroundSize: "56px 56px",
+            maskImage: "linear-gradient(to top, black 10%, transparent 90%)",
+            WebkitMaskImage: "linear-gradient(to top, black 10%, transparent 90%)",
+          }}
+        />
         <div
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(circle at 18% 15%, rgba(34,211,238,0.18) 0%, transparent 55%), radial-gradient(circle at 85% 8%, rgba(59,130,246,0.14) 0%, transparent 50%)",
+              "radial-gradient(circle at 18% 15%, rgba(77,168,255,0.18) 0%, transparent 55%), radial-gradient(circle at 85% 8%, rgba(30,80,255,0.2) 0%, transparent 50%)",
           }}
         />
 
@@ -745,9 +759,9 @@ export default function HomePage() {
 
             <p className="mx-auto mt-4 font-sans text-[15px] font-extrabold uppercase leading-[1.3] tracking-[0.06em] text-white sm:text-[17px] lg:text-[19px]">
               <span className="block">
-                No prompts <span className="text-cyan-300">·</span> No guessing
+                No prompts <span className="text-sky-300">·</span> No guessing
               </span>
-              <span className="mt-1 block text-cyan-100">Prebuilt expert workflows</span>
+              <span className="mt-1 block text-sky-100">Prebuilt expert workflows</span>
             </p>
 
             {/* Mechanism proof — the prebuilt workflow itself is the hero visual */}
@@ -767,13 +781,14 @@ export default function HomePage() {
               <Button
                 asChild
                 size="lg"
-                className="group relative h-[58px] overflow-hidden rounded-full border border-cyan-100/70 bg-gradient-to-b from-cyan-200 to-cyan-400 px-8 font-sans text-[16.5px] font-extrabold uppercase tracking-[0.06em] text-slate-950 shadow-[0_10px_30px_-12px_rgba(34,211,238,0.65)] transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[0_16px_38px_-12px_rgba(34,211,238,0.8)] active:translate-y-[1px] active:scale-[0.985] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:px-9 sm:text-[18px]"
+                className="group relative h-[58px] overflow-hidden rounded-full border border-sky-100/70 bg-[linear-gradient(180deg,#8FD0FF_0%,#3C8CFF_45%,#1A4FD6_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] px-8 font-sans text-[16.5px] font-extrabold uppercase tracking-[0.06em] text-white shadow-[0_10px_30px_-12px_rgba(77,168,255,0.65)] transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[0_16px_38px_-12px_rgba(77,168,255,0.8)] active:translate-y-[1px] active:scale-[0.985] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:px-9 sm:text-[18px]"
               >
                 <Link to="/app/templates" onClick={() => track("hero_explore_campaigns_click")}>
                   <span
                     aria-hidden
                     className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 skew-x-[-18deg] bg-white/40 opacity-0 [animation:hero-cta-sheen_7s_ease-in-out_infinite] motion-reduce:animate-none"
                   />
+                  <Ps2Glyph className="relative" />
                   <span className="relative">Explore campaigns</span>
                   <ArrowRight className="relative h-[18px] w-[18px] transition-transform duration-200 group-hover:translate-x-[5px] motion-reduce:transition-none" />
                 </Link>
@@ -816,7 +831,7 @@ export default function HomePage() {
               style={{ fontSize: "clamp(46px, 3.8vw, 74px)", lineHeight: 0.92, letterSpacing: "-0.045em" }}
             >
               <span className="block whitespace-nowrap">One-click campaign</span>
-              <span className="block text-cyan-100">Marketplace</span>
+              <span className="block text-sky-100">Marketplace</span>
             </h1>
 
             <p className="mt-4 max-w-[520px] font-sans text-[20px] font-bold leading-[1.3] text-white">
@@ -828,9 +843,9 @@ export default function HomePage() {
 
             <p className="mt-4 max-w-[520px] font-sans text-[16px] font-extrabold uppercase leading-[1.25] tracking-[0.06em] text-white">
               <span className="block">
-                No prompts <span className="text-cyan-300">·</span> No guessing
+                No prompts <span className="text-sky-300">·</span> No guessing
               </span>
-              <span className="mt-0.5 block text-cyan-100">Prebuilt expert workflows</span>
+              <span className="mt-0.5 block text-sky-100">Prebuilt expert workflows</span>
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -839,13 +854,14 @@ export default function HomePage() {
                 asChild
                 size="lg"
 
-                className="group relative h-[58px] overflow-hidden rounded-full border border-cyan-100/70 bg-gradient-to-b from-cyan-200 to-cyan-400 px-9 font-sans text-[18px] font-extrabold uppercase tracking-[0.06em] text-slate-950 shadow-[0_10px_30px_-12px_rgba(34,211,238,0.65)] transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[0_16px_38px_-12px_rgba(34,211,238,0.8)] active:translate-y-[1px] active:scale-[0.985] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                className="group relative h-[58px] overflow-hidden rounded-full border border-sky-100/70 bg-[linear-gradient(180deg,#8FD0FF_0%,#3C8CFF_45%,#1A4FD6_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] px-9 font-sans text-[18px] font-extrabold uppercase tracking-[0.06em] text-white shadow-[0_10px_30px_-12px_rgba(77,168,255,0.65)] transition-all duration-200 hover:-translate-y-[2px] hover:shadow-[0_16px_38px_-12px_rgba(77,168,255,0.8)] active:translate-y-[1px] active:scale-[0.985] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
               >
                 <Link to="/app/templates" onClick={() => track("hero_explore_campaigns_click")}>
                   <span
                     aria-hidden
                     className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 skew-x-[-18deg] bg-white/40 opacity-0 [animation:hero-cta-sheen_7s_ease-in-out_infinite] motion-reduce:animate-none"
                   />
+                  <Ps2Glyph className="relative" />
                   <span className="relative">Explore campaigns</span>
                   <ArrowRight className="relative h-[18px] w-[18px] transition-transform duration-200 group-hover:translate-x-[5px] motion-reduce:transition-none" />
                 </Link>
@@ -879,8 +895,8 @@ export default function HomePage() {
               workflow → finished campaigns. Explanatory only (no upload UI). */}
           <div className="relative flex min-w-0 items-center gap-0">
             {/* 1 · YOUR PRODUCTS input panel */}
-            <div className="w-[152px] shrink-0 rounded-2xl border border-cyan-200/30 bg-[linear-gradient(180deg,rgba(34,211,238,0.1),rgba(255,255,255,0.02))] p-4 shadow-[0_18px_46px_-24px_rgba(34,211,238,0.75)] xl:w-[172px]">
-              <p className="font-display text-[10.5px] font-bold uppercase tracking-[0.2em] text-cyan-100">
+            <div className="w-[152px] shrink-0 rounded-2xl border border-sky-200/30 bg-[linear-gradient(180deg,rgba(77,168,255,0.1),rgba(255,255,255,0.02))] p-4 shadow-[0_18px_46px_-24px_rgba(77,168,255,0.75)] xl:w-[172px]">
+              <p className="font-display text-[10.5px] font-bold uppercase tracking-[0.2em] text-sky-100">
                 Your products
               </p>
               <ul className="mt-3 space-y-2">
@@ -893,7 +909,7 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-3 rounded-lg border border-dashed border-cyan-200/40 px-2.5 py-2 text-center font-display text-[10.5px] font-bold uppercase tracking-[0.16em] text-cyan-100">
+              <p className="mt-3 rounded-lg border border-dashed border-sky-200/40 px-2.5 py-2 text-center font-display text-[10.5px] font-bold uppercase tracking-[0.16em] text-sky-100">
                 + Product
               </p>
             </div>
@@ -901,9 +917,9 @@ export default function HomePage() {
             {/* animated connector · input → workflow */}
             <span
               aria-hidden
-              className="relative h-px w-6 shrink-0 overflow-hidden bg-gradient-to-r from-cyan-300/20 to-cyan-300/70 xl:w-8"
+              className="relative h-px w-6 shrink-0 overflow-hidden bg-gradient-to-r from-sky-300/20 to-sky-300/70 xl:w-8"
             >
-              <span className="absolute inset-y-0 left-0 w-1/2 bg-cyan-100 [animation:hero-flow-pulse_6.5s_linear_infinite] motion-reduce:animate-none motion-reduce:opacity-0" />
+              <span className="absolute inset-y-0 left-0 w-1/2 bg-sky-100 [animation:hero-flow-pulse_6.5s_linear_infinite] motion-reduce:animate-none motion-reduce:opacity-0" />
             </span>
 
             {/* 2 · the prebuilt workflow itself — the centrepiece */}
@@ -914,9 +930,9 @@ export default function HomePage() {
             {/* animated connector · workflow → outputs */}
             <span
               aria-hidden
-              className="relative h-px w-6 shrink-0 overflow-hidden bg-gradient-to-r from-cyan-300/70 to-cyan-300/25 xl:w-8"
+              className="relative h-px w-6 shrink-0 overflow-hidden bg-gradient-to-r from-sky-300/70 to-sky-300/25 xl:w-8"
             >
-              <span className="absolute inset-y-0 left-0 w-1/2 bg-cyan-100 [animation:hero-flow-pulse_6.5s_linear_infinite_1.6s] motion-reduce:animate-none motion-reduce:opacity-0" />
+              <span className="absolute inset-y-0 left-0 w-1/2 bg-sky-100 [animation:hero-flow-pulse_6.5s_linear_infinite_1.6s] motion-reduce:animate-none motion-reduce:opacity-0" />
             </span>
 
             {/* 3 · finished campaigns — a small stack of real live previews */}
@@ -927,7 +943,7 @@ export default function HomePage() {
                     <div
                       key={`hero-stack-back-${entry.template.id ?? index}`}
                       aria-hidden
-                      className="absolute inset-0 overflow-hidden rounded-2xl border border-cyan-200/20 bg-[#0B1120]"
+                      className="absolute inset-0 overflow-hidden rounded-2xl border border-sky-200/20 bg-[#0B1120]"
                       style={{
                         transform: `translate(${(index + 1) * 18}px, ${(index + 1) * 14}px) scale(${1 - (index + 1) * 0.04})`,
                         zIndex: 1 - index,
@@ -937,7 +953,7 @@ export default function HomePage() {
                   ))}
                   <div
                     key={heroStoryPreviews[heroStackIndex % heroStoryPreviews.length]?.template.id ?? heroStackIndex}
-                    className="relative z-10 overflow-hidden rounded-2xl border border-cyan-200/40 bg-black/50 shadow-[0_0_48px_-18px_rgba(34,211,238,0.85)] [animation:hero-stack-settle_6.5s_ease-out_infinite] motion-reduce:animate-none"
+                    className="relative z-10 overflow-hidden rounded-2xl border border-sky-200/40 bg-black/50 shadow-[0_0_48px_-18px_rgba(77,168,255,0.85)] [animation:hero-stack-settle_6.5s_ease-out_infinite] motion-reduce:animate-none"
                   >
                     <AutoMedia
                       media={heroStoryPreviews[heroStackIndex % heroStoryPreviews.length].media}
@@ -958,6 +974,9 @@ export default function HomePage() {
       </section>
 
 
+
+      {/* 1.2 · MADDEN AI spotlight */}
+      {croEnabled("maddenAIHomeHero") ? <MaddenAIHero /> : null}
 
       {/* 1.35 · EXCLUSIVE CREATOR COLLABS — hidden when no active drop. */}
       <FeaturedCollabSection />

@@ -35,6 +35,7 @@ type PrimaryLink = { label: string; to?: string; href?: string; end?: boolean };
 const PRIMARY_LINKS: PrimaryLink[] = [
   { label: "Home", to: "/", end: true },
   { label: "Explore", to: "/app/templates" },
+  { label: "MADDEN AI", to: "/maddenai" },
   { label: "New Drops", href: "/#new-today" },
   { label: "Creators", to: "/creators" },
   { label: "Pricing", to: "/pricing" },
@@ -211,6 +212,9 @@ export default function SiteShell({ children }: { children: ReactNode }) {
               <NavLink to="/app/templates" className={textNavLinkClass}>
                 Explore
               </NavLink>
+              <NavLink to="/maddenai" className={textNavLinkClass}>
+                MADDEN AI
+              </NavLink>
               {user ? (
                 <NavLink to="/creators" className={textNavLinkClass}>
                   Creators
@@ -382,6 +386,9 @@ export default function SiteShell({ children }: { children: ReactNode }) {
                 ) : null}
                 <NavLink to="/app/templates" className={textNavLinkClass}>
                   Explore
+                </NavLink>
+                <NavLink to="/maddenai" className={textNavLinkClass}>
+                  MADDEN AI
                 </NavLink>
                 {user ? (
                   <>

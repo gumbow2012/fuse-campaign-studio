@@ -1,51 +1,69 @@
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { PS2, Ps2Backdrop } from "@/components/maddenai/ps2";
 
-/** MADDENAI brand shell: its own header, same FUSE account and credits underneath. */
-export const MADDENAI = { accent: "#FF3B2F", ground: "#0B0B0D", text: "#F4F1EC" };
+/** MADDEN AI brand shell: its own header, same FUSE account and credits underneath. */
+export const MADDENAI = PS2;
 
 export function MaddenAIWordmark({ size = 20 }: { size?: number }) {
-  return (
-    <span className="inline-flex items-center gap-2">
-      <img src="/maddenai/mark.svg" alt="" width={size + 8} height={size + 8} />
-      <span style={{ fontFamily: "Archivo, system-ui, sans-serif", fontWeight: 800, fontSize: size, letterSpacing: "0.04em", color: MADDENAI.text }}>
-        MADDEN<span style={{ color: MADDENAI.accent }}>AI</span>
-      </span>
-    </span>
-  );
+  return <img src="/maddenai/wordmark.png" alt="MADDEN AI" className="maddenai-glow" style={{ height: size * 1.25, width: "auto" }} />;
 }
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${isActive ? "bg-white/10 text-white" : "text-white/60 hover:text-white"}`;
+  `whitespace-nowrap rounded-lg border px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${
+    isActive
+      ? "border-sky-300/50 bg-sky-400/15 text-white shadow-[inset_0_1px_0_rgba(180,225,255,0.35)]"
+      : "border-transparent text-sky-100/60 hover:text-white"
+  }`;
+
+const NAV = [
+  { to: "/maddenai", label: "Outfit Swap", end: true },
+  { to: "/maddenai/create", label: "Image & Video" },
+  { to: "/maddenai/pro", label: "Pro editor" },
+];
 
 export default function MaddenAIShell({ children }: { children: ReactNode }) {
-  const { user, signOut } = useAuth();
+  const { user, profile, isAdmin, signOut } = useAuth();
   return (
-    <div className="dark min-h-screen" style={{ background: MADDENAI.ground, color: MADDENAI.text }}>
-      <header className="sticky top-0 z-40 border-b border-white/10 backdrop-blur" style={{ background: "rgba(11,11,13,0.85)" }}>
-        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-4 px-4 sm:px-6">
-          <Link to="/maddenai" aria-label="MADDENAI home"><MaddenAIWordmark size={18} /></Link>
-          <nav className="hidden items-center gap-1 sm:flex">
-            <NavLink to="/maddenai/create" className={linkClass}>Create</NavLink>
-            <NavLink to="/maddenai/outfit-swap" className={linkClass}>Outfit Swap</NavLink>
-          </nav>
-          <div className="ml-auto flex items-center gap-2 text-sm">
-            {user ? (
-              <>
-                <Link to="/account" className="text-white/60 hover:text-white">Account</Link>
-                <button type="button" onClick={() => void signOut()} className="text-white/60 hover:text-white">Sign out</button>
-              </>
-            ) : (
-              <Link to="/auth" className="whitespace-nowrap rounded-full px-4 py-1.5 font-semibold text-white" style={{ background: MADDENAI.accent }}>Sign in</Link>
-            )}
+    <Ps2Backdrop>
+      <div className="dark">
+        <header className="sticky top-0 z-40 border-b border-sky-300/15 bg-[#020820]/75 backdrop-blur-md">
+          <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-4 px-4 sm:px-6">
+            <Link to="/maddenai" aria-label="MADDEN AI home"><MaddenAIWordmark size={16} /></Link>
+            <nav className="hidden items-center gap-1 md:flex">
+              {NAV.map((item) => <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>{item.label}</NavLink>)}
+            </nav>
+            <div className="ml-auto flex items-center gap-3 text-sm">
+              {user ? (
+                <>
+                  {!isAdmin && profile ? (
+                    <Link to="/pricing" className="whitespace-nowrap rounded-lg border border-sky-300/30 bg-sky-400/10 px-3 py-1 font-display text-[11px] font-bold tracking-[0.1em] text-sky-50 hover:border-sky-200/60" title="Credits">
+                      {(profile.credits_balance ?? 0).toLocaleString()} CR
+                    </Link>
+                  ) : null}
+                  <Link to="/account" className="hidden text-sky-100/60 hover:text-white sm:inline">Account</Link>
+                  <button type="button" onClick={() => void signOut()} className="hidden text-sky-100/60 hover:text-white sm:inline">Sign out</button>
+                </>
+              ) : (
+                <Link
+                  to="/auth?returnTo=/maddenai"
+                  className="whitespace-nowrap rounded-lg border border-sky-200/60 bg-[linear-gradient(180deg,#8FD0FF,#2F6FF0)] px-4 py-1.5 font-display text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
+                >
+                  Sign in
+                </Link>
+              )}
+            </div>
           </div>
-        </div>
-      </header>
-      <main>{children}</main>
-      <footer className="border-t border-white/10 px-4 py-6 text-center text-xs text-white/40">
-        MADDENAI by Madden Media · <Link to="/terms" className="hover:text-white/70">Terms</Link> · <Link to="/privacy" className="hover:text-white/70">Privacy</Link>
-      </footer>
-    </div>
+          <nav className="flex gap-1 overflow-x-auto px-3 pb-2 md:hidden">
+            {NAV.map((item) => <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>{item.label}</NavLink>)}
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="border-t border-sky-300/10 px-4 py-6 text-center text-xs text-sky-100/40">
+          MADDEN AI by Madden Media · <Link to="/" className="hover:text-white/70">FUSE</Link> · <Link to="/terms" className="hover:text-white/70">Terms</Link> · <Link to="/privacy" className="hover:text-white/70">Privacy</Link>
+        </footer>
+      </div>
+    </Ps2Backdrop>
   );
 }
