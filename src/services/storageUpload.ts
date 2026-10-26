@@ -31,6 +31,11 @@ export async function createOutfitSwapFolder() {
   return `system/outfit-swap/${userId}/${crypto.randomUUID()}`;
 }
 
+/** Cinema references live under the user's own prefix (the only path storage RLS lets users write). */
+export async function cinemaReferenceFolder() {
+  return `${await currentUserId()}/cinema/references`;
+}
+
 /**
  * Upload straight to Supabase Storage from the browser — large videos and frame
  * batches never pass through an edge function.
