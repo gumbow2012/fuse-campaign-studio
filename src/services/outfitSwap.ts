@@ -624,3 +624,40 @@ export function applyFrameOverrides(args: {
 
   return { frameSubjects: nextSubjects, castAssignment: nextCast, modelAssignment: nextModels };
 }
+
+export type OutfitSwapJudgeFrame = {
+  id: number;
+  personVisible: boolean;
+  wearingGarment: "yes" | "no" | "unclear";
+  facingMatches: "yes" | "no" | "unclear";
+  samePerson: "yes" | "no" | "unclear";
+  notes: string;
+};
+
+/**
+ * Gemini judge for a finished render: per moment (original + rendered frame),
+ * is the right person wearing THIS garment, facing the right way, same person.
+ * Analysis only — never generates and never spends generation credits.
+ */
+export async function judgeOutfitSwapFrames(args: {
+  garmentUrls: string[];
+  subject: string;
+  replacingPerson: boolean;
+  frames: { id: number; sourceUrl: string; outputUrl: string }[];
+}): Promise<OutfitSwapJudgeFrame[]> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/outfit-swap-judge`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session?.access_token ?? SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify(args),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data?.error) throw new Error(data?.error ?? `Judge failed (${response.status})`);
+  return (data?.frames ?? []) as OutfitSwapJudgeFrame[];
+}
