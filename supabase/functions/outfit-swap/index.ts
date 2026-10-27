@@ -176,6 +176,23 @@ function cleanUrls(value: unknown) {
 type GarmentReference = { url?: string; type?: string; label?: string; person?: string };
 
 /**
+ * Kling O3 source-video edit takes a short edit instruction: the garments ride along as
+ * @Element1.. (front + another angle) and already-dressed frames of this clip as @Image1..
+ */
+function buildKlingEditPrompt(garments: any[], subject: string, imageCount: number, extra?: string) {
+  const who = subject ? `the ${subject.replace(/[.\s]+$/, "").replace(/^(a|an|the)\s+/i, "")}` : "the main person";
+  const lines = garments.map((g, i) =>
+    `Replace the ${/bottom|pant|short|jean/i.test(String(g?.type ?? "")) ? "pants or shorts" : "top layer (shirt, hoodie or jacket)"} worn by ${who} in @Video1 with the exact garment @Element${i + 1}: same colors, print, graphics, logos and fit${g?.backUrl ? ", with its back print when they face away" : "; its back is plain"}.`,
+  );
+  if (imageCount) lines.push(`@Image1${imageCount > 1 ? ` to @Image${imageCount}` : ""} show frames of this video already wearing it; match them.`);
+  lines.push(
+    "Keep everything else in @Video1 identical: same person, face, hair, body, pose, motion, timing, camera, background, lighting and all other clothing. Apply it in every shot where they appear. No added text.",
+  );
+  if (extra?.trim()) lines.push(extra.trim());
+  return lines.join(" ");
+}
+
+/**
  * Wardrobe edit prompt: the source frame is authoritative, only the supplied
  * clothing categories change.
  */
@@ -498,6 +515,8 @@ async function startReconstruction(admin: AdminClient, args: {
   aspectRatio?: string;
   generateAudio?: boolean;
   extraPrompt?: string;
+  /** Who wears the garments, e.g. "woman in pink zip-up hoodie" (used by the Kling edit prompt). */
+  subject?: string;
   // PHASE 7 context (optional — omitted requests keep the legacy prompt).
   frameSubjects?: AssemblyFrameSubject[];
   castAssignment?: Record<string, any>;
@@ -575,11 +594,20 @@ async function startReconstruction(admin: AdminClient, args: {
     const aspectRatio = videoModel.aspectRatios?.includes(aspect) ? aspect : "9:16";
 
     const imageUrls = (await resolveExecutionUrls(admin, referenceUrls)) as string[];
+    const klingGarments = (Array.isArray(args.garments) ? args.garments : []).filter((g: any) => g?.frontUrl ?? g?.url).slice(0, 2) as any[];
+    const klingElements = await Promise.all(
+      klingGarments.map(async (g) => {
+        const [front, other] = (await resolveExecutionUrls(admin, [g.frontUrl ?? g.url, g.backUrl ?? g.frontUrl ?? g.url])) as string[];
+        return { frontal_image_url: front, reference_image_urls: [other] };
+      }),
+    );
+    const klingImages = imageUrls.slice(0, KLING_VIDEO_EDIT_MAX_REFERENCES - klingElements.length);
     const { input: falInput } = kling
       ? buildKlingVideoEditInput({
-          prompt,
+          prompt: buildKlingEditPrompt(klingGarments, String(args.subject ?? ""), klingImages.length, args.extraPrompt),
           videoUrl: sourceVideo.executionUrl,
-          imageUrls: imageUrls.slice(0, KLING_VIDEO_EDIT_MAX_REFERENCES),
+          imageUrls: klingImages,
+          elements: klingElements,
           keepAudio: false,
           sourceDurationSec: Number.isFinite(sourceSeconds) ? sourceSeconds : null,
           sourceWidth: Number((sourceVideo.source as any).width) || null,
@@ -893,6 +921,7 @@ Deno.serve(async (req) => {
         aspectRatio: body.aspectRatio,
         generateAudio: body.generateAudio,
         extraPrompt: withCleanPlate(body.extraPrompt, body.removeSourceLogo),
+        subject: typeof body.subject === "string" ? body.subject.slice(0, 200) : undefined,
         // PHASE 7 context (optional — omitted requests keep the legacy prompt).
         frameSubjects: Array.isArray(body.frameSubjects) ? body.frameSubjects : [],
         castAssignment: body.castAssignment ?? {},
