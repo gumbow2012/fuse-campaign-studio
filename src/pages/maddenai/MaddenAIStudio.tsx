@@ -663,7 +663,7 @@ export default function MaddenAIStudio() {
   const needsSheet = model.modelSource === "upload" && !sheetUrl;
   const modelReady = !replacing || (modelPicked && !needsSheet && analysisState !== "running" && analysisState !== "idle");
   const backsBusy = pieces.some((p) => p.backState);
-  const loading = auto || styling || rendering || stitching || partsLive || (!!stageVideo && isLive(stageVideo));
+  const loading = auto || styling || rendering || stitching || (partsLive && !failedParts.length) || (!!stageVideo && isLive(stageVideo));
   const canStart = clipReady && outfitReady && modelReady && !backsBusy && !loading && !stylingLive;
 
   const begin = useCallback(() => {
@@ -746,6 +746,12 @@ export default function MaddenAIStudio() {
                     <p className="max-w-sm text-sky-100/75">
                       Part {failedParts.map((k) => k + 1).join(", ")} of {parts.length} didn't render. Credits for failed parts go back to your account.
                     </p>
+                    {partsLive ? (
+                      <p className="flex items-center gap-2 text-xs text-sky-100/55">
+                        <Loader2 size={13} className="animate-spin" />
+                        {partGens.filter((g) => isLive(g)).length} other part(s) still rendering. Retry now and everything gets stitched together when it's all done.
+                      </p>
+                    ) : null}
                     <button type="button" className={ps2Button} onClick={() => void renderParts(failedParts)}>
                       <Ps2Glyph /> Retry {failedParts.length > 1 ? "those parts" : "that part"}
                     </button>
