@@ -801,8 +801,6 @@ export default function MaddenAIStudio() {
       try {
         const runs = groupRuns(times).slice(0, PATCH_FRAMES_MAX);
         const length = readMeta(await loadVideo(gen.outputUrl)).duration;
-        const nearestCandidate = (t: number) =>
-          candidateFrames.reduce((best, i) => (Math.abs(frames[i].time - t) < Math.abs(frames[best].time - t) ? i : best), candidateFrames[0]);
 
         setPartStage("Restyling the shots that didn't swap");
         const src = await loadVideo(clipPreview);
@@ -811,6 +809,11 @@ export default function MaddenAIStudio() {
           const t = sourceStart + (run.from + run.to) / 2;
           const file = await captureFrameAt(src, t);
           const stored = await uploadToStorage(runFolder, file, file.name);
+          // This shot was never analysed: read who is in it and which way they face,
+          // so the edit keeps this pose (borrowing another shot's pose turns people around).
+          const own = await analyzeOutfitSwapSource([{ frameId: `patch-${n}`, timestamp: t, imageUrl: stored.url }])
+            .then((r) => r.analysis.frames[0]?.subjects ?? [])
+            .catch(() => [] as OutfitSwapFrameSubject[]);
           const data = await callOutfitSwap<{ generation: SwapGeneration }>({
             action: "swap_frame",
             sourceFrameUrl: stored.url,
@@ -821,7 +824,7 @@ export default function MaddenAIStudio() {
             aspectRatio: meta?.aspectRatio,
             extraPrompt: prompt,
             resolution: "2K",
-            frameSubjects: candidateFrames.length ? subjectsFor(nearestCandidate(t)) : [],
+            frameSubjects: own,
             castAssignment,
             modelAssignment,
           });
