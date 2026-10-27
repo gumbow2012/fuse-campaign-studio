@@ -60,24 +60,44 @@ export function pickSpread(pool: number[], grays: (Gray | undefined)[], max: num
 }
 
 /**
- * Seconds of `output` that came back as an untouched copy of the source while a
- * person is on screen. `personAt(gray)` says whether a source thumbnail shows
- * someone (from the frame analysis). Samples every half second.
+ * The moments (seconds into `output`, every half second) that came back as an
+ * untouched copy of the source while a person is on screen. `personAt(gray)`
+ * says whether a source thumbnail shows someone (from the frame analysis).
  */
-export async function unswappedSeconds(
+export async function unswappedTimes(
   sourceUrl: string,
   sourceStart: number,
   outputUrl: string,
   personAt: (sourceGray: Gray) => boolean,
-): Promise<number> {
+): Promise<number[]> {
   const [source, output] = await Promise.all([loadVideo(sourceUrl), loadVideo(outputUrl)]);
   const length = Math.min(output.duration, source.duration - sourceStart);
-  let copied = 0;
+  const copied: number[] = [];
   for (let t = 0.25; t < length; t += 0.5) {
     await seekVideoTo(source, sourceStart + t);
     const src = grayOf(source);
     await seekVideoTo(output, t);
-    if (changeScore(src, grayOf(output)) < UNCHANGED_SCORE && personAt(src)) copied += 0.5;
+    if (changeScore(src, grayOf(output)) < UNCHANGED_SCORE && personAt(src)) copied.push(t);
   }
   return copied;
+}
+
+/** Back-to-back unswapped moments grouped into runs (a gap over 1s starts a new run). */
+export function groupRuns(times: number[]): { from: number; to: number }[] {
+  const runs: { from: number; to: number }[] = [];
+  for (const t of [...times].sort((a, b) => a - b)) {
+    const last = runs[runs.length - 1];
+    if (last && t - last.to <= 1) last.to = t;
+    else runs.push({ from: t, to: t });
+  }
+  return runs;
+}
+
+/** The whole-second window (Seedance needs 4s+) that covers every run, inside [0, length]. */
+export function patchWindow(runs: { from: number; to: number }[], length: number, minSeconds = 4, maxSeconds = 15) {
+  const from = Math.min(...runs.map((r) => r.from)) - 0.25;
+  const to = Math.max(...runs.map((r) => r.to)) + 0.25;
+  const span = Math.min(maxSeconds, Math.max(minSeconds, Math.ceil(to - from)), Math.floor(length) || length);
+  const start = Math.max(0, Math.min((from + to) / 2 - span / 2, length - span));
+  return { start, end: start + span };
 }

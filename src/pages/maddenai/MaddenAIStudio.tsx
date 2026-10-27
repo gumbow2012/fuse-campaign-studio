@@ -13,8 +13,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { IMAGE_FLAT_USD, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
 import { compressImageFile } from "@/lib/imageCompress";
-import { extractFrames, frameTimestamps, loadVideo, readMeta, seekVideoTo, type VideoMeta } from "@/lib/videoFrames";
-import { changeScore, grayOf, pickSpread, unswappedSeconds, type Gray } from "@/lib/swapCheck";
+import { captureFrameAt, extractFrames, frameTimestamps, loadVideo, readMeta, seekVideoTo, type VideoMeta } from "@/lib/videoFrames";
+import { changeScore, grayOf, groupRuns, patchWindow, pickSpread, unswappedTimes, type Gray } from "@/lib/swapCheck";
 import { createOutfitSwapFolder, uploadToStorage, uploadWithConcurrency } from "@/services/storageUpload";
 import { renderPiecesToBlob } from "@/services/videoExport/renderClip";
 import {
@@ -57,7 +57,9 @@ const PART_MAX_SECONDS = 15; // Seedance's per-render limit
 const FRAMES_PER_PART = 2;
 const MAX_REFS_PER_PART = 6;
 const MAX_ANALYZED_FRAMES = 16; // outfit-swap-analyze takes 16 frames per call
-const MAX_UNSWAPPED_SECONDS = 1.5; // more than this of a person left untouched = redo the part
+const MAX_UNSWAPPED_SECONDS = 0.5; // 1s+ of a person left untouched = fix it before stitching
+const PATCH_FRAMES_MAX = 4;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const KLING_CLIP_SECONDS = 3; // outfit-swap animate_frame: Kling 3.0 Pro, fixed 3s
 const KLING_USD_PER_SECOND = 0.112;
 const BACK_CREDITS = creditsFromUsd(IMAGE_FLAT_USD); // one 1K Nano Banana Pro image
@@ -740,7 +742,10 @@ export default function MaddenAIStudio() {
 
   /* Copy check: Seedance sometimes hands back the source untouched for a shot or a whole part.
      Every finished render is compared to the source, second by second, before it's stitched. */
-  const [unswapped, setUnswapped] = useState<Record<string, number>>({});
+  const [unswapped, setUnswapped] = useState<Record<string, number[]>>({});
+  /** Re-rendered windows spliced over a render: genId -> seconds [start, end) and the patch video. */
+  const [patches, setPatches] = useState<Record<string, { start: number; end: number; url: string }>>({});
+  const [repairing, setRepairing] = useState(false);
   const checkingIds = useRef(new Set<string>());
   const personAt = useCallback(
     (src: Gray) => {
@@ -764,13 +769,137 @@ export default function MaddenAIStudio() {
     for (const { start, gen } of renders) {
       if (gen?.status !== "complete" || !gen.outputUrl || checkingIds.current.has(gen.id)) continue;
       checkingIds.current.add(gen.id);
-      void unswappedSeconds(clipPreview, start, gen.outputUrl, personAt)
-        .catch(() => 0) // can't read it: don't block the result
-        .then((seconds) => setUnswapped((prev) => ({ ...prev, [gen.id]: seconds })));
+      void unswappedTimes(clipPreview, start, gen.outputUrl, personAt)
+        .catch(() => [] as number[]) // can't read it: don't block the result
+        .then((times) => setUnswapped((prev) => ({ ...prev, [gen.id]: times })));
     }
   }, [engine, clipPreview, partJobs, partGens, stageVideo, stageFromSession, personAt]);
-  const isUnswapped = (g?: SwapGeneration | null) => !!g && (unswapped[g.id] ?? 0) > MAX_UNSWAPPED_SECONDS;
+  const unswappedSecs = (g?: SwapGeneration | null) => (g ? (unswapped[g.id]?.length ?? 0) * 0.5 : 0);
+  const isUnswapped = (g?: SwapGeneration | null) => unswappedSecs(g) > MAX_UNSWAPPED_SECONDS;
   const isChecked = (g?: SwapGeneration | null) => engine === "kling" || (!!g && unswapped[g.id] !== undefined);
+
+  /** Poll one generation until it finishes. */
+  const waitFor = useCallback(async (id: string) => {
+    for (;;) {
+      await sleep(5000);
+      const data = await callOutfitSwap<{ generations: SwapGeneration[] }>({ action: "status", generationIds: [id] }).catch(() => null);
+      const g = data?.generations?.find((x) => x.id === id);
+      if (g && !isLive(g)) return g;
+    }
+  }, []);
+
+  /**
+   * Fix only the seconds that came back unswapped: style a fresh frame from each missed
+   * shot, re-render a short window around them, check it, and splice it over the render.
+   */
+  const repair = useCallback(
+    async (gen: SwapGeneration, sourceStart: number) => {
+      const times = unswapped[gen.id] ?? [];
+      if (!gen.outputUrl || !times.length || !clipPreview || !runFolder || !sourceVideo) return;
+      setRepairing(true);
+      setStitched(null);
+      try {
+        const runs = groupRuns(times).slice(0, PATCH_FRAMES_MAX);
+        const length = readMeta(await loadVideo(gen.outputUrl)).duration;
+        const nearestCandidate = (t: number) =>
+          candidateFrames.reduce((best, i) => (Math.abs(frames[i].time - t) < Math.abs(frames[best].time - t) ? i : best), candidateFrames[0]);
+
+        setPartStage("Restyling the shots that didn't swap");
+        const src = await loadVideo(clipPreview);
+        const refs: string[] = [];
+        for (const [n, run] of runs.entries()) {
+          const t = sourceStart + (run.from + run.to) / 2;
+          const file = await captureFrameAt(src, t);
+          const stored = await uploadToStorage(runFolder, file, file.name);
+          const data = await callOutfitSwap<{ generation: SwapGeneration }>({
+            action: "swap_frame",
+            sourceFrameUrl: stored.url,
+            garments: cleanPieces,
+            person: "Main Subject",
+            frameIndex: 900 + n, // outside the clip's own frames
+            frameTime: t,
+            aspectRatio: meta?.aspectRatio,
+            extraPrompt: prompt,
+            resolution: "2K",
+            frameSubjects: candidateFrames.length ? subjectsFor(nearestCandidate(t)) : [],
+            castAssignment,
+            modelAssignment,
+          });
+          const done = await waitFor(data.generation.id);
+          if (done.status === "complete" && done.outputUrl) refs.push(done.outputUrl);
+        }
+        if (!refs.length) throw new Error("Couldn't restyle those shots. Try redoing the whole part.");
+
+        const win = patchWindow(runs, length);
+        // Keep the original references that fall inside the window too.
+        const nearby = pickedFrames
+          .filter((i) => frames[i] && frames[i].time >= sourceStart + win.start && frames[i].time <= sourceStart + win.end)
+          .map((i) => (swaps[i]?.status === "complete" ? swaps[i]?.outputUrl ?? null : null))
+          .filter((u): u is string => !!u);
+        setPartStage("Re-rendering those seconds");
+        const blob = await renderPiecesToBlob(
+          [{ url: clipPreview, startMs: (sourceStart + win.start) * 1000, endMs: (sourceStart + win.end) * 1000 }],
+          { width: sourceVideo.width, height: sourceVideo.height },
+        );
+        const piece = await uploadToStorage(runFolder, blob, `patch-${gen.id.slice(0, 8)}-${Math.round(win.start * 10)}.mp4`);
+        const seen = new Map<string, OutfitSwapFrameSubject>();
+        for (const f of analysis?.frames ?? []) for (const subj of f.subjects ?? []) if (!seen.has(subj.subjectId)) seen.set(subj.subjectId, subj);
+        const started = await callOutfitSwap<{ generation: SwapGeneration }>({
+          action: "reconstruct",
+          sourceVideo: { path: piece.path, duration: win.end - win.start, width: sourceVideo.width, height: sourceVideo.height },
+          frameUrls: [...refs, ...nearby],
+          garments: cleanPieces,
+          model: VIDEO_MODEL,
+          duration: partSeconds(win),
+          resolution: VIDEO_RESOLUTION,
+          aspectRatio: meta?.aspectRatio,
+          generateAudio: false,
+          extraPrompt: videoPrompt,
+          frameSubjects: Array.from(seen.values()),
+          castAssignment,
+          modelAssignment,
+        });
+        const patch = await waitFor(started.generation.id);
+        if (patch.status !== "complete" || !patch.outputUrl) throw new Error(patch.error ?? "That fix didn't render. Credits for failed renders go back to your account.");
+
+        setPartStage("Checking the fix");
+        const left = await unswappedTimes(clipPreview, sourceStart + win.start, patch.outputUrl, personAt).catch(() => [] as number[]);
+        const missedInside = times.filter((t) => t >= win.start && t < win.end);
+        if (left.length >= missedInside.length) throw new Error("The fix came back unswapped too. Try redoing the whole part.");
+        setPatches((prev) => ({ ...prev, [gen.id]: { start: win.start, end: win.end, url: patch.outputUrl as string } }));
+        setUnswapped((prev) => ({
+          ...prev,
+          [gen.id]: [...times.filter((t) => t < win.start || t >= win.end), ...left.map((t) => t + win.start)],
+        }));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Couldn't fix those seconds");
+      } finally {
+        setPartStage(null);
+        setRepairing(false);
+      }
+    },
+    [unswapped, clipPreview, runFolder, sourceVideo, candidateFrames, frames, cleanPieces, meta, prompt, subjectsFor, castAssignment, modelAssignment, waitFor, pickedFrames, swaps, analysis, videoPrompt, personAt],
+  );
+  const repairCredits = (g?: SwapGeneration | null) => {
+    const runs = groupRuns(g ? unswapped[g.id] ?? [] : []).slice(0, PATCH_FRAMES_MAX);
+    if (!runs.length) return 0;
+    const win = patchWindow(runs, 15);
+    return runs.length * creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K")) + creditsFromUsd(VIDEO_USD_PER_SECOND * partSeconds(win) * resolutionMultiplier(VIDEO_RESOLUTION));
+  };
+  /** A render as stitchable pieces, with its patch (if any) spliced in. */
+  const piecesOf = useCallback(
+    async (url: string, id: string) => {
+      const len = Math.round(readMeta(await loadVideo(url)).duration * 1000);
+      const patch = patches[id];
+      if (!patch) return [{ url, startMs: 0, endMs: len }];
+      return [
+        { url, startMs: 0, endMs: Math.round(patch.start * 1000) },
+        { url: patch.url, startMs: 0, endMs: Math.round((patch.end - patch.start) * 1000) },
+        { url, startMs: Math.round(patch.end * 1000), endMs: len },
+      ].filter((p) => p.endMs - p.startMs > 40);
+    },
+    [patches],
+  );
 
   const partsLive = partGens.some((g) => isLive(g));
   const failedParts = partJobs.map((job, k) => (partGens[k]?.status === "failed" || partGens[k]?.status === "canceled" || isUnswapped(partGens[k]) ? k : -1)).filter((k) => k >= 0);
@@ -786,12 +915,7 @@ export default function MaddenAIStudio() {
     setStitching(true);
     (async () => {
       try {
-        const pieces = await Promise.all(
-          partGens.map(async (g) => {
-            const meta = readMeta(await loadVideo(g!.outputUrl as string));
-            return { url: g!.outputUrl as string, startMs: 0, endMs: Math.round(meta.duration * 1000) };
-          }),
-        );
+        const pieces = (await Promise.all(partGens.map((g) => piecesOf(g!.outputUrl as string, g!.id)))).flat();
         const blob = await renderPiecesToBlob(pieces, { width: sourceVideo.width, height: sourceVideo.height });
         const { url } = await uploadToStorage(runFolder, blob, "madden-ai-full.mp4");
         setStitched(url);
@@ -801,7 +925,25 @@ export default function MaddenAIStudio() {
         setStitching(false);
       }
     })();
-  }, [partsDone, stitched, stitching, runFolder, sourceVideo, partGens]);
+  }, [partsDone, stitched, stitching, runFolder, sourceVideo, partGens, piecesOf]);
+
+  // A single render that got a fix spliced in becomes one file again.
+  const stagePatched = !!stageVideo?.outputUrl && !!patches[stageVideo.id] && !isUnswapped(stageVideo);
+  useEffect(() => {
+    if (!stagePatched || stitched || stitching || !runFolder || !sourceVideo || !stageVideo?.outputUrl) return;
+    setStitching(true);
+    (async () => {
+      try {
+        const blob = await renderPiecesToBlob(await piecesOf(stageVideo.outputUrl as string, stageVideo.id), { width: sourceVideo.width, height: sourceVideo.height });
+        const { url } = await uploadToStorage(runFolder, blob, "madden-ai-fixed.mp4");
+        setStitched(url);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Couldn't join the fix in");
+      } finally {
+        setStitching(false);
+      }
+    })();
+  }, [stagePatched, stitched, stitching, runFolder, sourceVideo, stageVideo, piecesOf]);
 
   const clipReady = !!sourceVideo;
   const modelPicked = !!(model.uploadedRefUrls?.length || model.avatarId);
@@ -809,7 +951,7 @@ export default function MaddenAIStudio() {
   const needsSheet = model.modelSource === "upload" && !sheetUrl;
   const modelReady = !replacing || (modelPicked && !needsSheet && analysisState !== "running" && analysisState !== "idle");
   const backsBusy = pieces.some((p) => p.backState);
-  const loading = auto || styling || rendering || stitching || checkingParts || checkingStage || (partsLive && !failedParts.length) || (!!stageVideo && isLive(stageVideo));
+  const loading = auto || styling || rendering || repairing || stitching || checkingParts || checkingStage || (partsLive && !failedParts.length) || (!!stageVideo && isLive(stageVideo));
   const needsConsent = engine === "kling" && replacing;
   const canStart = clipReady && outfitReady && modelReady && analysisState !== "running" && !backsBusy && !loading && !stylingLive && (!needsConsent || likenessConsent);
 
@@ -875,7 +1017,7 @@ export default function MaddenAIStudio() {
                 tiles={pickedFrames.map((i) => ({ source: frames[i]?.url ?? null, done: swaps[i]?.status === "complete" ? swaps[i]?.outputUrl ?? null : null }))}
                 stylingDone={swapList.filter((e) => e.swap?.status === "complete").length}
                 total={pickedFrames.length || FRAME_COUNT}
-                renderingVideo={rendering || stitching || partsLive || (!!stageVideo && isLive(stageVideo))}
+                renderingVideo={rendering || repairing || stitching || partsLive || (!!stageVideo && isLive(stageVideo))}
                 lowPoly={lowPoly}
                 status={
                   partStage ??
@@ -894,7 +1036,7 @@ export default function MaddenAIStudio() {
                   <div className="flex flex-col items-center gap-4 p-6 text-center">
                     {unswappedParts.length ? (
                       <p className="max-w-sm text-sky-100/75">
-                        Part {unswappedParts.map((k) => k + 1).join(", ")} of {parts.length} came back with the original person still in it ({unswappedParts.map((k) => `${unswapped[partGens[k]!.id]}s`).join(", ")} unchanged). Redo it before we stitch.
+                        Part {unswappedParts.map((k) => k + 1).join(", ")} of {parts.length} came back with the original person still in it ({unswappedParts.map((k) => `${unswappedSecs(partGens[k])}s`).join(", ")} unchanged). Fix just those seconds, or redo the whole part.
                       </p>
                     ) : null}
                     {failedParts.length > unswappedParts.length ? (
@@ -908,8 +1050,18 @@ export default function MaddenAIStudio() {
                         {partGens.filter((g) => isLive(g)).length} other part(s) still rendering. Retry now and everything gets stitched together when it's all done.
                       </p>
                     ) : null}
-                    <button type="button" className={ps2Button} onClick={() => void (engine === "kling" ? renderKling(failedParts) : renderParts(failedParts))}>
-                      <Ps2Glyph /> Retry {failedParts.length > 1 ? "those parts" : "that part"}
+                    {unswappedParts.length ? (
+                      <button
+                        type="button"
+                        className={ps2Button}
+                        disabled={!canAfford(unswappedParts.reduce((sum, k) => sum + repairCredits(partGens[k]), 0))}
+                        onClick={() => void (async () => { for (const k of unswappedParts) await repair(partGens[k]!, partJobs[k].range.start); })()}
+                      >
+                        <Ps2Glyph /> Fix just those seconds · ≈{unswappedParts.reduce((sum, k) => sum + repairCredits(partGens[k]), 0)} cr
+                      </button>
+                    ) : null}
+                    <button type="button" className={unswappedParts.length ? ps2Ghost : ps2Button} onClick={() => void (engine === "kling" ? renderKling(failedParts) : renderParts(failedParts))}>
+                      <Ps2Glyph /> Redo {failedParts.length > 1 ? "those parts" : "that part"}
                     </button>
                   </div>
                 ) : (
@@ -936,10 +1088,13 @@ export default function MaddenAIStudio() {
                 {stageVideo.status === "complete" && stageVideo.outputUrl && isUnswapped(stageVideo) ? (
                   <div className="flex flex-col items-center gap-4 p-6 text-center">
                     <p className="max-w-sm text-sky-100/75">
-                      {unswapped[stageVideo.id]}s of this render came back with the original person still in it. Render it again.
+                      {unswappedSecs(stageVideo)}s of this render came back with the original person still in it. Fix just those seconds, or render it all again.
                     </p>
-                    <button type="button" className={ps2Button} disabled={rendering || !readyUrls.length || !canAfford(videoCredits)} onClick={() => void makeVideo()}>
-                      <Ps2Glyph /> Render again
+                    <button type="button" className={ps2Button} disabled={!canAfford(repairCredits(stageVideo))} onClick={() => void repair(stageVideo, 0)}>
+                      <Ps2Glyph /> Fix just those seconds · ≈{repairCredits(stageVideo)} cr
+                    </button>
+                    <button type="button" className={ps2Ghost} disabled={rendering || !readyUrls.length || !canAfford(videoCredits)} onClick={() => void makeVideo()}>
+                      <Ps2Glyph /> Render it all again
                     </button>
                   </div>
                 ) : stageVideo.status === "complete" && stageVideo.outputUrl ? (
