@@ -22,6 +22,7 @@ import {
   callOutfitSwap,
   isKeepOriginal,
   primarySubjectId,
+  suggestCastAssignment,
   type OutfitSwapFrameSubject,
   type OutfitSwapGarment,
   type OutfitSwapSourceAnalysis,
@@ -57,6 +58,10 @@ const KLING_CLIP_SECONDS = 3; // outfit-swap animate_frame: Kling 3.0 Pro, fixed
 const KLING_USD_PER_SECOND = 0.112;
 const BACK_CREDITS = creditsFromUsd(IMAGE_FLAT_USD); // one 1K Nano Banana Pro image
 const SHEET_CREDITS = creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K")); // one 2K sheet
+const DRESS_SHEET_PROMPT =
+  "Image 1 is a CHARACTER REFERENCE SHEET. Re-create the exact same sheet — same person (identical face, hair, skin tone, tattoos, body), same layout, same views (front, three-quarter, side, back, face close-ups), same plain light-gray background, no text — but dress the person in the exact garments shown in the other reference images. Copy each garment's color, fabric, fit, and its prints and logos exactly where they appear in the garment photos. A print only appears on the back view if a garment's back photo shows it; otherwise the back of that garment is plain. Keep any garment not provided as plain black basics.";
+const NO_BACK_PRINT_RULE =
+  "If a garment has no back reference image, its back is plain: never copy or invent the front graphic, logo or text on the back.";
 const CHARACTER_SHEET_PROMPT =
   "CHARACTER REFERENCE SHEET of the EXACT same person shown in the reference photos — identical face, facial structure, skin tone, hair (style, length, color, texture), facial hair, tattoos, body type and height proportions. Do not beautify, slim, age, de-age or change ethnicity. Layout on one plain light-gray studio background, evenly spaced, no text or labels: full-body front view, full-body three-quarter view, full-body side profile, full-body back view, plus a large front face close-up and a three-quarter face close-up. Neutral relaxed standing pose, neutral expression, plain fitted black t-shirt and plain black pants, barefoot or plain black sneakers, no jewelry, hats or props (so outfits can be swapped later). Even soft studio lighting, photorealistic, sharp detail.";
 /** Appended to the swap + render prompts when Low Poly Mode is on. */
@@ -181,6 +186,9 @@ export default function MaddenAIStudio() {
   const [engine, setEngine] = useState<Engine>("seedance");
   const [likenessConsent, setLikenessConsent] = useState(false);
   const [sheetUrl, setSheetUrl] = useState<string | null>(null);
+  const [dressedUrl, setDressedUrl] = useState<string | null>(null);
+  const [dressedFor, setDressedFor] = useState<string>("");
+  const [dressing, setDressing] = useState(false);
   const [buildingSheet, setBuildingSheet] = useState(false);
   const [characterName, setCharacterName] = useState("");
   const [savingCharacter, setSavingCharacter] = useState(false);
@@ -454,7 +462,7 @@ export default function MaddenAIStudio() {
   }, [studioImage]);
 
   /* ---------------------------- character sheet ---------------------------- */
-  const modelPhotos = (model.uploadedRefUrls ?? []).filter((u) => u !== sheetUrl);
+  const modelPhotos = (model.uploadedRefUrls ?? []).filter((u) => u !== sheetUrl && u !== dressedUrl);
   // A sheet only belongs to the photos it was built from.
   useEffect(() => {
     if (sheetUrl && !(model.uploadedRefUrls ?? []).includes(sheetUrl)) setSheetUrl(null);
@@ -474,6 +482,25 @@ export default function MaddenAIStudio() {
       setBuildingSheet(false);
     }
   }, [modelPhotos.join("|"), studioImage]);
+
+  /** △ — the character sheet wearing your actual garments: one consistent person + outfit for every frame. */
+  const piecesKey = pieces.map((p) => `${p.frontUrl}|${p.backUrl ?? ""}`).join(",");
+  const dressedCurrent = !!dressedUrl && dressedFor === `${sheetUrl}::${piecesKey}`;
+  const dressSheet = useCallback(async () => {
+    if (!sheetUrl || !pieces.length) return;
+    setDressing(true);
+    try {
+      const garmentImages = pieces.flatMap((p) => [p.frontUrl, p.backUrl].filter((u): u is string => !!u));
+      const url = await studioImage({ prompt: DRESS_SHEET_PROMPT, imageUrls: [sheetUrl, ...garmentImages].slice(0, 10), resolution: "2K", aspectRatio: "16:9" });
+      setDressedUrl(url);
+      setDressedFor(`${sheetUrl}::${piecesKey}`);
+      setModel({ modelSource: "upload", avatarId: null, uploadedRefUrls: [url, sheetUrl, ...modelPhotos].slice(0, 5) });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't dress the character");
+    } finally {
+      setDressing(false);
+    }
+  }, [sheetUrl, pieces, piecesKey, studioImage, modelPhotos.join("|")]);
 
   /** ○ — keep the character (sheet + photos) in My avatars for next time. */
   const saveCharacter = useCallback(async () => {
@@ -504,7 +531,13 @@ export default function MaddenAIStudio() {
     [analysis],
   );
   const cleanPieces = useMemo(() => pieces.map(({ backState: _ignored, ...garment }) => garment), [pieces]);
-  const prompt = useMemo(() => [note.trim(), lowPoly ? LOW_POLY_PROMPT : ""].filter(Boolean).join("\n\n"), [note, lowPoly]);
+  const missingBack = pieces.some((p) => !p.backUrl);
+  const prompt = useMemo(
+    () => [note.trim(), missingBack ? NO_BACK_PRINT_RULE : "", lowPoly ? LOW_POLY_PROMPT : ""].filter(Boolean).join("\n\n"),
+    [note, lowPoly, missingBack],
+  );
+  // Put the garments on the main (replaced) person, even when the frame has several people.
+  const castAssignment = useMemo(() => suggestCastAssignment([subjectId], cleanPieces) ?? {}, [subjectId, cleanPieces]);
 
   const styleFrame = useCallback(
     async (index: number) => {
@@ -521,12 +554,12 @@ export default function MaddenAIStudio() {
         extraPrompt: prompt,
         resolution: "2K",
         frameSubjects: subjectsFor(index),
-        castAssignment: {},
+        castAssignment,
         modelAssignment,
       });
       setSwaps((prev) => ({ ...prev, [index]: data.generation }));
     },
-    [frames, cleanPieces, meta, prompt, subjectsFor, modelAssignment],
+    [frames, cleanPieces, meta, prompt, subjectsFor, castAssignment, modelAssignment],
   );
 
   const styleAll = useCallback(async () => {
@@ -575,7 +608,7 @@ export default function MaddenAIStudio() {
           generateAudio: false,
           extraPrompt: prompt,
           frameSubjects: Array.from(seen.values()),
-          castAssignment: {},
+          castAssignment,
           modelAssignment,
         });
         jobs[k] = { range, generationId: data.generation.id };
@@ -589,7 +622,7 @@ export default function MaddenAIStudio() {
       setPartStage(null);
       setRendering(false);
     }
-  }, [sourceVideo, clipPreview, runFolder, analysis, swaps, partJobs, parts, pickedFrames, frames, readyUrls, cleanPieces, meta, prompt, modelAssignment]);
+  }, [sourceVideo, clipPreview, runFolder, analysis, swaps, partJobs, parts, pickedFrames, frames, readyUrls, cleanPieces, meta, prompt, castAssignment, modelAssignment]);
 
   /** Kling: animate each styled frame into a 3s clip; the clips get stitched in order. */
   const renderKling = useCallback(async (only?: number[]) => {
@@ -650,7 +683,7 @@ export default function MaddenAIStudio() {
         generateAudio: false,
         extraPrompt: prompt,
         frameSubjects: Array.from(seen.values()),
-        castAssignment: {},
+        castAssignment,
         modelAssignment,
       });
       setVideos((prev) => [data.generation, ...prev]);
@@ -661,7 +694,7 @@ export default function MaddenAIStudio() {
     } finally {
       setRendering(false);
     }
-  }, [sourceVideo, readyUrls, engine, renderKling, parts.length, renderParts, cleanPieces, duration, meta, prompt, analysis, modelAssignment]);
+  }, [sourceVideo, readyUrls, engine, renderKling, parts.length, renderParts, cleanPieces, duration, meta, prompt, analysis, castAssignment, modelAssignment]);
 
   // One click: style the frames, then render as soon as they're all back.
   useEffect(() => {
@@ -990,6 +1023,19 @@ export default function MaddenAIStudio() {
                         <>
                           <img src={sheetUrl} alt="Character sheet" className="mt-2 w-full rounded-lg border border-sky-200/40 bg-white" />
                           <p className="mt-2 text-xs text-sky-100/60">Locked in. Every frame uses this sheet so the face and body stay the same.</p>
+                          {pieces.length ? (
+                            dressedCurrent ? (
+                              <>
+                                <img src={dressedUrl as string} alt="Character sheet wearing your outfit" className="mt-3 w-full rounded-lg border border-sky-200/40 bg-white" />
+                                <p className="mt-2 text-xs text-sky-100/60">Dressed in your outfit, front and back. Every frame copies this.</p>
+                              </>
+                            ) : (
+                              <button type="button" disabled={dressing || !canAfford(SHEET_CREDITS)} onClick={() => void dressSheet()} className={`${ps2Ghost} mt-3 w-full`}>
+                                {dressing ? <Loader2 size={15} className="animate-spin" /> : <Ps2Glyph glyph="△" className="h-5 w-5 text-[10px]" />}
+                                {dressing ? "Dressing the character…" : `Dress character in your outfit · ≈ ${SHEET_CREDITS} cr`}
+                              </button>
+                            )
+                          ) : null}
                           <div className="mt-3 flex gap-2">
                             <input
                               value={characterName}
