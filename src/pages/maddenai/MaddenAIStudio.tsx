@@ -20,6 +20,7 @@ import { renderPiecesToBlob } from "@/services/videoExport/renderClip";
 import {
   KEEP_ORIGINAL_MODEL,
   analyzeOutfitSwapSource,
+  judgeOutfitSwapFrames,
   callOutfitSwap,
   isKeepOriginal,
   primarySubjectId,
@@ -174,6 +175,9 @@ export default function MaddenAIStudio() {
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [sourceVideo, setSourceVideo] = useState<SourceVideo | null>(null);
   const [frames, setFrames] = useState<Frame[]>([]);
+  const [shots, setShots] = useState<Shot[]>([]);
+  /** Which tracked person gets the outfit when a clip has several (null = the first one found). */
+  const [chosenSubjectId, setChosenSubjectId] = useState<string | null>(null);
   const [clipProgress, setClipProgress] = useState<number | null>(null);
   const [igUrl, setIgUrl] = useState("");
   const [importing, setImporting] = useState(false);
@@ -325,6 +329,8 @@ export default function MaddenAIStudio() {
     setPartJobs([]);
     setStitched(null);
     setFrames([]);
+    setShots([]);
+    setChosenSubjectId(null);
     setSourceVideo(null);
     setSwaps({});
     setAnalysis(null);
@@ -340,6 +346,7 @@ export default function MaddenAIStudio() {
       const stored = await uploadToStorage(folder, file, file.name);
       // One reference per shot (a montage cuts between outfits and angles), more for long shots.
       const shots = await detectShots(el, m.duration, (d, t) => setClipProgress(Math.round((d / t) * 40)));
+      setShots(shots);
       const plan = shotFrameTimes(shots, MAX_ANALYZED_FRAMES);
       const captured = await extractFrames(el, plan.map((p) => p.time), (d, t) => setClipProgress(40 + Math.round((d / t) * 20)));
       const grays = new Map<number, Gray>();
@@ -557,7 +564,10 @@ export default function MaddenAIStudio() {
   }, [sheetUrl, characterName, modelPhotos.join("|")]);
 
   /* ------------------------------ generation ------------------------------ */
-  const subjectId = primarySubjectId(analysis);
+  const subjectTracks = analysis?.subjectTracks ?? [];
+  const subjectId =
+    chosenSubjectId && subjectTracks.some((t) => t.subjectId === chosenSubjectId) ? chosenSubjectId : primarySubjectId(analysis);
+  const subjectDescription = subjectTracks.find((t) => t.subjectId === subjectId)?.description ?? "";
   const replacing = !isKeepOriginal(model);
   const modelAssignment = useMemo(() => (replacing ? { [subjectId]: model } : {}), [replacing, subjectId, model]);
   const subjectsFor = useCallback(
@@ -633,6 +643,7 @@ export default function MaddenAIStudio() {
           .filter((i) => inPart(frames[i], range))
           .sort((a, b) => shotLength(frames[b]) - shotLength(frames[a])) // over Seedance's limit, keep the longest shots
           .slice(0, MAX_REFS_PER_PART)
+          .sort((a, b) => a - b) // then hand them over in shot order, like the video
           .map(styledAt)
           .filter((u): u is string => !!u);
         setPartStage(`Starting part ${k + 1} of ${parts.length}`);
@@ -770,6 +781,48 @@ export default function MaddenAIStudio() {
     },
     [candidateFrames, frames, hasPerson],
   );
+  /**
+   * The moments of a render (seconds into it) that failed. Every shot in it is judged by
+   * the AI judge: right person in THIS garment, facing the way they face in the original,
+   * same person. A failed shot counts in full. Falls back to the pixel copy check.
+   */
+  const checkRender = useCallback(
+    async (sourceStart: number, outputUrl: string): Promise<number[]> => {
+      if (!clipPreview) return [];
+      const pixelCheck = () => unswappedTimes(clipPreview, sourceStart, outputUrl, personAt).catch(() => [] as number[]);
+      const garmentUrls = cleanPieces.flatMap((p) => [p.frontUrl ?? p.url, p.backUrl]).filter((u): u is string => !!u);
+      if (!runFolder || !garmentUrls.length) return pixelCheck();
+      try {
+        const [src, out] = await Promise.all([loadVideo(clipPreview), loadVideo(outputUrl)]);
+        const length = Math.min(out.duration, src.duration - sourceStart);
+        const local = shots
+          .map((sh) => ({ start: Math.max(0, sh.start - sourceStart), end: Math.min(length, sh.end - sourceStart) }))
+          .filter((sh) => sh.end - sh.start >= 0.2);
+        const samples = shotFrameTimes(local.length ? local : [{ start: 0, end: length }], 16);
+        const pairs: { id: number; sourceUrl: string; outputUrl: string }[] = [];
+        for (const [id, sample] of samples.entries()) {
+          const before = await captureFrameAt(src, sourceStart + sample.time, 768);
+          const after = await captureFrameAt(out, sample.time, 768);
+          const [a, b] = await Promise.all([uploadToStorage(runFolder, before, `judge-src-${id}.jpg`), uploadToStorage(runFolder, after, `judge-out-${id}.jpg`)]);
+          pairs.push({ id, sourceUrl: a.url, outputUrl: b.url });
+        }
+        const batches = Array.from({ length: Math.ceil(pairs.length / 8) }, (_, k) => pairs.slice(k * 8, k * 8 + 8));
+        const verdicts = (
+          await Promise.all(batches.map((batch) => judgeOutfitSwapFrames({ garmentUrls, subject: subjectDescription, replacingPerson: replacing, frames: batch })))
+        ).flat();
+        const failedShots = verdicts
+          .filter((v) => v.personVisible && (v.wearingGarment === "no" || v.facingMatches === "no" || v.samePerson === "no"))
+          .map((v) => samples[v.id]?.shot)
+          .filter((sh): sh is Shot => !!sh);
+        const grid: number[] = [];
+        for (let t = 0.25; t < length; t += 0.5) grid.push(t);
+        return grid.filter((t) => failedShots.some((sh) => t >= sh.start && t < sh.end));
+      } catch {
+        return pixelCheck();
+      }
+    },
+    [clipPreview, personAt, cleanPieces, runFolder, shots, subjectDescription, replacing],
+  );
   useEffect(() => {
     if (engine === "kling" || !clipPreview) return;
     const renders = partJobs.map((job, k) => ({ start: job?.range.start ?? 0, gen: partGens[k] }));
@@ -777,11 +830,11 @@ export default function MaddenAIStudio() {
     for (const { start, gen } of renders) {
       if (gen?.status !== "complete" || !gen.outputUrl || checkingIds.current.has(gen.id)) continue;
       checkingIds.current.add(gen.id);
-      void unswappedTimes(clipPreview, start, gen.outputUrl, personAt)
+      void checkRender(start, gen.outputUrl)
         .catch(() => [] as number[]) // can't read it: don't block the result
         .then((times) => setUnswapped((prev) => ({ ...prev, [gen.id]: times })));
     }
-  }, [engine, clipPreview, partJobs, partGens, stageVideo, stageFromSession, personAt]);
+  }, [engine, clipPreview, partJobs, partGens, stageVideo, stageFromSession, checkRender]);
   const unswappedSecs = (g?: SwapGeneration | null) => (g ? (unswapped[g.id]?.length ?? 0) * 0.5 : 0);
   const isUnswapped = (g?: SwapGeneration | null) => unswappedSecs(g) > MAX_UNSWAPPED_SECONDS;
   const isChecked = (g?: SwapGeneration | null) => engine === "kling" || (!!g && unswapped[g.id] !== undefined);
@@ -874,7 +927,7 @@ export default function MaddenAIStudio() {
         if (patch.status !== "complete" || !patch.outputUrl) throw new Error(patch.error ?? "That fix didn't render. Credits for failed renders go back to your account.");
 
         setPartStage("Checking the fix");
-        const left = await unswappedTimes(clipPreview, sourceStart + win.start, patch.outputUrl, personAt).catch(() => [] as number[]);
+        const left = await checkRender(sourceStart + win.start, patch.outputUrl).catch(() => [] as number[]);
         const missedInside = times.filter((t) => t >= win.start && t < win.end);
         if (left.length >= missedInside.length) throw new Error("The fix came back unswapped too. Try redoing the whole part.");
         setPatches((prev) => ({ ...prev, [gen.id]: [...(prev[gen.id] ?? []), { start: win.start, end: win.end, url: patch.outputUrl as string }] }));
@@ -889,7 +942,7 @@ export default function MaddenAIStudio() {
         setRepairing(false);
       }
     },
-    [unswapped, clipPreview, runFolder, sourceVideo, candidateFrames, frames, cleanPieces, meta, prompt, subjectsFor, castAssignment, modelAssignment, waitFor, pickedFrames, swaps, analysis, videoPrompt, personAt],
+    [unswapped, clipPreview, runFolder, sourceVideo, candidateFrames, frames, cleanPieces, meta, prompt, subjectsFor, castAssignment, modelAssignment, waitFor, pickedFrames, swaps, analysis, videoPrompt, checkRender],
   );
   const repairCredits = (g?: SwapGeneration | null) => {
     const runs = groupRuns(g ? unswapped[g.id] ?? [] : []).slice(0, PATCH_FRAMES_MAX);
@@ -1275,6 +1328,16 @@ export default function MaddenAIStudio() {
                   }
                 />
               </div>
+              {subjectTracks.length > 1 ? (
+                <div className="mt-2">
+                  <OptionCycler
+                    label="Which person?"
+                    options={subjectTracks.map((t, i) => ({ label: t.description || `Person ${i + 1}`, value: t.subjectId }))}
+                    value={subjectId}
+                    onChange={(v) => setChosenSubjectId(v)}
+                  />
+                </div>
+              ) : null}
               {replacing ? (
                 <div className="ps2-scope mt-3">
                   <SubjectModelSelector userId={user?.id ?? null} model={model} onChange={setModel} compact hideSourcePicker hideSave={model.modelSource === "upload"} />
