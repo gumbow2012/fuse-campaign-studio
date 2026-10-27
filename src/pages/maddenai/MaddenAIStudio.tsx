@@ -59,6 +59,7 @@ const MAX_REFS_PER_PART = 9; // Seedance reference-image limit
 const MAX_ANALYZED_FRAMES = 16; // outfit-swap-analyze takes 16 frames per call
 const MAX_UNSWAPPED_SECONDS = 0.5; // 1s+ of a person left untouched = fix it before stitching
 const PATCH_FRAMES_MAX = 4;
+const AUTO_FIX_PASSES = 2; // fixes run on their own this many times per render, then it is your call
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const KLING_CLIP_SECONDS = 3; // outfit-swap animate_frame: Kling 3.0 Pro, fixed 3s
 const KLING_USD_PER_SECOND = 0.112;
@@ -270,6 +271,11 @@ export default function MaddenAIStudio() {
   const klingCredits = (pickedFrames.length || FRAME_COUNT) * creditsFromUsd(KLING_USD_PER_SECOND * KLING_CLIP_SECONDS);
   const videoCredits = engine === "kling" ? klingCredits : seedanceCredits;
   const totalCredits = styleCredits + videoCredits;
+  // Worst case if every part needs both auto-fix passes (≈2 restyled frames + a 6s re-render each).
+  const autoFixMaxCredits =
+    engine === "kling"
+      ? 0
+      : parts.length * AUTO_FIX_PASSES * (2 * creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K")) + creditsFromUsd(VIDEO_USD_PER_SECOND * 6 * resolutionMultiplier(VIDEO_RESOLUTION)));
   const balance = profile?.credits_balance ?? 0;
   const canAfford = (credits: number) => isAdmin || balance >= credits;
 
@@ -891,6 +897,21 @@ export default function MaddenAIStudio() {
     const win = patchWindow(runs, 15);
     return runs.length * creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K")) + creditsFromUsd(VIDEO_USD_PER_SECOND * partSeconds(win) * resolutionMultiplier(VIDEO_RESOLUTION));
   };
+  // Auto-fix: a render that came back with the original person in it gets its bad
+  // seconds re-rendered without a click, up to AUTO_FIX_PASSES times, one at a time.
+  const fixPasses = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (engine === "kling" || repairing || rendering || stitching) return;
+    const renders = partJobs.map((job, k) => ({ start: job?.range.start ?? 0, gen: partGens[k] }));
+    if (stageVideo && stageFromSession) renders.push({ start: 0, gen: stageVideo });
+    const next = renders.find(
+      ({ gen }) => gen && isUnswapped(gen) && (fixPasses.current[gen.id] ?? 0) < AUTO_FIX_PASSES && canAfford(repairCredits(gen)),
+    );
+    if (!next?.gen) return;
+    fixPasses.current[next.gen.id] = (fixPasses.current[next.gen.id] ?? 0) + 1;
+    void repair(next.gen, next.start);
+  });
+
   /** A render as stitchable pieces, with its patch (if any) spliced in. */
   const piecesOf = useCallback(
     async (url: string, id: string) => {
@@ -1364,13 +1385,14 @@ export default function MaddenAIStudio() {
               {canAfford(totalCredits) ? (
                 <button type="button" className={`${ps2Button} w-full py-4 text-[14px]`} disabled={!canStart} onClick={begin}>
                   {loading ? <Loader2 size={16} className="animate-spin" /> : <Ps2Glyph />}
-                  Start · ≈ {totalCredits} credits
+                  Start · ≈ {totalCredits}{autoFixMaxCredits ? `–${totalCredits + autoFixMaxCredits}` : ""} credits
                 </button>
               ) : (
                 <Link to="/pricing" className={`${ps2Button} w-full py-4`}>Get credits ({totalCredits} needed)</Link>
               )}
               <p className="mt-2 text-center text-xs text-sky-100/45">
                 {isAdmin ? "Admin · free" : `${balance.toLocaleString()} credits`} · failed steps are refunded
+                {autoFixMaxCredits ? " · the higher number only if seconds come back unswapped and get re-rendered" : ""}
               </p>
             </div>
           </aside>
