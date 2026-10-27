@@ -426,6 +426,27 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
 
   const buffered: any[] = [];
   let lastOutTsUs = 0;
+  // Camera files (B-frames) can hand frames back slightly out of order when a cut starts
+  // mid-clip; a backwards timestamp makes the muxer throw. Hold a few, emit in order.
+  const REORDER_FRAMES = 8;
+  const pending: any[] = [];
+  let lastEmittedTs = -Infinity;
+  const release = (all: boolean) => {
+    pending.sort((a, b) => a.timestamp - b.timestamp);
+    while (pending.length > (all ? 0 : REORDER_FRAMES)) {
+      const frame = pending.shift();
+      try {
+        if (frame.timestamp <= lastEmittedTs) continue; // late or duplicate: drop it
+        lastEmittedTs = frame.timestamp;
+        const outTsUs = (frame.timestamp - startUs) / speed;
+        const durUs = Math.max(1, Math.round((frame.duration ?? frameDurUs) / speed));
+        emit(frame, outTsUs, durUs);
+        lastOutTsUs = outTsUs + durUs;
+      } finally {
+        frame.close();
+      }
+    }
+  };
 
   const decoder = new g.VideoDecoder({
     output: (frame: any) => {
@@ -441,14 +462,8 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
         buffered.push(frame);
         return;
       }
-      try {
-        const outTsUs = (frame.timestamp - startUs) / speed;
-        const durUs = Math.max(1, Math.round((frame.duration ?? frameDurUs) / speed));
-        emit(frame, outTsUs, durUs);
-        lastOutTsUs = outTsUs + durUs;
-      } finally {
-        frame.close();
-      }
+      pending.push(frame);
+      release(false);
     },
     error: (error: unknown) => {
       throw error instanceof Error ? error : new Error(String(error));
@@ -472,6 +487,7 @@ async function encodeVideo(source: Demuxed, segment: WorkerSegment, target: Expo
     }));
   }
   await decoder.flush();
+  release(true);
 
   // Reverse plays the buffered frames back to front, evenly spaced.
   if (motion.reverse) {
@@ -612,8 +628,11 @@ async function renderSegment(segment: WorkerSegment, target: ExportTarget): Prom
   await loadImageLayers(target);
 
   let rendered: Rendered;
-  if (canStreamCopy(source, segment, target)) {
-    const { durationUs, ...video } = sliceCopy(source, segment);
+  // A stream copy keeps the source's frame order; with B-frames that order runs backwards
+  // in places and the muxer rejects it, so only copy slices whose timestamps only go up.
+  const copy = canStreamCopy(source, segment, target) ? sliceCopy(source, segment) : null;
+  if (copy && copy.chunks.every((chunk, i) => i === 0 || chunk.ptsUs > copy.chunks[i - 1].ptsUs)) {
+    const { durationUs, ...video } = copy;
     rendered = {
       key,
       mode: "copy",
