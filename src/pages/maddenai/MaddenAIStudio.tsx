@@ -13,7 +13,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { IMAGE_FLAT_USD, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
 import { compressImageFile } from "@/lib/imageCompress";
-import { extractFrames, frameTimestamps, loadVideo, readMeta, type VideoMeta } from "@/lib/videoFrames";
+import { extractFrames, frameTimestamps, loadVideo, readMeta, seekVideoTo, type VideoMeta } from "@/lib/videoFrames";
+import { changeScore, grayOf, pickSpread, unswappedSeconds, type Gray } from "@/lib/swapCheck";
 import { createOutfitSwapFolder, uploadToStorage, uploadWithConcurrency } from "@/services/storageUpload";
 import { renderPiecesToBlob } from "@/services/videoExport/renderClip";
 import {
@@ -54,12 +55,18 @@ const MAX_PIECES = 4;
 const MAX_CLIP_SECONDS = 60;
 const PART_MAX_SECONDS = 15; // Seedance's per-render limit
 const FRAMES_PER_PART = 2;
+const MAX_REFS_PER_PART = 6;
+const MAX_ANALYZED_FRAMES = 16; // outfit-swap-analyze takes 16 frames per call
+const MAX_UNSWAPPED_SECONDS = 1.5; // more than this of a person left untouched = redo the part
 const KLING_CLIP_SECONDS = 3; // outfit-swap animate_frame: Kling 3.0 Pro, fixed 3s
 const KLING_USD_PER_SECOND = 0.112;
 const BACK_CREDITS = creditsFromUsd(IMAGE_FLAT_USD); // one 1K Nano Banana Pro image
 const SHEET_CREDITS = creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K")); // one 2K sheet
 const DRESS_SHEET_PROMPT =
   "Image 1 is a CHARACTER REFERENCE SHEET. Re-create the exact same sheet — same person (identical face, hair, skin tone, tattoos, body), same layout, same views (front, three-quarter, side, back, face close-ups), same plain light-gray background, no text — but dress the person in the exact garments shown in the other reference images. Copy each garment's color, fabric, fit, and its prints and logos exactly where they appear in the garment photos. A print only appears on the back view if a garment's back photo shows it; otherwise the back of that garment is plain. Keep any garment not provided as plain black basics.";
+/** Video renders only: montages cut between shots, and every shot with the person gets the swap. */
+const EVERY_SHOT_RULE =
+  "This clip may cut between several shots, outfits and angles. The replacement applies to the person in EVERY shot where they appear, including shots with no matching reference frame: never fall back to the original person or the original outfit for any shot or any second. Only shots with no person in them (empty room, title cards, text) stay as in @Video1.";
 const NO_BACK_PRINT_RULE =
   "If a garment has no back reference image, its back is plain: never copy or invent the front graphic, logo or text on the back.";
 const CHARACTER_SHEET_PROMPT =
@@ -81,7 +88,7 @@ const TIPS = [
   "Clips over 15 seconds render in parts and get stitched back together.",
 ];
 
-type Frame = { time: number; url: string };
+type Frame = { time: number; url: string; gray?: Gray };
 type PartRange = { start: number; end: number };
 type PartJob = { range: PartRange; generationId: string; frameUrl?: string };
 type Engine = "seedance" | "kling";
@@ -93,17 +100,21 @@ function splitParts(duration: number): PartRange[] {
   return Array.from({ length: n }, (_, k) => ({ start: k * len, end: k === n - 1 ? duration : (k + 1) * len }));
 }
 
-/** Frames to style: 4 spread over a short clip, or 2 per part (at 25% / 75%) for a long one. */
+/**
+ * Frames to style: per part, frames spread about every 2s (so every shot / outfit /
+ * angle in a montage has a reference nearby), up to the cap.
+ */
 function pickFrameIndices(frames: Frame[], duration: number): number[] {
   if (!frames.length) return [];
   const parts = splitParts(duration);
-  if (parts.length === 1) {
-    const step = Math.max(1, Math.ceil(frames.length / FRAME_COUNT));
-    return frames.map((_, i) => i).filter((i) => i % step === 0).slice(0, FRAME_COUNT);
-  }
-  const nearest = (t: number) => frames.reduce((best, f, i) => (Math.abs(f.time - t) < Math.abs(frames[best].time - t) ? i : best), 0);
-  const picks = parts.flatMap((p) => [0.25, 0.75].slice(0, FRAMES_PER_PART).map((q) => nearest(p.start + (p.end - p.start) * q)));
-  return [...new Set(picks)];
+  const cap = parts.length === 1 ? FRAME_COUNT : Math.min(MAX_REFS_PER_PART, Math.floor(MAX_ANALYZED_FRAMES / parts.length));
+  const grays = frames.map((f) => f.gray);
+  return parts
+    .flatMap((p, k) => {
+      const pool = frames.map((_, i) => i).filter((i) => frames[i].time >= p.start && (frames[i].time < p.end || k === parts.length - 1));
+      return pickSpread(pool, grays, cap);
+    })
+    .sort((a, b) => a - b);
 }
 type SourceVideo = { path: string; duration: number; width: number; height: number };
 type Screen = "title" | "menu" | "setup";
@@ -247,7 +258,20 @@ export default function MaddenAIStudio() {
   /* ----------------------------- cost preview ----------------------------- */
   const clipSeconds = meta?.duration ?? 5;
   const parts = useMemo(() => splitParts(clipSeconds), [clipSeconds]);
-  const pickedFrames = useMemo(() => pickFrameIndices(frames, clipSeconds), [frames, clipSeconds]);
+  const candidateFrames = useMemo(() => pickFrameIndices(frames, clipSeconds), [frames, clipSeconds]);
+  /** Whether the analysis saw a person in frame i (unknown = yes). */
+  const hasPerson = useCallback(
+    (i: number) => {
+      const f = analysis?.frames.find((x) => x.frameId === `frame-${i}`);
+      return !f || f.subjects.length > 0;
+    },
+    [analysis],
+  );
+  // Skip title cards and empty shots: nothing to restyle there.
+  const pickedFrames = useMemo(() => {
+    const withPeople = candidateFrames.filter(hasPerson);
+    return withPeople.length ? withPeople : candidateFrames;
+  }, [candidateFrames, hasPerson]);
   const partSeconds = (range: PartRange) => Math.min(PART_MAX_SECONDS, Math.max(4, Math.round(range.end - range.start)));
   const duration = partSeconds(parts[0]);
   const styleCredits = creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K") * (pickedFrames.length || FRAME_COUNT));
@@ -318,10 +342,15 @@ export default function MaddenAIStudio() {
       setRunFolder(folder);
       const stored = await uploadToStorage(folder, file, file.name);
       const captured = await extractFrames(el, frameTimestamps(m.duration), (d, t) => setClipProgress(Math.round((d / t) * 50)));
-      const uploaded = await uploadWithConcurrency(
+      const grays = new Map<number, Gray>();
+      for (const f of captured) {
+        await seekVideoTo(el, f.time);
+        grays.set(f.time, grayOf(el));
+      }
+      const uploaded: Frame[] = await uploadWithConcurrency(
         captured,
         3,
-        async (f) => ({ time: f.time, url: (await uploadToStorage(folder, f.file, f.file.name)).url }),
+        async (f) => ({ time: f.time, url: (await uploadToStorage(folder, f.file, f.file.name)).url, gray: grays.get(f.time) }),
         (d, t) => setClipProgress(50 + Math.round((d / t) * 50)),
       );
       setFrames(uploaded);
@@ -536,6 +565,7 @@ export default function MaddenAIStudio() {
     () => [note.trim(), missingBack ? NO_BACK_PRINT_RULE : "", lowPoly ? LOW_POLY_PROMPT : ""].filter(Boolean).join("\n\n"),
     [note, lowPoly, missingBack],
   );
+  const videoPrompt = `${prompt}\n\n${EVERY_SHOT_RULE}`.trim();
   // Put the garments on the main (replaced) person, even when the frame has several people.
   const castAssignment = useMemo(() => suggestCastAssignment([subjectId], cleanPieces) ?? {}, [subjectId, cleanPieces]);
 
@@ -606,7 +636,7 @@ export default function MaddenAIStudio() {
           resolution: VIDEO_RESOLUTION,
           aspectRatio: meta?.aspectRatio,
           generateAudio: false,
-          extraPrompt: prompt,
+          extraPrompt: videoPrompt,
           frameSubjects: Array.from(seen.values()),
           castAssignment,
           modelAssignment,
@@ -622,7 +652,7 @@ export default function MaddenAIStudio() {
       setPartStage(null);
       setRendering(false);
     }
-  }, [sourceVideo, clipPreview, runFolder, analysis, swaps, partJobs, parts, pickedFrames, frames, readyUrls, cleanPieces, meta, prompt, castAssignment, modelAssignment]);
+  }, [sourceVideo, clipPreview, runFolder, analysis, swaps, partJobs, parts, pickedFrames, frames, readyUrls, cleanPieces, meta, videoPrompt, castAssignment, modelAssignment]);
 
   /** Kling: animate each styled frame into a 3s clip; the clips get stitched in order. */
   const renderKling = useCallback(async (only?: number[]) => {
@@ -681,7 +711,7 @@ export default function MaddenAIStudio() {
         resolution: VIDEO_RESOLUTION,
         aspectRatio: meta?.aspectRatio,
         generateAudio: false,
-        extraPrompt: prompt,
+        extraPrompt: videoPrompt,
         frameSubjects: Array.from(seen.values()),
         castAssignment,
         modelAssignment,
@@ -694,7 +724,7 @@ export default function MaddenAIStudio() {
     } finally {
       setRendering(false);
     }
-  }, [sourceVideo, readyUrls, engine, renderKling, parts.length, renderParts, cleanPieces, duration, meta, prompt, analysis, castAssignment, modelAssignment]);
+  }, [sourceVideo, readyUrls, engine, renderKling, parts.length, renderParts, cleanPieces, duration, meta, videoPrompt, analysis, castAssignment, modelAssignment]);
 
   // One click: style the frames, then render as soon as they're all back.
   useEffect(() => {
@@ -705,10 +735,51 @@ export default function MaddenAIStudio() {
   }, [auto, styling, stylingLive, swapList.length, pickedFrames.length, readyUrls.length, makeVideo]);
 
   const partGens = partJobs.map((job) => videos.find((v) => v.id === job?.generationId) ?? null);
+  const stageVideo = videos.find((v) => v.id === stageVideoId) ?? null;
+  const stageFromSession = !!stageVideoId && sessionVideoIds.includes(stageVideoId);
+
+  /* Copy check: Seedance sometimes hands back the source untouched for a shot or a whole part.
+     Every finished render is compared to the source, second by second, before it's stitched. */
+  const [unswapped, setUnswapped] = useState<Record<string, number>>({});
+  const checkingIds = useRef(new Set<string>());
+  const personAt = useCallback(
+    (src: Gray) => {
+      // The analysed frame that looks most like this moment says whether someone is on screen.
+      let best = -1;
+      let bestScore = Infinity;
+      for (const i of candidateFrames) {
+        const gray = frames[i]?.gray;
+        if (!gray) continue;
+        const score = changeScore(src, gray);
+        if (score < bestScore) [best, bestScore] = [i, score];
+      }
+      return best < 0 || hasPerson(best);
+    },
+    [candidateFrames, frames, hasPerson],
+  );
+  useEffect(() => {
+    if (engine === "kling" || !clipPreview) return;
+    const renders = partJobs.map((job, k) => ({ start: job?.range.start ?? 0, gen: partGens[k] }));
+    if (stageVideo && stageFromSession) renders.push({ start: 0, gen: stageVideo });
+    for (const { start, gen } of renders) {
+      if (gen?.status !== "complete" || !gen.outputUrl || checkingIds.current.has(gen.id)) continue;
+      checkingIds.current.add(gen.id);
+      void unswappedSeconds(clipPreview, start, gen.outputUrl, personAt)
+        .catch(() => 0) // can't read it: don't block the result
+        .then((seconds) => setUnswapped((prev) => ({ ...prev, [gen.id]: seconds })));
+    }
+  }, [engine, clipPreview, partJobs, partGens, stageVideo, stageFromSession, personAt]);
+  const isUnswapped = (g?: SwapGeneration | null) => !!g && (unswapped[g.id] ?? 0) > MAX_UNSWAPPED_SECONDS;
+  const isChecked = (g?: SwapGeneration | null) => engine === "kling" || (!!g && unswapped[g.id] !== undefined);
+
   const partsLive = partGens.some((g) => isLive(g));
-  const failedParts = partJobs.map((job, k) => (partGens[k]?.status === "failed" || partGens[k]?.status === "canceled" ? k : -1)).filter((k) => k >= 0);
+  const failedParts = partJobs.map((job, k) => (partGens[k]?.status === "failed" || partGens[k]?.status === "canceled" || isUnswapped(partGens[k]) ? k : -1)).filter((k) => k >= 0);
+  const unswappedParts = failedParts.filter((k) => isUnswapped(partGens[k]));
   const expectedParts = engine === "kling" ? readyUrls.length : parts.length;
-  const partsDone = partJobs.length > 0 && partJobs.length === expectedParts && (engine === "kling" || parts.length > 1) && partGens.every((g) => g?.status === "complete" && g.outputUrl);
+  const partsRendered = partJobs.length > 0 && partJobs.length === expectedParts && (engine === "kling" || parts.length > 1) && partGens.every((g) => g?.status === "complete" && g.outputUrl);
+  const checkingParts = partsRendered && !partGens.every(isChecked);
+  const partsDone = partsRendered && !checkingParts && !failedParts.length;
+  const checkingStage = !!stageVideo && stageFromSession && stageVideo.status === "complete" && !isChecked(stageVideo);
 
   useEffect(() => {
     if (!partsDone || stitched || stitching || !runFolder || !sourceVideo) return;
@@ -732,17 +803,15 @@ export default function MaddenAIStudio() {
     })();
   }, [partsDone, stitched, stitching, runFolder, sourceVideo, partGens]);
 
-  const stageVideo = videos.find((v) => v.id === stageVideoId) ?? null;
-  const stageFromSession = !!stageVideoId && sessionVideoIds.includes(stageVideoId);
   const clipReady = !!sourceVideo;
   const modelPicked = !!(model.uploadedRefUrls?.length || model.avatarId);
   const outfitReady = pieces.length > 0 || (replacing && modelPicked);
   const needsSheet = model.modelSource === "upload" && !sheetUrl;
   const modelReady = !replacing || (modelPicked && !needsSheet && analysisState !== "running" && analysisState !== "idle");
   const backsBusy = pieces.some((p) => p.backState);
-  const loading = auto || styling || rendering || stitching || (partsLive && !failedParts.length) || (!!stageVideo && isLive(stageVideo));
+  const loading = auto || styling || rendering || stitching || checkingParts || checkingStage || (partsLive && !failedParts.length) || (!!stageVideo && isLive(stageVideo));
   const needsConsent = engine === "kling" && replacing;
-  const canStart = clipReady && outfitReady && modelReady && !backsBusy && !loading && !stylingLive && (!needsConsent || likenessConsent);
+  const canStart = clipReady && outfitReady && modelReady && analysisState !== "running" && !backsBusy && !loading && !stylingLive && (!needsConsent || likenessConsent);
 
   const begin = useCallback(() => {
     setStageVideoId(null);
@@ -810,7 +879,9 @@ export default function MaddenAIStudio() {
                 lowPoly={lowPoly}
                 status={
                   partStage ??
-                  (stitching
+                  (checkingParts || checkingStage
+                    ? "Checking every second for the swap"
+                    : stitching
                     ? `Stitching ${partJobs.length} ${engine === "kling" ? "clips" : "parts"}`
                     : partsLive
                       ? `Rendering ${engine === "kling" ? "clips" : "parts"} · ${partGens.filter((g) => g?.status === "complete").length}/${partJobs.length} done`
@@ -821,9 +892,16 @@ export default function MaddenAIStudio() {
               <div className="flex h-full min-h-[420px] flex-col items-center justify-center">
                 {failedParts.length ? (
                   <div className="flex flex-col items-center gap-4 p-6 text-center">
-                    <p className="max-w-sm text-sky-100/75">
-                      Part {failedParts.map((k) => k + 1).join(", ")} of {parts.length} didn't render. Credits for failed parts go back to your account.
-                    </p>
+                    {unswappedParts.length ? (
+                      <p className="max-w-sm text-sky-100/75">
+                        Part {unswappedParts.map((k) => k + 1).join(", ")} of {parts.length} came back with the original person still in it ({unswappedParts.map((k) => `${unswapped[partGens[k]!.id]}s`).join(", ")} unchanged). Redo it before we stitch.
+                      </p>
+                    ) : null}
+                    {failedParts.length > unswappedParts.length ? (
+                      <p className="max-w-sm text-sky-100/75">
+                        Part {failedParts.filter((k) => !unswappedParts.includes(k)).map((k) => k + 1).join(", ")} of {parts.length} didn't render. Credits for failed parts go back to your account.
+                      </p>
+                    ) : null}
                     {partsLive ? (
                       <p className="flex items-center gap-2 text-xs text-sky-100/55">
                         <Loader2 size={13} className="animate-spin" />
@@ -855,7 +933,16 @@ export default function MaddenAIStudio() {
               </div>
             ) : stageVideo ? (
               <div className="flex h-full min-h-[420px] flex-col items-center justify-center">
-                {stageVideo.status === "complete" && stageVideo.outputUrl ? (
+                {stageVideo.status === "complete" && stageVideo.outputUrl && isUnswapped(stageVideo) ? (
+                  <div className="flex flex-col items-center gap-4 p-6 text-center">
+                    <p className="max-w-sm text-sky-100/75">
+                      {unswapped[stageVideo.id]}s of this render came back with the original person still in it. Render it again.
+                    </p>
+                    <button type="button" className={ps2Button} disabled={rendering || !readyUrls.length || !canAfford(videoCredits)} onClick={() => void makeVideo()}>
+                      <Ps2Glyph /> Render again
+                    </button>
+                  </div>
+                ) : stageVideo.status === "complete" && stageVideo.outputUrl ? (
                   <ResultStage
                     videoUrl={stageVideo.outputUrl}
                     breakdown={stageFromSession ? pickedFrames.map((i) => ({
