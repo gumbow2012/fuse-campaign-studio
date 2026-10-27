@@ -53,6 +53,8 @@ const MAX_PIECES = 4;
 const MAX_CLIP_SECONDS = 60;
 const PART_MAX_SECONDS = 15; // Seedance's per-render limit
 const FRAMES_PER_PART = 2;
+const KLING_CLIP_SECONDS = 3; // outfit-swap animate_frame: Kling 3.0 Pro, fixed 3s
+const KLING_USD_PER_SECOND = 0.112;
 const BACK_CREDITS = creditsFromUsd(IMAGE_FLAT_USD); // one 1K Nano Banana Pro image
 const SHEET_CREDITS = creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K")); // one 2K sheet
 const CHARACTER_SHEET_PROMPT =
@@ -76,7 +78,8 @@ const TIPS = [
 
 type Frame = { time: number; url: string };
 type PartRange = { start: number; end: number };
-type PartJob = { range: PartRange; generationId: string };
+type PartJob = { range: PartRange; generationId: string; frameUrl?: string };
+type Engine = "seedance" | "kling";
 
 /** Equal parts of at most 15s (a 60s clip -> 4 x 15s, 20s -> 2 x 10s). */
 function splitParts(duration: number): PartRange[] {
@@ -175,6 +178,8 @@ export default function MaddenAIStudio() {
   const [note, setNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
   const [lowPoly, setLowPoly] = useState(false);
+  const [engine, setEngine] = useState<Engine>("seedance");
+  const [likenessConsent, setLikenessConsent] = useState(false);
   const [sheetUrl, setSheetUrl] = useState<string | null>(null);
   const [buildingSheet, setBuildingSheet] = useState(false);
   const [characterName, setCharacterName] = useState("");
@@ -238,7 +243,9 @@ export default function MaddenAIStudio() {
   const partSeconds = (range: PartRange) => Math.min(PART_MAX_SECONDS, Math.max(4, Math.round(range.end - range.start)));
   const duration = partSeconds(parts[0]);
   const styleCredits = creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K") * (pickedFrames.length || FRAME_COUNT));
-  const videoCredits = parts.reduce((sum, range) => sum + creditsFromUsd(VIDEO_USD_PER_SECOND * partSeconds(range) * resolutionMultiplier(VIDEO_RESOLUTION)), 0);
+  const seedanceCredits = parts.reduce((sum, range) => sum + creditsFromUsd(VIDEO_USD_PER_SECOND * partSeconds(range) * resolutionMultiplier(VIDEO_RESOLUTION)), 0);
+  const klingCredits = (pickedFrames.length || FRAME_COUNT) * creditsFromUsd(KLING_USD_PER_SECOND * KLING_CLIP_SECONDS);
+  const videoCredits = engine === "kling" ? klingCredits : seedanceCredits;
   const totalCredits = styleCredits + videoCredits;
   const balance = profile?.credits_balance ?? 0;
   const canAfford = (credits: number) => isAdmin || balance >= credits;
@@ -584,8 +591,44 @@ export default function MaddenAIStudio() {
     }
   }, [sourceVideo, clipPreview, runFolder, analysis, swaps, partJobs, parts, pickedFrames, frames, readyUrls, cleanPieces, meta, prompt, modelAssignment]);
 
+  /** Kling: animate each styled frame into a 3s clip; the clips get stitched in order. */
+  const renderKling = useCallback(async (only?: number[]) => {
+    setRendering(true);
+    setStitched(null);
+    try {
+      const styled = pickedFrames
+        .map((i) => ({ i, url: swaps[i]?.status === "complete" ? swaps[i]?.outputUrl ?? null : null }))
+        .filter((f): f is { i: number; url: string } => !!f.url);
+      const jobs: PartJob[] = only ? [...partJobs] : [];
+      for (let k = 0; k < styled.length; k++) {
+        if (only && !only.includes(k)) continue;
+        setPartStage(`Animating clip ${k + 1} of ${styled.length}`);
+        const data = await callOutfitSwap<{ generation: SwapGeneration }>({
+          action: "animate_frame",
+          imageUrl: styled[k].url,
+          frameIndex: styled[k].i,
+          frameTime: frames[styled[k].i]?.time ?? 0,
+        });
+        jobs[k] = { range: { start: 0, end: KLING_CLIP_SECONDS }, generationId: data.generation.id, frameUrl: styled[k].url };
+        setVideos((prev) => [data.generation, ...prev]);
+        setSessionVideoIds((prev) => [...prev, data.generation.id]);
+        setPartJobs([...jobs]);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't start the clips");
+    } finally {
+      setPartStage(null);
+      setRendering(false);
+    }
+  }, [pickedFrames, swaps, partJobs, frames]);
+
   const makeVideo = useCallback(async () => {
     if (!sourceVideo || !readyUrls.length) return;
+    if (engine === "kling") {
+      setStageVideoId(null);
+      setPartJobs([]);
+      return renderKling();
+    }
     if (parts.length > 1) {
       setStageVideoId(null);
       setPartJobs([]);
@@ -618,7 +661,7 @@ export default function MaddenAIStudio() {
     } finally {
       setRendering(false);
     }
-  }, [sourceVideo, readyUrls, parts.length, renderParts, cleanPieces, duration, meta, prompt, analysis, modelAssignment]);
+  }, [sourceVideo, readyUrls, engine, renderKling, parts.length, renderParts, cleanPieces, duration, meta, prompt, analysis, modelAssignment]);
 
   // One click: style the frames, then render as soon as they're all back.
   useEffect(() => {
@@ -631,7 +674,8 @@ export default function MaddenAIStudio() {
   const partGens = partJobs.map((job) => videos.find((v) => v.id === job?.generationId) ?? null);
   const partsLive = partGens.some((g) => isLive(g));
   const failedParts = partJobs.map((job, k) => (partGens[k]?.status === "failed" || partGens[k]?.status === "canceled" ? k : -1)).filter((k) => k >= 0);
-  const partsDone = partJobs.length === parts.length && parts.length > 1 && partGens.every((g) => g?.status === "complete" && g.outputUrl);
+  const expectedParts = engine === "kling" ? readyUrls.length : parts.length;
+  const partsDone = partJobs.length > 0 && partJobs.length === expectedParts && (engine === "kling" || parts.length > 1) && partGens.every((g) => g?.status === "complete" && g.outputUrl);
 
   useEffect(() => {
     if (!partsDone || stitched || stitching || !runFolder || !sourceVideo) return;
@@ -664,7 +708,8 @@ export default function MaddenAIStudio() {
   const modelReady = !replacing || (modelPicked && !needsSheet && analysisState !== "running" && analysisState !== "idle");
   const backsBusy = pieces.some((p) => p.backState);
   const loading = auto || styling || rendering || stitching || (partsLive && !failedParts.length) || (!!stageVideo && isLive(stageVideo));
-  const canStart = clipReady && outfitReady && modelReady && !backsBusy && !loading && !stylingLive;
+  const needsConsent = engine === "kling" && replacing;
+  const canStart = clipReady && outfitReady && modelReady && !backsBusy && !loading && !stylingLive && (!needsConsent || likenessConsent);
 
   const begin = useCallback(() => {
     setStageVideoId(null);
@@ -733,9 +778,9 @@ export default function MaddenAIStudio() {
                 status={
                   partStage ??
                   (stitching
-                    ? `Stitching ${parts.length} parts`
+                    ? `Stitching ${partJobs.length} ${engine === "kling" ? "clips" : "parts"}`
                     : partsLive
-                      ? `Rendering parts · ${partGens.filter((g) => g?.status === "complete").length}/${parts.length} done`
+                      ? `Rendering ${engine === "kling" ? "clips" : "parts"} · ${partGens.filter((g) => g?.status === "complete").length}/${partJobs.length} done`
                       : null)
                 }
               />
@@ -752,7 +797,7 @@ export default function MaddenAIStudio() {
                         {partGens.filter((g) => isLive(g)).length} other part(s) still rendering. Retry now and everything gets stitched together when it's all done.
                       </p>
                     ) : null}
-                    <button type="button" className={ps2Button} onClick={() => void renderParts(failedParts)}>
+                    <button type="button" className={ps2Button} onClick={() => void (engine === "kling" ? renderKling(failedParts) : renderParts(failedParts))}>
                       <Ps2Glyph /> Retry {failedParts.length > 1 ? "those parts" : "that part"}
                     </button>
                   </div>
@@ -980,6 +1025,27 @@ export default function MaddenAIStudio() {
 
             {/* ✕ START */}
             <div className={`${ps2Panel} p-4`}>
+              <p className="mb-1.5 font-display text-[10px] font-bold uppercase tracking-[0.18em] text-sky-100/70">Video engine</p>
+              <OptionCycler
+                label="Video engine"
+                options={[
+                  { label: "Seedance · copies your clip's motion", value: "seedance" },
+                  { label: "Kling · animates your styled frames", value: "kling" },
+                ]}
+                value={engine}
+                onChange={(v) => setEngine(v as Engine)}
+              />
+              <p className="mb-3 mt-1.5 text-[11px] text-sky-100/50">
+                {engine === "kling"
+                  ? `Each styled frame becomes a ${KLING_CLIP_SECONDS}s clip, stitched in order (${(pickedFrames.length || FRAME_COUNT) * KLING_CLIP_SECONDS}s total). Best when Seedance won't accept a face.`
+                  : "Rebuilds your exact clip with the new outfit. Some faces get rejected by this engine."}
+              </p>
+              {needsConsent ? (
+                <label className={`${ps2Well} mb-3 flex cursor-pointer items-start gap-2.5 p-3 text-xs text-sky-100/80`}>
+                  <input type="checkbox" checked={likenessConsent} onChange={(e) => setLikenessConsent(e.target.checked)} className="mt-0.5 h-4 w-4 accent-sky-400" />
+                  <span>I have permission from the person in my model photos to use their likeness in this video.</span>
+                </label>
+              ) : null}
               <button
                 type="button"
                 role="switch"
