@@ -50,6 +50,12 @@ const PIECE_TYPES = [
 ];
 const FRAME_COUNT = 4;
 const VIDEO_MODEL = "seedance-2.0";
+/** Fallback when Seedance refuses a clip (usually a face): Kling O3 Pro edits the source video itself. */
+const KLING_EDIT_MODEL = "kling-o3-pro-video-edit";
+const KLING_EDIT_MAX_REFS = 4;
+const refusedByEngine = (g?: SwapGeneration | null) => g?.status === "failed" && /\b422\b/.test(g.error ?? "");
+const friendlyError = (message?: string | null) =>
+  /\b422\b/.test(message ?? "") ? "The video engine refused this clip (usually a face it won't render)." : message ?? "That render didn't finish.";
 const VIDEO_USD_PER_SECOND = 0.3024; // matches the Pro editor's Seedance 2.0 rate
 const VIDEO_RESOLUTION = "1080p";
 const MAX_PIECES = 4;
@@ -622,17 +628,19 @@ export default function MaddenAIStudio() {
   const swapList = pickedFrames.map((i) => ({ index: i, swap: swaps[i] })).filter((e) => e.swap);
   const readyUrls = swapList.filter((e) => e.swap?.status === "complete" && e.swap.outputUrl).map((e) => e.swap!.outputUrl as string);
   /** Styled frames for one render: over Seedance's limit keep the longest shots, then hand them over in shot order. */
-  const refsFor = (indices: number[]) =>
+  const refsFor = (indices: number[], cap = MAX_REFS_PER_PART) =>
     indices
       .filter((i) => swaps[i]?.status === "complete" && swaps[i]?.outputUrl)
       .sort((a, b) => shotLength(frames[b]) - shotLength(frames[a]))
-      .slice(0, MAX_REFS_PER_PART)
+      .slice(0, cap)
       .sort((a, b) => a - b)
       .map((i) => swaps[i]!.outputUrl as string);
   const stylingLive = swapList.some((e) => isLive(e.swap));
 
   /** Long clips: cut each ≤15s part in the browser, upload it, render it with that part's styled frames. */
-  const renderParts = useCallback(async (only?: number[]) => {
+  /** Renders made with the Kling fallback, so their fixes use Kling too. */
+  const klingGens = useRef(new Set<string>());
+  const renderParts = useCallback(async (only?: number[], model: string = VIDEO_MODEL) => {
     if (!sourceVideo || !clipPreview || !runFolder) return;
     setRendering(true);
     setStitched(null);
@@ -647,20 +655,17 @@ export default function MaddenAIStudio() {
         setPartStage(`Cutting part ${k + 1} of ${parts.length}`);
         const blob = await renderPiecesToBlob([{ url: clipPreview, startMs: range.start * 1000, endMs: range.end * 1000 }], { width: sourceVideo.width, height: sourceVideo.height });
         const stored = await uploadToStorage(runFolder, blob, `part-${k + 1}.mp4`);
-        const own = pickedFrames
-          .filter((i) => inPart(frames[i], range))
-          .sort((a, b) => shotLength(frames[b]) - shotLength(frames[a])) // over Seedance's limit, keep the longest shots
-          .slice(0, MAX_REFS_PER_PART)
-          .sort((a, b) => a - b) // then hand them over in shot order, like the video
-          .map(styledAt)
-          .filter((u): u is string => !!u);
+        const own = refsFor(
+          pickedFrames.filter((i) => inPart(frames[i], range)),
+          model === KLING_EDIT_MODEL ? KLING_EDIT_MAX_REFS : MAX_REFS_PER_PART,
+        );
         setPartStage(`Starting part ${k + 1} of ${parts.length}`);
         const data = await callOutfitSwap<{ generation: SwapGeneration }>({
           action: "reconstruct",
           sourceVideo: { path: stored.path, duration: range.end - range.start, width: sourceVideo.width, height: sourceVideo.height },
           frameUrls: own.length ? own : readyUrls.slice(0, FRAMES_PER_PART),
           garments: cleanPieces,
-          model: VIDEO_MODEL,
+          model,
           duration: partSeconds(range),
           resolution: VIDEO_RESOLUTION,
           aspectRatio: meta?.aspectRatio,
@@ -671,6 +676,7 @@ export default function MaddenAIStudio() {
           modelAssignment,
         });
         jobs[k] = { range, generationId: data.generation.id };
+        if (model === KLING_EDIT_MODEL) klingGens.current.add(data.generation.id);
         setVideos((prev) => [data.generation, ...prev]);
         setSessionVideoIds((prev) => [...prev, data.generation.id]);
         setPartJobs([...jobs]);
@@ -714,7 +720,7 @@ export default function MaddenAIStudio() {
     }
   }, [pickedFrames, swaps, partJobs, frames]);
 
-  const makeVideo = useCallback(async () => {
+  const makeVideo = useCallback(async (model: string = VIDEO_MODEL) => {
     if (!sourceVideo || !readyUrls.length) return;
     if (engine === "kling") {
       setStageVideoId(null);
@@ -724,7 +730,7 @@ export default function MaddenAIStudio() {
     if (parts.length > 1) {
       setStageVideoId(null);
       setPartJobs([]);
-      return renderParts();
+      return renderParts(undefined, model);
     }
     setRendering(true);
     try {
@@ -733,9 +739,9 @@ export default function MaddenAIStudio() {
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "reconstruct",
         sourceVideo,
-        frameUrls: refsFor(pickedFrames),
+        frameUrls: refsFor(pickedFrames, model === KLING_EDIT_MODEL ? KLING_EDIT_MAX_REFS : MAX_REFS_PER_PART),
         garments: cleanPieces,
-        model: VIDEO_MODEL,
+        model,
         duration,
         resolution: VIDEO_RESOLUTION,
         aspectRatio: meta?.aspectRatio,
@@ -748,6 +754,7 @@ export default function MaddenAIStudio() {
       setVideos((prev) => [data.generation, ...prev]);
       setSessionVideoIds((prev) => [...prev, data.generation.id]);
       setStageVideoId(data.generation.id);
+      if (model === KLING_EDIT_MODEL) klingGens.current.add(data.generation.id);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't start the video");
     } finally {
@@ -919,9 +926,9 @@ export default function MaddenAIStudio() {
         const started = await callOutfitSwap<{ generation: SwapGeneration }>({
           action: "reconstruct",
           sourceVideo: { path: piece.path, duration: win.end - win.start, width: sourceVideo.width, height: sourceVideo.height },
-          frameUrls: [...refs, ...nearby].slice(0, MAX_REFS_PER_PART),
+          frameUrls: [...refs, ...nearby].slice(0, klingGens.current.has(gen.id) ? KLING_EDIT_MAX_REFS : MAX_REFS_PER_PART),
           garments: cleanPieces,
-          model: VIDEO_MODEL,
+          model: klingGens.current.has(gen.id) ? KLING_EDIT_MODEL : VIDEO_MODEL,
           duration: partSeconds(win),
           resolution: VIDEO_RESOLUTION,
           aspectRatio: meta?.aspectRatio,
@@ -958,6 +965,21 @@ export default function MaddenAIStudio() {
     const win = patchWindow(runs, 15);
     return runs.length * creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K")) + creditsFromUsd(VIDEO_USD_PER_SECOND * partSeconds(win) * resolutionMultiplier(VIDEO_RESOLUTION));
   };
+  // Engine fallback: when Seedance refuses a part (422, usually a face), render that part
+  // again with Kling's source-video edit, once per part.
+  const klingTried = useRef(new Set<string>());
+  useEffect(() => {
+    if (engine === "kling" || rendering) return;
+    const refused = partJobs.map((_, k) => k).filter((k) => refusedByEngine(partGens[k]) && !klingTried.current.has(`part-${k}`));
+    if (refused.length) {
+      refused.forEach((k) => klingTried.current.add(`part-${k}`));
+      void renderParts(refused, KLING_EDIT_MODEL);
+    } else if (stageVideo && stageFromSession && refusedByEngine(stageVideo) && !klingTried.current.has("stage")) {
+      klingTried.current.add("stage");
+      void makeVideo(KLING_EDIT_MODEL);
+    }
+  });
+
   // Auto-fix: a render that came back with the original person in it gets its bad
   // seconds re-rendered without a click, up to AUTO_FIX_PASSES times, one at a time.
   const fixPasses = useRef<Record<string, number>>({});
@@ -1037,6 +1059,7 @@ export default function MaddenAIStudio() {
   const canStart = clipReady && outfitReady && modelReady && analysisState !== "running" && !backsBusy && !loading && !stylingLive && (!needsConsent || likenessConsent);
 
   const begin = useCallback(() => {
+    klingTried.current.clear();
     setStageVideoId(null);
     setPartJobs([]);
     setStitched(null);
@@ -1196,7 +1219,7 @@ export default function MaddenAIStudio() {
                     rerenderDisabled={stylingLive || rendering || !readyUrls.length || !canAfford(videoCredits)}
                   />
                 ) : (
-                  <p className="max-w-sm text-center text-sky-100/75">{stageVideo.error ?? "That render didn't finish."} Credits for failed renders go back to your account.</p>
+                  <p className="max-w-sm text-center text-sky-100/75">{friendlyError(stageVideo.error)} Credits for failed renders go back to your account.</p>
                 )}
               </div>
             ) : clipPreview ? (

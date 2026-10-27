@@ -18,6 +18,8 @@ import {
   getFalQueueStatus,
   buildVideoModelInput,
   buildSeedanceReferenceInput,
+  buildKlingVideoEditInput,
+  KLING_VIDEO_EDIT_MAX_REFERENCES,
   getVideoModel,
   IMAGE_MODEL,
   referenceToVideoEndpoint,
@@ -506,11 +508,16 @@ async function startReconstruction(admin: AdminClient, args: {
   if (!referenceUrls.length) throw new Error("Approve at least one swapped frame first");
   const sourceVideo = await resolveOwnedSourceVideo(admin, args.userId, args.sourceVideo);
 
+  // Kling O3 Pro source-video edit: the fallback when Seedance refuses a face.
+  const kling = args.model === "kling-o3-pro-video-edit";
   const videoModel = getVideoModel(
-    args.model === "seedance-2.0-fast" ? "seedance-2.0-fast" : "seedance-2.0",
+    kling ? "kling-o3-pro-video-edit" : args.model === "seedance-2.0-fast" ? "seedance-2.0-fast" : "seedance-2.0",
   );
-  const endpointId = referenceToVideoEndpoint(videoModel.key);
-  const duration = clampSeedanceDuration(args.duration ?? 5, videoModel);
+  const endpointId = kling ? videoModel.endpointId : referenceToVideoEndpoint(videoModel.key);
+  const sourceSeconds = Number((sourceVideo.source as any).duration);
+  const duration = kling
+    ? Math.max(3, Math.min(15, Math.round(Number.isFinite(sourceSeconds) ? sourceSeconds : Number(args.duration ?? 5))))
+    : clampSeedanceDuration(args.duration ?? 5, videoModel);
   const legacyPrompt = buildReconstructionPrompt({
     garments: Array.isArray(args.garments) ? args.garments : [],
     extra: args.extraPrompt,
@@ -567,16 +574,27 @@ async function startReconstruction(admin: AdminClient, args: {
     const aspect = String(args.aspectRatio ?? "").trim();
     const aspectRatio = videoModel.aspectRatios?.includes(aspect) ? aspect : "9:16";
 
-    const { input: falInput } = buildSeedanceReferenceInput({
-      modelKey: videoModel.key,
-      prompt,
-      imageUrls: (await resolveExecutionUrls(admin, referenceUrls)) as string[],
-      videoUrls: [sourceVideo.executionUrl],
-      duration,
-      resolution,
-      aspectRatio,
-      generateAudio,
-    });
+    const imageUrls = (await resolveExecutionUrls(admin, referenceUrls)) as string[];
+    const { input: falInput } = kling
+      ? buildKlingVideoEditInput({
+          prompt,
+          videoUrl: sourceVideo.executionUrl,
+          imageUrls: imageUrls.slice(0, KLING_VIDEO_EDIT_MAX_REFERENCES),
+          keepAudio: false,
+          sourceDurationSec: Number.isFinite(sourceSeconds) ? sourceSeconds : null,
+          sourceWidth: Number((sourceVideo.source as any).width) || null,
+          sourceHeight: Number((sourceVideo.source as any).height) || null,
+        })
+      : buildSeedanceReferenceInput({
+          modelKey: videoModel.key,
+          prompt,
+          imageUrls,
+          videoUrls: [sourceVideo.executionUrl],
+          duration,
+          resolution,
+          aspectRatio,
+          generateAudio,
+        });
 
     await chargeCredits(admin, inserted.id, args.userId, args.privileged === true, estimatedCostUsd, (falInput as any).video_urls ? "video" : "clip");
     const webhookUrl = `${args.webhookBase}${encodeURIComponent(inserted.id)}`;
