@@ -13,8 +13,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { IMAGE_FLAT_USD, creditsFromUsd, resolutionMultiplier } from "@/lib/costEstimate";
 import { compressImageFile } from "@/lib/imageCompress";
-import { captureFrameAt, extractFrames, frameTimestamps, loadVideo, readMeta, seekVideoTo, type VideoMeta } from "@/lib/videoFrames";
-import { changeScore, grayOf, groupRuns, patchWindow, pickSpread, unswappedTimes, type Gray } from "@/lib/swapCheck";
+import { captureFrameAt, extractFrames, loadVideo, readMeta, seekVideoTo, type VideoMeta } from "@/lib/videoFrames";
+import { changeScore, detectShots, grayOf, groupRuns, layPatches, patchWindow, shotFrameTimes, unswappedTimes, type Gray, type Patch, type Shot } from "@/lib/swapCheck";
 import { createOutfitSwapFolder, uploadToStorage, uploadWithConcurrency } from "@/services/storageUpload";
 import { renderPiecesToBlob } from "@/services/videoExport/renderClip";
 import {
@@ -55,7 +55,7 @@ const MAX_PIECES = 4;
 const MAX_CLIP_SECONDS = 60;
 const PART_MAX_SECONDS = 15; // Seedance's per-render limit
 const FRAMES_PER_PART = 2;
-const MAX_REFS_PER_PART = 6;
+const MAX_REFS_PER_PART = 9; // Seedance reference-image limit
 const MAX_ANALYZED_FRAMES = 16; // outfit-swap-analyze takes 16 frames per call
 const MAX_UNSWAPPED_SECONDS = 0.5; // 1s+ of a person left untouched = fix it before stitching
 const PATCH_FRAMES_MAX = 4;
@@ -90,7 +90,7 @@ const TIPS = [
   "Clips over 15 seconds render in parts and get stitched back together.",
 ];
 
-type Frame = { time: number; url: string; gray?: Gray };
+type Frame = { time: number; url: string; gray?: Gray; shot?: Shot };
 type PartRange = { start: number; end: number };
 type PartJob = { range: PartRange; generationId: string; frameUrl?: string };
 type Engine = "seedance" | "kling";
@@ -102,22 +102,11 @@ function splitParts(duration: number): PartRange[] {
   return Array.from({ length: n }, (_, k) => ({ start: k * len, end: k === n - 1 ? duration : (k + 1) * len }));
 }
 
-/**
- * Frames to style: per part, frames spread about every 2s (so every shot / outfit /
- * angle in a montage has a reference nearby), up to the cap.
- */
-function pickFrameIndices(frames: Frame[], duration: number): number[] {
-  if (!frames.length) return [];
-  const parts = splitParts(duration);
-  const cap = parts.length === 1 ? FRAME_COUNT : Math.min(MAX_REFS_PER_PART, Math.floor(MAX_ANALYZED_FRAMES / parts.length));
-  const grays = frames.map((f) => f.gray);
-  return parts
-    .flatMap((p, k) => {
-      const pool = frames.map((_, i) => i).filter((i) => frames[i].time >= p.start && (frames[i].time < p.end || k === parts.length - 1));
-      return pickSpread(pool, grays, cap);
-    })
-    .sort((a, b) => a - b);
-}
+/** Whether a frame's shot plays during this part (so it can be that part's reference). */
+const inPart = (f: Frame | undefined, r: PartRange) =>
+  !!f && (f.shot ? f.shot.start < r.end && f.shot.end > r.start : f.time >= r.start && f.time <= r.end);
+const shotLength = (f?: Frame) => (f?.shot ? f.shot.end - f.shot.start : 0);
+
 type SourceVideo = { path: string; duration: number; width: number; height: number };
 type Screen = "title" | "menu" | "setup";
 type Piece = OutfitSwapGarment & { backState?: "generating" | "uploading" | null };
@@ -260,7 +249,7 @@ export default function MaddenAIStudio() {
   /* ----------------------------- cost preview ----------------------------- */
   const clipSeconds = meta?.duration ?? 5;
   const parts = useMemo(() => splitParts(clipSeconds), [clipSeconds]);
-  const candidateFrames = useMemo(() => pickFrameIndices(frames, clipSeconds), [frames, clipSeconds]);
+  const candidateFrames = useMemo(() => frames.map((_, i) => i), [frames]);
   /** Whether the analysis saw a person in frame i (unknown = yes). */
   const hasPerson = useCallback(
     (i: number) => {
@@ -343,7 +332,10 @@ export default function MaddenAIStudio() {
       const folder = await createOutfitSwapFolder();
       setRunFolder(folder);
       const stored = await uploadToStorage(folder, file, file.name);
-      const captured = await extractFrames(el, frameTimestamps(m.duration), (d, t) => setClipProgress(Math.round((d / t) * 50)));
+      // One reference per shot (a montage cuts between outfits and angles), more for long shots.
+      const shots = await detectShots(el, m.duration, (d, t) => setClipProgress(Math.round((d / t) * 40)));
+      const plan = shotFrameTimes(shots, MAX_ANALYZED_FRAMES);
+      const captured = await extractFrames(el, plan.map((p) => p.time), (d, t) => setClipProgress(40 + Math.round((d / t) * 20)));
       const grays = new Map<number, Gray>();
       for (const f of captured) {
         await seekVideoTo(el, f.time);
@@ -352,14 +344,19 @@ export default function MaddenAIStudio() {
       const uploaded: Frame[] = await uploadWithConcurrency(
         captured,
         3,
-        async (f) => ({ time: f.time, url: (await uploadToStorage(folder, f.file, f.file.name)).url, gray: grays.get(f.time) }),
-        (d, t) => setClipProgress(50 + Math.round((d / t) * 50)),
+        async (f) => ({
+          time: f.time,
+          url: (await uploadToStorage(folder, f.file, f.file.name)).url,
+          gray: grays.get(f.time),
+          shot: plan.find((p) => p.time === f.time)?.shot,
+        }),
+        (d, t) => setClipProgress(60 + Math.round((d / t) * 40)),
       );
       setFrames(uploaded);
       setSourceVideo({ path: stored.path, duration: m.duration, width: m.width, height: m.height });
       // Same detection pass as the Pro editor: who is in each frame and which way they face.
       setAnalysisState("running");
-      analyzeOutfitSwapSource(pickFrameIndices(uploaded, m.duration).map((i) => ({ frameId: `frame-${i}`, timestamp: uploaded[i].time, imageUrl: uploaded[i].url })))
+      analyzeOutfitSwapSource(uploaded.map((f, i) => ({ frameId: `frame-${i}`, timestamp: f.time, imageUrl: f.url })))
         .then((result) => {
           setAnalysis(result.analysis);
           setAnalysisState("done");
@@ -626,7 +623,12 @@ export default function MaddenAIStudio() {
         setPartStage(`Cutting part ${k + 1} of ${parts.length}`);
         const blob = await renderPiecesToBlob([{ url: clipPreview, startMs: range.start * 1000, endMs: range.end * 1000 }], { width: sourceVideo.width, height: sourceVideo.height });
         const stored = await uploadToStorage(runFolder, blob, `part-${k + 1}.mp4`);
-        const own = pickedFrames.filter((i) => frames[i] && frames[i].time >= range.start && frames[i].time <= range.end).map(styledAt).filter((u): u is string => !!u);
+        const own = pickedFrames
+          .filter((i) => inPart(frames[i], range))
+          .sort((a, b) => shotLength(frames[b]) - shotLength(frames[a])) // over Seedance's limit, keep the longest shots
+          .slice(0, MAX_REFS_PER_PART)
+          .map(styledAt)
+          .filter((u): u is string => !!u);
         setPartStage(`Starting part ${k + 1} of ${parts.length}`);
         const data = await callOutfitSwap<{ generation: SwapGeneration }>({
           action: "reconstruct",
@@ -743,8 +745,8 @@ export default function MaddenAIStudio() {
   /* Copy check: Seedance sometimes hands back the source untouched for a shot or a whole part.
      Every finished render is compared to the source, second by second, before it's stitched. */
   const [unswapped, setUnswapped] = useState<Record<string, number[]>>({});
-  /** Re-rendered windows spliced over a render: genId -> seconds [start, end) and the patch video. */
-  const [patches, setPatches] = useState<Record<string, { start: number; end: number; url: string }>>({});
+  /** Re-rendered windows spliced over a render, in the order they were made (later wins). */
+  const [patches, setPatches] = useState<Record<string, Patch[]>>({});
   const [repairing, setRepairing] = useState(false);
   const checkingIds = useRef(new Set<string>());
   const personAt = useCallback(
@@ -836,7 +838,7 @@ export default function MaddenAIStudio() {
         const win = patchWindow(runs, length);
         // Keep the original references that fall inside the window too.
         const nearby = pickedFrames
-          .filter((i) => frames[i] && frames[i].time >= sourceStart + win.start && frames[i].time <= sourceStart + win.end)
+          .filter((i) => inPart(frames[i], { start: sourceStart + win.start, end: sourceStart + win.end }))
           .map((i) => (swaps[i]?.status === "complete" ? swaps[i]?.outputUrl ?? null : null))
           .filter((u): u is string => !!u);
         setPartStage("Re-rendering those seconds");
@@ -850,7 +852,7 @@ export default function MaddenAIStudio() {
         const started = await callOutfitSwap<{ generation: SwapGeneration }>({
           action: "reconstruct",
           sourceVideo: { path: piece.path, duration: win.end - win.start, width: sourceVideo.width, height: sourceVideo.height },
-          frameUrls: [...refs, ...nearby],
+          frameUrls: [...refs, ...nearby].slice(0, MAX_REFS_PER_PART),
           garments: cleanPieces,
           model: VIDEO_MODEL,
           duration: partSeconds(win),
@@ -869,7 +871,7 @@ export default function MaddenAIStudio() {
         const left = await unswappedTimes(clipPreview, sourceStart + win.start, patch.outputUrl, personAt).catch(() => [] as number[]);
         const missedInside = times.filter((t) => t >= win.start && t < win.end);
         if (left.length >= missedInside.length) throw new Error("The fix came back unswapped too. Try redoing the whole part.");
-        setPatches((prev) => ({ ...prev, [gen.id]: { start: win.start, end: win.end, url: patch.outputUrl as string } }));
+        setPatches((prev) => ({ ...prev, [gen.id]: [...(prev[gen.id] ?? []), { start: win.start, end: win.end, url: patch.outputUrl as string }] }));
         setUnswapped((prev) => ({
           ...prev,
           [gen.id]: [...times.filter((t) => t < win.start || t >= win.end), ...left.map((t) => t + win.start)],
@@ -893,13 +895,7 @@ export default function MaddenAIStudio() {
   const piecesOf = useCallback(
     async (url: string, id: string) => {
       const len = Math.round(readMeta(await loadVideo(url)).duration * 1000);
-      const patch = patches[id];
-      if (!patch) return [{ url, startMs: 0, endMs: len }];
-      return [
-        { url, startMs: 0, endMs: Math.round(patch.start * 1000) },
-        { url: patch.url, startMs: 0, endMs: Math.round((patch.end - patch.start) * 1000) },
-        { url, startMs: Math.round(patch.end * 1000), endMs: len },
-      ].filter((p) => p.endMs - p.startMs > 40);
+      return layPatches(url, len, patches[id] ?? []);
     },
     [patches],
   );
@@ -931,7 +927,7 @@ export default function MaddenAIStudio() {
   }, [partsDone, stitched, stitching, runFolder, sourceVideo, partGens, piecesOf]);
 
   // A single render that got a fix spliced in becomes one file again.
-  const stagePatched = !!stageVideo?.outputUrl && !!patches[stageVideo.id] && !isUnswapped(stageVideo);
+  const stagePatched = !!stageVideo?.outputUrl && !!patches[stageVideo.id]?.length && !isUnswapped(stageVideo);
   useEffect(() => {
     if (!stagePatched || stitched || stitching || !runFolder || !sourceVideo || !stageVideo?.outputUrl) return;
     setStitching(true);

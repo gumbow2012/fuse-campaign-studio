@@ -62,19 +62,6 @@ export function changeScore(a: Gray, b: Gray): number {
 }
 
 /**
- * Up to `max` frames spread evenly over `pool` (so every shot of a montage is near a
- * reference), skipping any that look the same as the one before (a static shot).
- */
-export function pickSpread(pool: number[], grays: (Gray | undefined)[], max: number): number[] {
-  const count = Math.min(max, pool.length);
-  const picks = Array.from({ length: count }, (_, k) => pool[Math.floor((pool.length / count) * (k + 0.5))]);
-  return picks.filter((i, k) => {
-    const prev = grays[picks[k - 1]];
-    return k === 0 || !prev || !grays[i] || changeScore(grays[i]!, prev) >= UNCHANGED_SCORE * 2;
-  });
-}
-
-/**
  * The moments (seconds into `output`, every half second) that came back as an
  * untouched copy of the source while a person is on screen. `personAt(gray)`
  * says whether a source thumbnail shows someone (from the frame analysis).
@@ -152,4 +139,83 @@ export function patchWindow(runs: { from: number; to: number }[], length: number
   const span = Math.min(maxSeconds, Math.max(minSeconds, Math.ceil(to - from)), Math.floor(length) || length);
   const start = Math.max(0, Math.min((from + to) / 2 - span / 2, length - span));
   return { start, end: start + span };
+}
+
+export type Patch = { start: number; end: number; url: string };
+
+/**
+ * A render as stitchable pieces with its patches laid over it in order (a later
+ * patch wins where windows overlap). Times in seconds, pieces in ms of each file.
+ */
+export function layPatches(url: string, lengthMs: number, patches: Patch[]) {
+  let segments = [{ url, from: 0, to: lengthMs, offset: 0 }]; // timeline [from,to) shows url at (t - offset)
+  for (const p of patches) {
+    const from = Math.round(p.start * 1000);
+    const to = Math.round(p.end * 1000);
+    segments = segments.flatMap((s) => [
+      ...(s.from < from ? [{ ...s, to: Math.min(s.to, from) }] : []),
+      ...(s.to > to ? [{ ...s, from: Math.max(s.from, to) }] : []),
+    ]);
+    segments.push({ url: p.url, from, to: Math.min(to, lengthMs), offset: from });
+    segments.sort((a, b) => a.from - b.from);
+  }
+  return segments
+    .filter((s) => s.to - s.from > 40)
+    .map((s) => ({ url: s.url, startMs: s.from - s.offset, endMs: s.to - s.offset }));
+}
+
+export type Shot = { start: number; end: number };
+
+/**
+ * Hard cuts in a clip: compare each frame with the one 1/15s before it. Motion
+ * changes little between neighbours; a cut (even same room, new shirt) spikes.
+ * A spike counts when it is well above its neighbourhood's normal change.
+ */
+export async function detectShots(
+  video: HTMLVideoElement,
+  duration: number,
+  onProgress?: (done: number, total: number) => void,
+): Promise<Shot[]> {
+  const step = 1 / 15;
+  const times: number[] = [];
+  for (let t = step; t < duration - 0.02; t += step) times.push(t);
+  const diffs: number[] = [];
+  await seekVideoTo(video, 0);
+  let prev = grayOf(video);
+  for (const [i, t] of times.entries()) {
+    await seekVideoTo(video, t);
+    const g = grayOf(video);
+    diffs.push(changeScore(prev, g));
+    prev = g;
+    if (i % 15 === 0) onProgress?.(i, times.length);
+  }
+  const cuts: number[] = [];
+  diffs.forEach((d, i) => {
+    const near = diffs.slice(Math.max(0, i - 7), i + 8).sort((a, b) => a - b);
+    const normal = near[Math.floor(near.length / 2)];
+    if (d > Math.max(18, normal * 2.5) && (!cuts.length || times[i] - cuts[cuts.length - 1] > 0.25)) cuts.push(times[i]);
+  });
+  const edges = [0, ...cuts, duration];
+  return edges.slice(1).map((end, i) => ({ start: edges[i], end }));
+}
+
+/**
+ * Where to grab reference frames: one mid-shot frame per shot, plus one per extra ~3s
+ * of a long shot (turns, walk-aways). Over `max`, long shots give up extras first,
+ * then the shortest shots are dropped.
+ */
+export function shotFrameTimes(shots: Shot[], max: number): { time: number; shot: Shot }[] {
+  const usable = shots.filter((s) => s.end - s.start >= 0.2);
+  const counts = usable.map((s) => Math.max(1, Math.round((s.end - s.start) / 3)));
+  const total = () => counts.reduce((a, b) => a + b, 0);
+  while (total() > max && counts.some((c) => c > 1)) counts[counts.indexOf(Math.max(...counts))]--;
+  let keep = usable.map((_, i) => i);
+  if (total() > max) keep = keep.sort((a, b) => (usable[b].end - usable[b].start) - (usable[a].end - usable[a].start)).slice(0, max);
+  return keep
+    .sort((a, b) => a - b)
+    .flatMap((i) => {
+      const s = usable[i];
+      const step = (s.end - s.start) / counts[i];
+      return Array.from({ length: counts[i] }, (_, k) => ({ time: Number((s.start + step * (k + 0.5)).toFixed(2)), shot: s }));
+    });
 }
