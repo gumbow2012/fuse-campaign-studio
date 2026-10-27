@@ -621,6 +621,14 @@ export default function MaddenAIStudio() {
 
   const swapList = pickedFrames.map((i) => ({ index: i, swap: swaps[i] })).filter((e) => e.swap);
   const readyUrls = swapList.filter((e) => e.swap?.status === "complete" && e.swap.outputUrl).map((e) => e.swap!.outputUrl as string);
+  /** Styled frames for one render: over Seedance's limit keep the longest shots, then hand them over in shot order. */
+  const refsFor = (indices: number[]) =>
+    indices
+      .filter((i) => swaps[i]?.status === "complete" && swaps[i]?.outputUrl)
+      .sort((a, b) => shotLength(frames[b]) - shotLength(frames[a]))
+      .slice(0, MAX_REFS_PER_PART)
+      .sort((a, b) => a - b)
+      .map((i) => swaps[i]!.outputUrl as string);
   const stylingLive = swapList.some((e) => isLive(e.swap));
 
   /** Long clips: cut each ≤15s part in the browser, upload it, render it with that part's styled frames. */
@@ -725,7 +733,7 @@ export default function MaddenAIStudio() {
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "reconstruct",
         sourceVideo,
-        frameUrls: readyUrls,
+        frameUrls: refsFor(pickedFrames),
         garments: cleanPieces,
         model: VIDEO_MODEL,
         duration,
