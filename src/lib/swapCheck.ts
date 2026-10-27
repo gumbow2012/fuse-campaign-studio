@@ -9,20 +9,35 @@ import { loadVideo, seekVideoTo } from "@/lib/videoFrames";
 const W = 72;
 const H = 128;
 const CELL = 8;
-/** Below this, a source/output pair is the same picture (measured: copies 10–14, swaps 27+). */
+/** Below this, two thumbnails are the same picture (used to skip near-duplicate frames). */
 export const UNCHANGED_SCORE = 20;
+/**
+ * Below this (aligned, in-browser), an output moment looks like a copy of the source.
+ * Measured on 5 real renders: copied stretches 8–27; swapped 34+, except lone dips
+ * (one at 23) — so only 2+ samples in a row count as a copy.
+ */
+export const COPY_SCORE = 30;
 
 export type Gray = Float32Array;
 
 let canvas: HTMLCanvasElement | null = null;
+let mid: HTMLCanvasElement | null = null;
 
-/** The video element's current frame as a 72x128 grayscale thumbnail. */
+/** The video element's current frame as a 72x128 grayscale thumbnail (area-averaged, not aliased). */
 export function grayOf(source: CanvasImageSource): Gray {
+  // Two smooth steps (4x then 4x): one big drawImage jump aliases and adds noise.
+  mid ??= document.createElement("canvas");
+  mid.width = W * 4;
+  mid.height = H * 4;
+  const midCtx = mid.getContext("2d")!;
+  midCtx.imageSmoothingQuality = "high";
+  midCtx.drawImage(source, 0, 0, mid.width, mid.height);
   canvas ??= document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
-  ctx.drawImage(source, 0, 0, W, H);
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(mid, 0, 0, W, H);
   const rgba = ctx.getImageData(0, 0, W, H).data;
   const gray = new Float32Array(W * H);
   for (let i = 0; i < gray.length; i++) gray[i] = 0.299 * rgba[i * 4] + 0.587 * rgba[i * 4 + 1] + 0.114 * rgba[i * 4 + 2];
@@ -72,14 +87,51 @@ export async function unswappedTimes(
 ): Promise<number[]> {
   const [source, output] = await Promise.all([loadVideo(sourceUrl), loadVideo(outputUrl)]);
   const length = Math.min(output.duration, source.duration - sourceStart);
-  const copied: number[] = [];
+  const samples: { t: number; copy: boolean }[] = [];
   for (let t = 0.25; t < length; t += 0.5) {
     await seekVideoTo(source, sourceStart + t);
     const src = grayOf(source);
     await seekVideoTo(output, t);
-    if (changeScore(src, grayOf(output)) < UNCHANGED_SCORE && personAt(src)) copied.push(t);
+    samples.push({ t, copy: alignedChangeScore(src, grayOf(output)) < COPY_SCORE && personAt(src) });
   }
-  return copied;
+  // A lone low sample is motion noise; a copy lasts at least a second.
+  return samples.filter((s, i) => s.copy && (samples[i - 1]?.copy || samples[i + 1]?.copy)).map((s) => s.t);
+}
+
+/**
+ * changeScore after undoing Seedance's slight reframing: the best match over small
+ * shifts (±3 x, ±4 y px) and zooms (±4%). A re-rendered copy lines up; a new outfit doesn't.
+ */
+export function alignedChangeScore(srcGray: Gray, outGray: Gray): number {
+  // Undo brightness/contrast grading first: zero mean, fixed spread.
+  const normalize = (g: Gray) => {
+    let mean = 0;
+    for (const v of g) mean += v;
+    mean /= g.length;
+    let sd = 0;
+    for (const v of g) sd += (v - mean) ** 2;
+    sd = Math.sqrt(sd / g.length) + 1e-6;
+    return g.map((v) => ((v - mean) / sd) * 50);
+  };
+  const src = normalize(srcGray);
+  const out = normalize(outGray);
+  let best = Infinity;
+  const shifted = new Float32Array(W * H);
+  for (const scale of [0.96, 1, 1.04]) {
+    for (let dy = -4; dy <= 4; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        for (let y = 0; y < H; y++) {
+          const by = Math.min(H - 1, Math.max(0, Math.trunc((y - H / 2) * scale + H / 2) + dy));
+          for (let x = 0; x < W; x++) {
+            const bx = Math.min(W - 1, Math.max(0, Math.trunc((x - W / 2) * scale + W / 2) + dx));
+            shifted[y * W + x] = out[by * W + bx];
+          }
+        }
+        best = Math.min(best, changeScore(src, shifted));
+      }
+    }
+  }
+  return best;
 }
 
 /** Back-to-back unswapped moments grouped into runs (a gap over 1s starts a new run). */
