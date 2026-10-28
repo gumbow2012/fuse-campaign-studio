@@ -1022,6 +1022,7 @@ export default function MaddenAIStudio() {
   // Auto-fix: a render that came back with the original person in it gets its bad
   // seconds re-rendered without a click, up to AUTO_FIX_PASSES times, one at a time.
   const fixPasses = useRef<Record<string, number>>({});
+  const cutting = useRef(new Set<string>());
   useEffect(() => {
     if (engine === "kling" || repairing || rendering || stitching) return;
     const renders = partJobs.map((job, k) => ({ start: job?.range.start ?? 0, gen: partGens[k] }));
@@ -1049,9 +1050,27 @@ export default function MaddenAIStudio() {
         else merged.push({ ...r });
         return merged;
       }, []);
-    if (ranges.reduce((sum, r) => sum + r.end - r.start, 0) > MAX_CUT_SECONDS) return;
-    setCuts((prev) => ({ ...prev, [stuck.gen!.id]: ranges }));
-    setUnswapped((prev) => ({ ...prev, [stuck.gen!.id]: [] }));
+    if (ranges.reduce((sum, r) => sum + r.end - r.start, 0) > MAX_CUT_SECONDS || cutting.current.has(stuck.gen.id)) return;
+    const gen = stuck.gen;
+    cutting.current.add(gen.id);
+    void (async () => {
+      // The render's shots drift from the source's by a few frames: cut on the render's own
+      // cuts (in the file that plays there, a fix or the render), or a sliver of the shot stays.
+      const snapped = await Promise.all(
+        ranges.map(async (r) => {
+          const mid = (r.start + r.end) / 2;
+          const patch = [...(patches[gen.id] ?? [])].reverse().find((p) => mid >= p.start && mid < p.end);
+          const offset = patch?.start ?? 0;
+          const video = await loadVideo(patch?.url ?? (gen.outputUrl as string));
+          const own = (await detectShots(video, video.duration)).map((sh) => ({ start: sh.start + offset, end: sh.end + offset }));
+          const hit = own.filter((sh) => Math.min(sh.end, r.end) - Math.max(sh.start, r.start) > (sh.end - sh.start) / 2);
+          // Start one sample early: the cut lands somewhere in the 1/15s before it was seen.
+          return hit.length ? { start: Math.max(0, Math.min(...hit.map((sh) => sh.start)) - 1 / 15), end: Math.max(...hit.map((sh) => sh.end)) } : r;
+        }),
+      ).catch(() => ranges);
+      setCuts((prev) => ({ ...prev, [gen.id]: snapped }));
+      setUnswapped((prev) => ({ ...prev, [gen.id]: [] }));
+    })();
   });
   const cutSeconds = Object.values(cuts).flat().reduce((sum, r) => sum + r.end - r.start, 0);
 
