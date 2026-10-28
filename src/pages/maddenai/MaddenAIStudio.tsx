@@ -47,7 +47,20 @@ const PIECE_TYPES = [
   { label: "Shoes", type: "Shoes" },
   { label: "Hat", type: "Hat" },
   { label: "Accessory", type: "Accessory" },
+  { label: "Product / object", type: "Product" },
+  { label: "Location / room", type: "Location" },
 ];
+/** Products and locations ride into the video edit, not onto the person, so frame styling skips them. */
+const isWearable = (type?: string) => type !== "Product" && type !== "Location";
+/** Trend presets: one tap sets what the run does. */
+const TRENDS = [
+  { value: "outfit", label: "Outfit swap", hint: "Same video, your clothes on them." },
+  { value: "fitcheck", label: "Fit check", hint: "Every shot shows the full fit, crisp head to toe." },
+  { value: "putmein", label: "Put me in it", hint: "Your avatar takes their place. Add clothes only if you want to change them." },
+  { value: "transition", label: "Outfit transition", hint: "Original outfit until the first cut, then your fit." },
+];
+const FIT_CHECK_PROMPT =
+  "FIT CHECK: the outfit is the hero. Keep every piece clearly visible and crisp in every shot, with clean fabric detail, true colors and accurate prints; full-body shots stay full-body.";
 const FRAME_COUNT = 4;
 const VIDEO_MODEL = "seedance-2.0";
 /** Kling O3 Pro edits the source video itself: takes faces Seedance refuses, ~3x faster, ~half the cost. */
@@ -98,29 +111,34 @@ const LOW_POLY_PROMPT = [
   "Translate everything into crude low-poly geometry, never photorealism. No text, no UI, no watermark.",
 ].join(" ");
 /** Looks: "real" keeps the footage as filmed; the rest restyle every frame (prompt appended to swap + render). */
-const LOOKS: { value: string; label: string; hint: string; prompt?: string }[] = [
+/** `hidden` looks are admin-only for now (kept for style-based trends). */
+const LOOKS: { value: string; label: string; hint: string; prompt?: string; hidden?: boolean }[] = [
   { value: "real", label: "Real · as filmed", hint: "Keeps the footage exactly as filmed." },
   { value: "lowpoly", label: "PS2 low poly", hint: "Remakes the whole video as a 2001 PS2 game.", prompt: LOW_POLY_PROMPT },
   {
     value: "anime",
+    hidden: true,
     label: "Anime",
     hint: "Redraws the video as a 2D anime.",
     prompt: "STYLE OVERRIDE — ANIME. Re-create every frame as high-quality 2D anime: clean line art, cel shading, flat color fills with soft shadows, anime-style eyes and hair. Same person (same hairstyle, hair color, skin tone), same pose, motion, camera and framing; the outfit keeps its exact colors, prints and logos, redrawn in anime style; the background becomes a matching hand-painted anime background. Never photorealistic. No text, no UI, no watermark.",
   },
   {
     value: "clay",
+    hidden: true,
     label: "Claymation",
     hint: "Turns it into stop-motion clay.",
     prompt: "STYLE OVERRIDE — CLAYMATION. Re-create every frame as stop-motion claymation: plasticine figures with visible fingerprints and tool marks, slightly lumpy handmade forms, miniature handmade set, soft practical studio lighting, subtle stop-motion stutter. Same person (same hairstyle, hair color, skin tone), same pose, motion, camera and framing; the outfit keeps its exact colors, prints and logos, sculpted in clay. Never photorealistic. No text, no UI, no watermark.",
   },
   {
     value: "film",
+    hidden: true,
     label: "35mm film",
     hint: "Real footage with a cinematic film look.",
     prompt: "LOOK: shot on 35mm motion-picture film. Natural film grain, gentle halation around highlights, soft rolled-off contrast, rich warm cinematic color grade. Stays photorealistic: same people, outfit, motion and framing. No text, no letterbox bars.",
   },
   {
     value: "camcorder",
+    hidden: true,
     label: "2000s camcorder",
     hint: "Real footage that looks like a 2005 home video.",
     prompt: "LOOK: mid-2000s consumer DV camcorder footage. Soft standard-definition detail, slightly blown highlights, low dynamic range, mild chroma noise, cool white balance, handheld feel. Stays photorealistic: same people, outfit, motion and framing. No date stamp, no text, no UI.",
@@ -234,6 +252,7 @@ export default function MaddenAIStudio() {
   const [note, setNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
   const [look, setLook] = useState("real");
+  const [trend, setTrend] = useState("outfit");
   const [engine, setEngine] = useState<Engine>("seedance");
   const [likenessConsent, setLikenessConsent] = useState(false);
   const [sheetUrl, setSheetUrl] = useState<string | null>(null);
@@ -621,10 +640,18 @@ export default function MaddenAIStudio() {
     [analysis],
   );
   const cleanPieces = useMemo(() => pieces.map(({ backState: _ignored, ...garment }) => garment), [pieces]);
-  const missingBack = pieces.some((p) => !p.backUrl);
+  const wearPieces = useMemo(() => cleanPieces.filter((p) => isWearable(p.type)), [cleanPieces]);
+  const missingBack = pieces.some((p) => isWearable(p.type) && !p.backUrl);
+  /** Frames get styled only when something goes on the person (clothes or a new person). */
+  const needsStyling = wearPieces.length > 0 || replacing;
+  /** Outfit transition: the original plays until the first cut (or halfway in a one-shot clip). */
+  const transitionAt = trend === "transition" ? (shots.length > 1 ? shots[0].end : duration / 2) : 0;
   const prompt = useMemo(
-    () => [note.trim(), missingBack ? NO_BACK_PRINT_RULE : "", LOOKS.find((l) => l.value === look)?.prompt ?? ""].filter(Boolean).join("\n\n"),
-    [note, look, missingBack],
+    () =>
+      [note.trim(), missingBack ? NO_BACK_PRINT_RULE : "", trend === "fitcheck" ? FIT_CHECK_PROMPT : "", LOOKS.find((l) => l.value === look)?.prompt ?? ""]
+        .filter(Boolean)
+        .join("\n\n"),
+    [note, look, missingBack, trend],
   );
   const videoPrompt = `${prompt}\n\n${EVERY_SHOT_RULE}`.trim();
   // Put the garments on the main (replaced) person, even when the frame has several people.
@@ -637,7 +664,7 @@ export default function MaddenAIStudio() {
       const data = await callOutfitSwap<{ generation: SwapGeneration }>({
         action: "swap_frame",
         sourceFrameUrl: frame.url,
-        garments: cleanPieces,
+        garments: wearPieces,
         person: "Main Subject",
         frameIndex: index,
         frameTime: frame.time,
@@ -650,7 +677,7 @@ export default function MaddenAIStudio() {
       });
       setSwaps((prev) => ({ ...prev, [index]: data.generation }));
     },
-    [frames, cleanPieces, meta, prompt, subjectsFor, castAssignment, modelAssignment],
+    [frames, wearPieces, meta, prompt, subjectsFor, castAssignment, modelAssignment],
   );
 
   const styleAll = useCallback(async () => {
@@ -768,7 +795,7 @@ export default function MaddenAIStudio() {
   }, [pickedFrames, swaps, partJobs, frames]);
 
   const makeVideo = useCallback(async (model: string = PRIMARY_MODEL) => {
-    if (!sourceVideo || !readyUrls.length) return;
+    if (!sourceVideo || (needsStyling && !readyUrls.length)) return;
     if (engine === "kling") {
       setStageVideoId(null);
       setPartJobs([]);
@@ -811,7 +838,7 @@ export default function MaddenAIStudio() {
     } finally {
       setRendering(false);
     }
-  }, [sourceVideo, readyUrls, engine, renderKling, parts.length, renderParts, cleanPieces, duration, meta, videoPrompt, analysis, castAssignment, modelAssignment]);
+  }, [sourceVideo, readyUrls, needsStyling, engine, renderKling, parts.length, renderParts, cleanPieces, duration, meta, videoPrompt, analysis, castAssignment, modelAssignment]);
 
   // One click: style the frames, then render as soon as they're all back.
   useEffect(() => {
@@ -858,7 +885,11 @@ export default function MaddenAIStudio() {
     async (sourceStart: number, outputUrl: string): Promise<number[]> => {
       if (!clipPreview) return [];
       const pixelCheck = () => unswappedTimes(clipPreview, sourceStart, outputUrl, personAt).catch(() => [] as number[]);
-      const garmentUrls = cleanPieces.flatMap((p) => [p.frontUrl ?? p.url, p.backUrl]).filter((u): u is string => !!u);
+      const items = cleanPieces.flatMap((p) => [
+        { url: p.frontUrl ?? p.url, kind: p.type },
+        { url: p.backUrl, kind: `${p.type} (back)` },
+      ]).filter((i): i is { url: string; kind: string } => !!i.url);
+      const garmentUrls = items.map((i) => i.url);
       if (!runFolder || !garmentUrls.length) return pixelCheck();
       try {
         const [src, out] = await Promise.all([loadVideo(clipPreview), loadVideo(outputUrl)]);
@@ -883,7 +914,7 @@ export default function MaddenAIStudio() {
         }
         const batches = Array.from({ length: Math.ceil(pairs.length / 8) }, (_, k) => pairs.slice(k * 8, k * 8 + 8));
         const verdicts = (
-          await Promise.all(batches.map((batch) => judgeOutfitSwapFrames({ garmentUrls, subject: subjectDescription, replacingPerson: replacing, model: replacing ? model : undefined, restyled: look !== "real", frames: batch })))
+          await Promise.all(batches.map((batch) => judgeOutfitSwapFrames({ garmentUrls, itemKinds: items.map((i) => i.kind), subject: subjectDescription, replacingPerson: replacing, model: replacing ? model : undefined, restyled: look !== "real", frames: batch })))
         ).flat();
         const failedShots = verdicts
           .filter((v) => v.personVisible && (v.wearingGarment === "no" || v.facingMatches === "no" || v.samePerson === "no" || v.renderedCleanly === "no"))
@@ -891,12 +922,12 @@ export default function MaddenAIStudio() {
           .filter((sh): sh is Shot => !!sh);
         const grid: number[] = [];
         for (let t = 0.25; t < length; t += 0.5) grid.push(t);
-        return grid.filter((t) => failedShots.some((sh) => t >= sh.start && t < sh.end));
+        return grid.filter((t) => sourceStart + t >= transitionAt && failedShots.some((sh) => t >= sh.start && t < sh.end));
       } catch {
         return pixelCheck();
       }
     },
-    [clipPreview, personAt, cleanPieces, runFolder, shots, subjectDescription, replacing, model, look],
+    [clipPreview, personAt, cleanPieces, runFolder, shots, subjectDescription, replacing, model, look, transitionAt],
   );
   useEffect(() => {
     if (engine === "kling" || !clipPreview) return;
@@ -941,7 +972,7 @@ export default function MaddenAIStudio() {
         setPartStage("Restyling the shots that didn't swap");
         const src = await loadVideo(clipPreview);
         const refs: string[] = [];
-        for (const [n, run] of runs.entries()) {
+        for (const [n, run] of needsStyling ? runs.entries() : []) {
           const t = sourceStart + (run.from + run.to) / 2;
           const file = await captureFrameAt(src, t);
           const stored = await uploadToStorage(runFolder, file, file.name);
@@ -953,7 +984,7 @@ export default function MaddenAIStudio() {
           const data = await callOutfitSwap<{ generation: SwapGeneration }>({
             action: "swap_frame",
             sourceFrameUrl: stored.url,
-            garments: cleanPieces,
+            garments: wearPieces,
             person: "Main Subject",
             frameIndex: 900 + n, // outside the clip's own frames
             frameTime: t,
@@ -967,7 +998,7 @@ export default function MaddenAIStudio() {
           const done = await waitFor(data.generation.id);
           if (done.status === "complete" && done.outputUrl) refs.push(done.outputUrl);
         }
-        if (!refs.length) throw new Error("Couldn't restyle those shots. Try redoing the whole part.");
+        if (needsStyling && !refs.length) throw new Error("Couldn't restyle those shots. Try redoing the whole part.");
 
         const win = patchWindow(runs, length);
         // Keep the original references that fall inside the window too.
@@ -1019,7 +1050,7 @@ export default function MaddenAIStudio() {
         setRepairing(false);
       }
     },
-    [unswapped, clipPreview, runFolder, sourceVideo, candidateFrames, frames, cleanPieces, meta, prompt, subjectsFor, castAssignment, modelAssignment, waitFor, pickedFrames, swaps, analysis, videoPrompt, checkRender],
+    [unswapped, clipPreview, runFolder, sourceVideo, candidateFrames, frames, cleanPieces, wearPieces, needsStyling, meta, prompt, subjectsFor, castAssignment, modelAssignment, waitFor, pickedFrames, swaps, analysis, videoPrompt, checkRender],
   );
   const repairCredits = (g?: SwapGeneration | null) => {
     const runs = groupRuns(g ? unswapped[g.id] ?? [] : []).slice(0, PATCH_FRAMES_MAX);
@@ -1105,11 +1136,14 @@ export default function MaddenAIStudio() {
 
   /** A render as stitchable pieces, with its patch (if any) spliced in. */
   const piecesOf = useCallback(
-    async (url: string, id: string) => {
+    async (url: string, id: string, sourceStart = 0) => {
       const len = Math.round(readMeta(await loadVideo(url)).duration * 1000);
-      return layPatches(url, len, patches[id] ?? [], cuts[id] ?? []);
+      // Outfit transition: the first render opens on the original footage up to the cut.
+      const head = sourceStart === 0 && transitionAt > 0 && clipPreview ? Math.min(transitionAt * 1000, len) : 0;
+      const body = layPatches(url, len, patches[id] ?? [], [...(cuts[id] ?? []), ...(head ? [{ start: 0, end: head / 1000 }] : [])]);
+      return head ? [{ url: clipPreview as string, startMs: 0, endMs: head }, ...body] : body;
     },
-    [patches, cuts],
+    [patches, cuts, transitionAt, clipPreview],
   );
 
   const partsLive = partGens.some((g) => isLive(g));
@@ -1126,7 +1160,7 @@ export default function MaddenAIStudio() {
     setStitching(true);
     (async () => {
       try {
-        const pieces = (await Promise.all(partGens.map((g) => piecesOf(g!.outputUrl as string, g!.id)))).flat();
+        const pieces = (await Promise.all(partGens.map((g) => piecesOf(g!.outputUrl as string, g!.id, partJobs[partGens.indexOf(g)]?.range.start ?? 0)))).flat();
         const blob = await renderPiecesToBlob(pieces, { width: sourceVideo.width, height: sourceVideo.height });
         const { url } = await uploadToStorage(runFolder, blob, "madden-ai-full.mp4");
         setStitched(url);
@@ -1139,7 +1173,7 @@ export default function MaddenAIStudio() {
   }, [partsDone, stitched, stitching, runFolder, sourceVideo, partGens, piecesOf]);
 
   // A single render that got a fix spliced in becomes one file again.
-  const stagePatched = !!stageVideo?.outputUrl && !!(patches[stageVideo.id]?.length || cuts[stageVideo.id]?.length) && !isUnswapped(stageVideo);
+  const stagePatched = !!stageVideo?.outputUrl && !!(patches[stageVideo.id]?.length || cuts[stageVideo.id]?.length || transitionAt) && !isUnswapped(stageVideo);
   useEffect(() => {
     if (!stagePatched || stitched || stitching || !runFolder || !sourceVideo || !stageVideo?.outputUrl) return;
     setStitching(true);
@@ -1173,9 +1207,11 @@ export default function MaddenAIStudio() {
     setStitched(null);
     setCuts({});
     setSwaps({});
-    setAuto(true);
-    void styleAll();
-  }, [styleAll]);
+    if (needsStyling) {
+      setAuto(true);
+      void styleAll();
+    } else void makeVideo();
+  }, [styleAll, needsStyling, makeVideo]);
 
   /* ------------------------- survive a reload ------------------------- */
   // The run lives in this tab; save it after every change and pick it back up on reload.
@@ -1206,6 +1242,7 @@ export default function MaddenAIStudio() {
     setChosenSubjectId(saved.chosenSubjectId);
     setNote(saved.note);
     setLook(saved.look ?? (saved.lowPoly ? "lowpoly" : "real"));
+    setTrend(saved.trend ?? "outfit");
     setEngine(saved.engine);
     setSwaps(saved.swaps);
     setPartJobs(saved.partJobs);
@@ -1256,6 +1293,7 @@ export default function MaddenAIStudio() {
         chosenSubjectId,
         note,
         look,
+        trend,
         engine,
         swaps,
         partJobs,
@@ -1498,6 +1536,28 @@ export default function MaddenAIStudio() {
               )}
             </div>
 
+            {/* TREND preset */}
+            <div className={`${ps2Panel} p-4`}>
+              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-100/55">Trend</p>
+              <OptionCycler
+                label="Trend"
+                options={TRENDS.map((t) => ({ label: t.label, value: t.value }))}
+                value={trend}
+                onChange={(v) => {
+                  setTrend(v);
+                  // "Put me in it" is about the person: open the avatar picker straight away.
+                  if (v === "putmein" && !replacing) setModel({ modelSource: "avatar", avatarId: null, uploadedRefUrls: [] });
+                }}
+              />
+              <p className="mt-1.5 text-[11px] text-sky-100/55">
+                {trend === "transition" && sourceVideo
+                  ? shots.length > 1
+                    ? `Original outfit until ${transitionAt.toFixed(1)}s (the first cut), then your fit.`
+                    : `This clip has no cut, so the switch happens halfway (${transitionAt.toFixed(1)}s). A spin or jump cut works best.`
+                  : TRENDS.find((t) => t.value === trend)?.hint}
+              </p>
+            </div>
+
             {/* △ OUTFIT */}
             <div className={`${ps2Panel} p-4`}>
               <StepLabel glyph="△" title="Your outfit" done={pieces.length > 0} hint={`${pieces.length}/${MAX_PIECES}`} />
@@ -1513,6 +1573,7 @@ export default function MaddenAIStudio() {
                         <X size={16} />
                       </button>
                     </div>
+                    {isWearable(piece.type) ? (
                     <div className="mt-2 flex items-center gap-2">
                       {piece.backUrl ? (
                         <>
@@ -1536,7 +1597,8 @@ export default function MaddenAIStudio() {
                         </>
                       )}
                     </div>
-                    {!piece.backUrl && !piece.backState ? (
+                    ) : null}
+                    {isWearable(piece.type) && !piece.backUrl && !piece.backState ? (
                       <p className="mt-1.5 text-[11px] text-amber-200/80">No back photo: when they turn around, the back comes out plain. Add it if this piece has a back print.</p>
                     ) : null}
                   </div>
@@ -1545,7 +1607,7 @@ export default function MaddenAIStudio() {
                   <DropZone accept="image/*" multiple disabled={uploadingPiece} onFiles={(f) => void onPieces(f)}>
                     {uploadingPiece ? <Loader2 size={18} className="animate-spin text-sky-200" /> : <Plus size={18} className="text-sky-200" />}
                     <span className="text-sm font-semibold text-white">{pieces.length ? "Drop another piece" : "Drop your clothes here"}</span>
-                    <span className="text-xs text-sky-100/50">Front photo first. Add the back, or press △ to generate it (≈{BACK_CREDITS} cr).</span>
+                    <span className="text-xs text-sky-100/50">Clothes, a product, or a photo of a place. Set what it is after it drops in.</span>
                   </DropZone>
                 ) : null}
               </div>
@@ -1665,7 +1727,7 @@ export default function MaddenAIStudio() {
               ) : null}
               <div className="mb-3">
                 <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-100/55">Look</p>
-                <OptionCycler label="Look" options={LOOKS.map((l) => ({ label: l.label, value: l.value }))} value={look} onChange={setLook} />
+                <OptionCycler label="Look" options={LOOKS.filter((l) => isAdmin || !l.hidden).map((l) => ({ label: l.label, value: l.value }))} value={look} onChange={setLook} />
                 <p className="mt-1.5 text-[11px] text-sky-100/55">{LOOKS.find((l) => l.value === look)?.hint}</p>
               </div>
               {canAfford(totalCredits) ? (

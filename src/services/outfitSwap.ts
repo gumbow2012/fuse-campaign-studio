@@ -643,6 +643,8 @@ export type OutfitSwapJudgeFrame = {
  */
 export async function judgeOutfitSwapFrames(args: {
   garmentUrls: string[];
+  /** What each garmentUrls image is ("Shirt / Top", "Product", "Location (back)"…). */
+  itemKinds?: string[];
   subject: string;
   replacingPerson: boolean;
   /** Who should appear instead, when replacing (photos or an avatar); the judge checks it's them. */
