@@ -97,6 +97,35 @@ const LOW_POLY_PROMPT = [
   "Rendered entirely as 2001 PlayStation 2 low-poly 3D graphics: chunky visible polygons, blurry low-resolution textures, dithered gradients, hard aliased edges with no anti-aliasing, flat vertex lighting, nostalgic uncanny quiet, faint CRT phosphor tint.",
   "Translate everything into crude low-poly geometry, never photorealism. No text, no UI, no watermark.",
 ].join(" ");
+/** Looks: "real" keeps the footage as filmed; the rest restyle every frame (prompt appended to swap + render). */
+const LOOKS: { value: string; label: string; hint: string; prompt?: string }[] = [
+  { value: "real", label: "Real · as filmed", hint: "Keeps the footage exactly as filmed." },
+  { value: "lowpoly", label: "PS2 low poly", hint: "Remakes the whole video as a 2001 PS2 game.", prompt: LOW_POLY_PROMPT },
+  {
+    value: "anime",
+    label: "Anime",
+    hint: "Redraws the video as a 2D anime.",
+    prompt: "STYLE OVERRIDE — ANIME. Re-create every frame as high-quality 2D anime: clean line art, cel shading, flat color fills with soft shadows, anime-style eyes and hair. Same person (same hairstyle, hair color, skin tone), same pose, motion, camera and framing; the outfit keeps its exact colors, prints and logos, redrawn in anime style; the background becomes a matching hand-painted anime background. Never photorealistic. No text, no UI, no watermark.",
+  },
+  {
+    value: "clay",
+    label: "Claymation",
+    hint: "Turns it into stop-motion clay.",
+    prompt: "STYLE OVERRIDE — CLAYMATION. Re-create every frame as stop-motion claymation: plasticine figures with visible fingerprints and tool marks, slightly lumpy handmade forms, miniature handmade set, soft practical studio lighting, subtle stop-motion stutter. Same person (same hairstyle, hair color, skin tone), same pose, motion, camera and framing; the outfit keeps its exact colors, prints and logos, sculpted in clay. Never photorealistic. No text, no UI, no watermark.",
+  },
+  {
+    value: "film",
+    label: "35mm film",
+    hint: "Real footage with a cinematic film look.",
+    prompt: "LOOK: shot on 35mm motion-picture film. Natural film grain, gentle halation around highlights, soft rolled-off contrast, rich warm cinematic color grade. Stays photorealistic: same people, outfit, motion and framing. No text, no letterbox bars.",
+  },
+  {
+    value: "camcorder",
+    label: "2000s camcorder",
+    hint: "Real footage that looks like a 2005 home video.",
+    prompt: "LOOK: mid-2000s consumer DV camcorder footage. Soft standard-definition detail, slightly blown highlights, low dynamic range, mild chroma noise, cool white balance, handheld feel. Stays photorealistic: same people, outfit, motion and framing. No date stamp, no text, no UI.",
+  },
+];
 const TIPS = [
   "Clean product photos on a plain background give the sharpest fit.",
   "One person facing the camera swaps best.",
@@ -204,7 +233,7 @@ export default function MaddenAIStudio() {
   const [model, setModel] = useState<OutfitSwapSubjectModel>(KEEP_ORIGINAL_MODEL);
   const [note, setNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
-  const [lowPoly, setLowPoly] = useState(false);
+  const [look, setLook] = useState("real");
   const [engine, setEngine] = useState<Engine>("seedance");
   const [likenessConsent, setLikenessConsent] = useState(false);
   const [sheetUrl, setSheetUrl] = useState<string | null>(null);
@@ -594,8 +623,8 @@ export default function MaddenAIStudio() {
   const cleanPieces = useMemo(() => pieces.map(({ backState: _ignored, ...garment }) => garment), [pieces]);
   const missingBack = pieces.some((p) => !p.backUrl);
   const prompt = useMemo(
-    () => [note.trim(), missingBack ? NO_BACK_PRINT_RULE : "", lowPoly ? LOW_POLY_PROMPT : ""].filter(Boolean).join("\n\n"),
-    [note, lowPoly, missingBack],
+    () => [note.trim(), missingBack ? NO_BACK_PRINT_RULE : "", LOOKS.find((l) => l.value === look)?.prompt ?? ""].filter(Boolean).join("\n\n"),
+    [note, look, missingBack],
   );
   const videoPrompt = `${prompt}\n\n${EVERY_SHOT_RULE}`.trim();
   // Put the garments on the main (replaced) person, even when the frame has several people.
@@ -854,7 +883,7 @@ export default function MaddenAIStudio() {
         }
         const batches = Array.from({ length: Math.ceil(pairs.length / 8) }, (_, k) => pairs.slice(k * 8, k * 8 + 8));
         const verdicts = (
-          await Promise.all(batches.map((batch) => judgeOutfitSwapFrames({ garmentUrls, subject: subjectDescription, replacingPerson: replacing, model: replacing ? model : undefined, frames: batch })))
+          await Promise.all(batches.map((batch) => judgeOutfitSwapFrames({ garmentUrls, subject: subjectDescription, replacingPerson: replacing, model: replacing ? model : undefined, restyled: look !== "real", frames: batch })))
         ).flat();
         const failedShots = verdicts
           .filter((v) => v.personVisible && (v.wearingGarment === "no" || v.facingMatches === "no" || v.samePerson === "no" || v.renderedCleanly === "no"))
@@ -867,7 +896,7 @@ export default function MaddenAIStudio() {
         return pixelCheck();
       }
     },
-    [clipPreview, personAt, cleanPieces, runFolder, shots, subjectDescription, replacing, model],
+    [clipPreview, personAt, cleanPieces, runFolder, shots, subjectDescription, replacing, model, look],
   );
   useEffect(() => {
     if (engine === "kling" || !clipPreview) return;
@@ -1176,7 +1205,7 @@ export default function MaddenAIStudio() {
     setModel(saved.model);
     setChosenSubjectId(saved.chosenSubjectId);
     setNote(saved.note);
-    setLowPoly(saved.lowPoly);
+    setLook(saved.look ?? (saved.lowPoly ? "lowpoly" : "real"));
     setEngine(saved.engine);
     setSwaps(saved.swaps);
     setPartJobs(saved.partJobs);
@@ -1226,7 +1255,7 @@ export default function MaddenAIStudio() {
         model,
         chosenSubjectId,
         note,
-        lowPoly,
+        look,
         engine,
         swaps,
         partJobs,
@@ -1298,7 +1327,7 @@ export default function MaddenAIStudio() {
                 stylingDone={swapList.filter((e) => e.swap?.status === "complete").length}
                 total={pickedFrames.length || FRAME_COUNT}
                 renderingVideo={rendering || repairing || stitching || partsLive || (!!stageVideo && isLive(stageVideo))}
-                lowPoly={lowPoly}
+                look={look}
                 status={
                   partStage ??
                   (checkingParts || checkingStage
@@ -1634,34 +1663,11 @@ export default function MaddenAIStudio() {
                   <span>I have permission from the person in my model photos to use their likeness in this video.</span>
                 </label>
               ) : null}
-              <button
-                type="button"
-                role="switch"
-                aria-checked={lowPoly}
-                onClick={() => setLowPoly((v) => !v)}
-                className={`mb-3 flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
-                  lowPoly
-                    ? "border-sky-200/70 bg-[linear-gradient(90deg,rgba(77,168,255,0.35),rgba(20,60,180,0.25))] shadow-[0_0_24px_-4px_rgba(77,168,255,0.8)]"
-                    : "border-sky-300/25 bg-[#020a24]/60 hover:border-sky-200/50"
-                }`}
-              >
-                <span aria-hidden className="grid h-8 w-8 place-items-center">
-                  <svg viewBox="0 0 32 32" className="h-7 w-7" fill="none" stroke={lowPoly ? "#7CE3FF" : "#6f8fbf"} strokeWidth="1.5" strokeLinejoin="round">
-                    <path d="M16 3 28 10v12L16 29 4 22V10z" />
-                    <path d="M16 3v26M4 10l24 12M28 10 4 22" opacity=".6" />
-                  </svg>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2 font-display text-[12px] font-bold uppercase tracking-[0.14em] text-white">
-                    Low Poly Mode
-                    <span className="rounded border border-[#FF8C9A]/60 bg-[#FF8C9A]/15 px-1.5 py-px text-[9px] tracking-[0.2em] text-[#FFB3BE]">New</span>
-                  </span>
-                  <span className="block text-[11px] text-sky-100/55">Swaps the outfit and remakes the whole video in PS2 low-poly style.</span>
-                </span>
-                <span className={`h-5 w-9 shrink-0 rounded-full border p-0.5 transition ${lowPoly ? "border-sky-200 bg-sky-400/60" : "border-sky-300/30 bg-[#020a24]"}`}>
-                  <span className={`block h-3.5 w-3.5 rounded-full bg-white transition ${lowPoly ? "translate-x-4" : ""}`} />
-                </span>
-              </button>
+              <div className="mb-3">
+                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-100/55">Look</p>
+                <OptionCycler label="Look" options={LOOKS.map((l) => ({ label: l.label, value: l.value }))} value={look} onChange={setLook} />
+                <p className="mt-1.5 text-[11px] text-sky-100/55">{LOOKS.find((l) => l.value === look)?.hint}</p>
+              </div>
               {canAfford(totalCredits) ? (
                 <button type="button" className={`${ps2Button} w-full py-4 text-[14px]`} disabled={!canStart} onClick={begin}>
                   {loading ? <Loader2 size={16} className="animate-spin" /> : <Ps2Glyph />}
@@ -1721,7 +1727,7 @@ function TitleScreen({ onStart }: { onStart: () => void }) {
 
 /* ----------------------------- loading screen ----------------------------- */
 
-function LoadingScreen({ tiles, stylingDone, total, renderingVideo, lowPoly, status }: { tiles: { source: string | null; done: string | null }[]; stylingDone: number; total: number; renderingVideo: boolean; lowPoly?: boolean; status?: string | null }) {
+function LoadingScreen({ tiles, stylingDone, total, renderingVideo, look, status }: { tiles: { source: string | null; done: string | null }[]; stylingDone: number; total: number; renderingVideo: boolean; look: string; status?: string | null }) {
   const [tick, setTick] = useState(0);
   const renderStart = useRef<number | null>(null);
   if (renderingVideo && renderStart.current === null) renderStart.current = Date.now();
@@ -1737,7 +1743,7 @@ function LoadingScreen({ tiles, stylingDone, total, renderingVideo, lowPoly, sta
 
   return (
     <div className="relative flex h-full min-h-[520px] flex-col items-center justify-center gap-6 p-6">
-      <p className="font-display text-[11px] font-bold uppercase tracking-[0.45em] text-sky-300">{status ?? (renderingVideo ? "Rendering stage" : "Styling outfit")}{lowPoly ? " · Low poly" : ""}</p>
+      <p className="font-display text-[11px] font-bold uppercase tracking-[0.45em] text-sky-300">{status ?? (renderingVideo ? "Rendering stage" : "Styling outfit")}{look !== "real" ? ` · ${LOOKS.find((l) => l.value === look)?.label}` : ""}</p>
 
       {/* featured "character select" card: locked silhouette until its frame is styled */}
       <div className="relative aspect-[9/16] w-[min(260px,60vw)] overflow-hidden rounded-2xl border border-sky-200/40 bg-[#020a24] shadow-[0_0_60px_-12px_rgba(77,168,255,0.85)]">
