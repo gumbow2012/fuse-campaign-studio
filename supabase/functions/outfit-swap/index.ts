@@ -182,7 +182,7 @@ type GarmentReference = { url?: string; type?: string; label?: string; person?: 
 function buildKlingEditPrompt(garments: any[], subject: string, imageCount: number, extra?: string) {
   const who = subject ? `the ${subject.replace(/[.\s]+$/, "").replace(/^(a|an|the)\s+/i, "")}` : "the main person";
   const lines = garments.map((g, i) =>
-    `Replace the ${/bottom|pant|short|jean/i.test(String(g?.type ?? "")) ? "pants or shorts" : "top layer (shirt, hoodie or jacket)"} worn by ${who} in @Video1 with the exact garment @Element${i + 1}: same colors, print, graphics, logos and fit${g?.backUrl ? ", with its back print when they face away" : "; its back is plain"}.`,
+    `Replace the ${/bottom|pant|short|jean/i.test(String(g?.type ?? "")) ? "pants or shorts" : "top layer (shirt, hoodie or jacket)"} worn by ${who} in @Video1 with the exact garment @Element${i + 1}: same colors, print, graphics, logos and fit${g?.backUrl ? ", with its back print when they face away" : ". The back of this garment is plain solid fabric with no print: never show the front graphic on the back"}.`,
   );
   if (imageCount) lines.push(`@Image1${imageCount > 1 ? ` to @Image${imageCount}` : ""} show frames of this video already wearing it; match them.`);
   lines.push(
