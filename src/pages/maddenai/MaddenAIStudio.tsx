@@ -72,6 +72,8 @@ const MAX_ANALYZED_FRAMES = 16; // outfit-swap-analyze takes 16 frames per call
 const MAX_UNSWAPPED_SECONDS = 0.5; // 1s+ of a person left untouched = fix it before stitching
 const PATCH_FRAMES_MAX = 4;
 const AUTO_FIX_PASSES = 2; // fixes run on their own this many times per render, then it is your call
+/** After the fixes, shots that still won't swap (a close-up of a hood or long sleeve the new piece doesn't have) are cut, up to this much. */
+const MAX_CUT_SECONDS = 3;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const KLING_CLIP_SECONDS = 3; // outfit-swap animate_frame: Kling 3.0 Pro, fixed 3s
 const KLING_USD_PER_SECOND = 0.112;
@@ -799,6 +801,8 @@ export default function MaddenAIStudio() {
   const [unswapped, setUnswapped] = useState<Record<string, number[]>>({});
   /** Re-rendered windows spliced over a render, in the order they were made (later wins). */
   const [patches, setPatches] = useState<Record<string, Patch[]>>({});
+  /** Shots cut out of a render (seconds into it) because no fix could swap them. */
+  const [cuts, setCuts] = useState<Record<string, { start: number; end: number }[]>>({});
   const [repairing, setRepairing] = useState(false);
   const checkingIds = useRef(new Set<string>());
   const personAt = useCallback(
@@ -1025,18 +1029,39 @@ export default function MaddenAIStudio() {
     const next = renders.find(
       ({ gen }) => gen && isUnswapped(gen) && (fixPasses.current[gen.id] ?? 0) < AUTO_FIX_PASSES && canAfford(repairCredits(gen)),
     );
-    if (!next?.gen) return;
-    fixPasses.current[next.gen.id] = (fixPasses.current[next.gen.id] ?? 0) + 1;
-    void repair(next.gen, next.start);
+    if (next?.gen) {
+      fixPasses.current[next.gen.id] = (fixPasses.current[next.gen.id] ?? 0) + 1;
+      void repair(next.gen, next.start);
+      return;
+    }
+    // Fixes used up: cut the whole shots that still won't swap, if that's a small part of the render.
+    const stuck = renders.find(({ gen }) => gen && isUnswapped(gen) && (fixPasses.current[gen.id] ?? 0) >= AUTO_FIX_PASSES);
+    if (!stuck?.gen) return;
+    const ranges = (unswapped[stuck.gen.id] ?? [])
+      .map((t) => {
+        const shot = shots.find((sh) => stuck.start + t >= sh.start && stuck.start + t < sh.end);
+        return shot ? { start: Math.max(0, shot.start - stuck.start), end: shot.end - stuck.start } : { start: t - 0.25, end: t + 0.25 };
+      })
+      .sort((a, b) => a.start - b.start)
+      .reduce<{ start: number; end: number }[]>((merged, r) => {
+        const last = merged[merged.length - 1];
+        if (last && r.start <= last.end) last.end = Math.max(last.end, r.end);
+        else merged.push({ ...r });
+        return merged;
+      }, []);
+    if (ranges.reduce((sum, r) => sum + r.end - r.start, 0) > MAX_CUT_SECONDS) return;
+    setCuts((prev) => ({ ...prev, [stuck.gen!.id]: ranges }));
+    setUnswapped((prev) => ({ ...prev, [stuck.gen!.id]: [] }));
   });
+  const cutSeconds = Object.values(cuts).flat().reduce((sum, r) => sum + r.end - r.start, 0);
 
   /** A render as stitchable pieces, with its patch (if any) spliced in. */
   const piecesOf = useCallback(
     async (url: string, id: string) => {
       const len = Math.round(readMeta(await loadVideo(url)).duration * 1000);
-      return layPatches(url, len, patches[id] ?? []);
+      return layPatches(url, len, patches[id] ?? [], cuts[id] ?? []);
     },
-    [patches],
+    [patches, cuts],
   );
 
   const partsLive = partGens.some((g) => isLive(g));
@@ -1066,7 +1091,7 @@ export default function MaddenAIStudio() {
   }, [partsDone, stitched, stitching, runFolder, sourceVideo, partGens, piecesOf]);
 
   // A single render that got a fix spliced in becomes one file again.
-  const stagePatched = !!stageVideo?.outputUrl && !!patches[stageVideo.id]?.length && !isUnswapped(stageVideo);
+  const stagePatched = !!stageVideo?.outputUrl && !!(patches[stageVideo.id]?.length || cuts[stageVideo.id]?.length) && !isUnswapped(stageVideo);
   useEffect(() => {
     if (!stagePatched || stitched || stitching || !runFolder || !sourceVideo || !stageVideo?.outputUrl) return;
     setStitching(true);
@@ -1139,6 +1164,7 @@ export default function MaddenAIStudio() {
     setSessionVideoIds(saved.sessionVideoIds);
     setStitched(saved.stitched);
     setPatches(saved.patches);
+    setCuts(saved.cuts ?? {});
     setUnswapped(saved.unswapped);
     genModel.current = new Map(saved.genModel);
     fixPasses.current = saved.fixPasses;
@@ -1188,6 +1214,7 @@ export default function MaddenAIStudio() {
         sessionVideoIds,
         stitched,
         patches,
+        cuts,
         unswapped,
         genModel: [...genModel.current],
         fixPasses: fixPasses.current,
@@ -1298,6 +1325,12 @@ export default function MaddenAIStudio() {
                     </button>
                   </div>
                 ) : (
+                  <>
+                  {cutSeconds ? (
+                    <p className="max-w-sm px-6 pt-4 text-center text-xs text-sky-100/60">
+                      Cut {cutSeconds.toFixed(1)}s: {cutSeconds > 1.5 ? "shots" : "a shot"} of something your piece doesn't have (like a hood or long sleeve) that couldn't take the new outfit.
+                    </p>
+                  ) : null}
                   <ResultStage
                     videoUrl={stitched as string}
                     breakdown={pickedFrames.map((i) => ({
@@ -1314,6 +1347,7 @@ export default function MaddenAIStudio() {
                     frameCredits={creditsFromUsd(IMAGE_FLAT_USD * resolutionMultiplier("2K"))}
                     rerenderDisabled={stylingLive || rendering || !readyUrls.length || !canAfford(videoCredits)}
                   />
+                  </>
                 )}
               </div>
             ) : stageVideo ? (

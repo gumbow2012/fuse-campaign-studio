@@ -1,9 +1,10 @@
 // OUTFIT SWAP — RENDER JUDGE (analysis only).
 //
 // Shown the garment photos and, per moment, the ORIGINAL frame next to the
-// RENDERED frame, Gemini answers three questions for the person who should be
+// RENDERED frame, Gemini answers four questions for the person who should be
 // wearing the garment: are they wearing THIS garment, do they face the same way
-// as in the original, and are they the same person. The client re-renders the
+// as in the original, are they the same person, and did the frame render without
+// melted faces or smeared prints. The client re-renders the
 // shots that fail. Never generates anything; one Gemini call per batch.
 
 import { GoogleGenAI, Type } from "https://esm.sh/@google/genai@1.29.0";
@@ -30,9 +31,10 @@ const RESPONSE_SCHEMA = {
           wearing_garment: ANSWER,
           facing_matches: ANSWER,
           same_person: ANSWER,
+          rendered_cleanly: ANSWER,
           notes: { type: Type.STRING },
         },
-        required: ["id", "person_visible", "wearing_garment", "facing_matches", "same_person"],
+        required: ["id", "person_visible", "wearing_garment", "facing_matches", "same_person", "rendered_cleanly"],
       },
     },
   },
@@ -69,6 +71,7 @@ function buildPrompt(garmentCount: number, subject: string, frames: JudgeFrame[]
     replacingPerson
       ? "- same_person: always answer unclear (the person is intentionally replaced)."
       : "- same_person: is it the same person as in the ORIGINAL (face, hair, skin tone, body)?",
+    "- rendered_cleanly: no = the RENDERED frame is visibly broken where the ORIGINAL is not: a melted, smeared or faceless face, warped or extra limbs, or the garment print smeared into noise. Motion blur that the ORIGINAL also has is fine. yes = it looks like a normal video frame.",
     "- notes: at most 100 characters, the main problem, or empty.",
     "Judge each pair on its own. When unsure, answer unclear rather than guessing.",
     ...frames.map((f, i) => `PAIR ${i + 1}: id ${f.id}. Images ${garmentCount + i * 2 + 1} (ORIGINAL) and ${garmentCount + i * 2 + 2} (RENDERED).`),
@@ -121,6 +124,7 @@ Deno.serve(async (req) => {
           wearingGarment: answer(f.wearing_garment),
           facingMatches: answer(f.facing_matches),
           samePerson: answer(f.same_person),
+          renderedCleanly: answer(f.rendered_cleanly),
           notes: String(f.notes ?? "").slice(0, 100),
         })),
     });
