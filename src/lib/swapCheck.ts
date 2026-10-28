@@ -145,20 +145,25 @@ export type Patch = { start: number; end: number; url: string };
 
 /**
  * A render as stitchable pieces with its patches laid over it in order (a later
- * patch wins where windows overlap). Times in seconds, pieces in ms of each file.
+ * patch wins where windows overlap), and `cuts` taken out of the timeline.
+ * Times in seconds, pieces in ms of each file.
  */
-export function layPatches(url: string, lengthMs: number, patches: Patch[]) {
-  let segments = [{ url, from: 0, to: lengthMs, offset: 0 }]; // timeline [from,to) shows url at (t - offset)
-  for (const p of patches) {
-    const from = Math.round(p.start * 1000);
-    const to = Math.round(p.end * 1000);
-    segments = segments.flatMap((s) => [
+export function layPatches(url: string, lengthMs: number, patches: Patch[], cuts: { start: number; end: number }[] = []) {
+  type Segment = { url: string; from: number; to: number; offset: number }; // timeline [from,to) shows url at (t - offset)
+  const without = (segments: Segment[], from: number, to: number) =>
+    segments.flatMap((s) => [
       ...(s.from < from ? [{ ...s, to: Math.min(s.to, from) }] : []),
       ...(s.to > to ? [{ ...s, from: Math.max(s.from, to) }] : []),
     ]);
+  let segments: Segment[] = [{ url, from: 0, to: lengthMs, offset: 0 }];
+  for (const p of patches) {
+    const from = Math.round(p.start * 1000);
+    const to = Math.round(p.end * 1000);
+    segments = without(segments, from, to);
     segments.push({ url: p.url, from, to: Math.min(to, lengthMs), offset: from });
     segments.sort((a, b) => a.from - b.from);
   }
+  for (const c of cuts) segments = without(segments, Math.round(c.start * 1000), Math.round(c.end * 1000));
   return segments
     .filter((s) => s.to - s.from > 40)
     .map((s) => ({ url: s.url, startMs: s.from - s.offset, endMs: s.to - s.offset }));
