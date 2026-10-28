@@ -72,6 +72,8 @@ export type AssemblySubjectModel = {
   identityRefs?: string[] | null;
   /** Angle-keyed approved references (avatar/cast only). */
   identityAngles?: Record<string, string | null> | null;
+  /** The avatar's front/side/back/face sheet, when it has one. */
+  sheetUrl?: string | null;
 };
 
 export type AssembledReference = {
