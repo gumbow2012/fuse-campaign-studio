@@ -854,7 +854,7 @@ export default function MaddenAIStudio() {
         }
         const batches = Array.from({ length: Math.ceil(pairs.length / 8) }, (_, k) => pairs.slice(k * 8, k * 8 + 8));
         const verdicts = (
-          await Promise.all(batches.map((batch) => judgeOutfitSwapFrames({ garmentUrls, subject: subjectDescription, replacingPerson: replacing, frames: batch })))
+          await Promise.all(batches.map((batch) => judgeOutfitSwapFrames({ garmentUrls, subject: subjectDescription, replacingPerson: replacing, model: replacing ? model : undefined, frames: batch })))
         ).flat();
         const failedShots = verdicts
           .filter((v) => v.personVisible && (v.wearingGarment === "no" || v.facingMatches === "no" || v.samePerson === "no" || v.renderedCleanly === "no"))
@@ -867,7 +867,7 @@ export default function MaddenAIStudio() {
         return pixelCheck();
       }
     },
-    [clipPreview, personAt, cleanPieces, runFolder, shots, subjectDescription, replacing],
+    [clipPreview, personAt, cleanPieces, runFolder, shots, subjectDescription, replacing, model],
   );
   useEffect(() => {
     if (engine === "kling" || !clipPreview) return;
