@@ -59,7 +59,7 @@ async function inlineImage(url: string) {
   }
 }
 
-function buildPrompt(garmentCount: number, subject: string, frames: JudgeFrame[], replacingPerson: boolean, modelCount: number) {
+function buildPrompt(garmentCount: number, subject: string, frames: JudgeFrame[], replacingPerson: boolean, modelCount: number, restyled: boolean) {
   const before = garmentCount + modelCount;
   return [
     "You check an outfit-swap video render. Return JSON only.",
@@ -78,6 +78,7 @@ function buildPrompt(garmentCount: number, subject: string, frames: JudgeFrame[]
       : "- same_person: is it the same person as in the ORIGINAL (face, hair, skin tone, body)?",
     "- rendered_cleanly: no = the RENDERED frame is visibly broken where the ORIGINAL is not: a melted, smeared or faceless face, warped or extra limbs, or the garment print smeared into noise. Motion blur that the ORIGINAL also has is fine. yes = it looks like a normal video frame.",
     "- notes: at most 100 characters, the main problem, or empty.",
+    ...(restyled ? ["The RENDERED video is intentionally restyled (e.g. anime, claymation, low-poly game, film look). Judge garment, person and facing by design and colors, not photorealism; that style alone is never a reason for rendered_cleanly = no."] : []),
     "Judge each pair on its own. When unsure, answer unclear rather than guessing.",
     ...frames.map((f, i) => `PAIR ${i + 1}: id ${f.id}. Images ${before + i * 2 + 1} (ORIGINAL) and ${before + i * 2 + 2} (RENDERED).`),
   ].join("\n");
@@ -121,7 +122,7 @@ Deno.serve(async (req) => {
     modelUrls = modelUrls.slice(0, MAX_MODEL_IMAGES);
 
     const images = await Promise.all([...garmentUrls, ...modelUrls, ...frames.flatMap((f) => [f.sourceUrl, f.outputUrl])].map(inlineImage));
-    const prompt = buildPrompt(garmentUrls.length, String(body?.subject ?? "").slice(0, 200), frames, replacingPerson, modelUrls.length);
+    const prompt = buildPrompt(garmentUrls.length, String(body?.subject ?? "").slice(0, 200), frames, replacingPerson, modelUrls.length, body?.restyled === true);
     const response = await new GoogleGenAI({ apiKey }).models.generateContent({
       model: MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }, ...images] }] as any,

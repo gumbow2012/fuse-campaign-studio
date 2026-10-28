@@ -647,6 +647,8 @@ export async function judgeOutfitSwapFrames(args: {
   replacingPerson: boolean;
   /** Who should appear instead, when replacing (photos or an avatar); the judge checks it's them. */
   model?: OutfitSwapSubjectModel;
+  /** The render is intentionally restyled (anime, low poly…): judge by design, not photorealism. */
+  restyled?: boolean;
   frames: { id: number; sourceUrl: string; outputUrl: string }[];
 }): Promise<OutfitSwapJudgeFrame[]> {
   const {
