@@ -59,11 +59,14 @@ async function inlineImage(url: string) {
   }
 }
 
-function buildPrompt(garmentCount: number, subject: string, frames: JudgeFrame[], replacingPerson: boolean, modelCount: number, restyled: boolean) {
+function buildPrompt(garmentCount: number, subject: string, frames: JudgeFrame[], replacingPerson: boolean, modelCount: number, restyled: boolean, kinds: string[]) {
   const before = garmentCount + modelCount;
+  const nonWear = kinds.some((k) => /^(Product|Location)/.test(k));
   return [
     "You check an outfit-swap video render. Return JSON only.",
     `Images 1-${garmentCount} are product photos of THE GARMENT (front, and back if given).`,
+    ...(kinds.length ? [`What each of those images is: ${kinds.map((k, i) => `image ${i + 1} = ${k}`).join(", ")}. "Product" is an object the person holds or shows; "Location" is the place the scene must be set in.`] : []),
+    ...(nonWear ? ["For wearing_garment, count it as yes only when every item applies: clothing worn, Product items held or shown in place of the original object, the scene set in the Location. When a shot simply does not show the item, answer unclear."] : []),
     ...(modelCount ? [`Images ${garmentCount + 1}-${before} are photos of THE MODEL, who must appear in the RENDERED frames instead of the original person.`] : []),
     `The person who must wear it: ${subject || "the main person in the frame"}.`,
     "Then come PAIRS: an ORIGINAL video frame followed by the RENDERED frame at the same moment.",
@@ -122,7 +125,7 @@ Deno.serve(async (req) => {
     modelUrls = modelUrls.slice(0, MAX_MODEL_IMAGES);
 
     const images = await Promise.all([...garmentUrls, ...modelUrls, ...frames.flatMap((f) => [f.sourceUrl, f.outputUrl])].map(inlineImage));
-    const prompt = buildPrompt(garmentUrls.length, String(body?.subject ?? "").slice(0, 200), frames, replacingPerson, modelUrls.length, body?.restyled === true);
+    const prompt = buildPrompt(garmentUrls.length, String(body?.subject ?? "").slice(0, 200), frames, replacingPerson, modelUrls.length, body?.restyled === true, (Array.isArray(body?.itemKinds) ? body.itemKinds : []).slice(0, garmentUrls.length).map((k: unknown) => String(k).slice(0, 40)));
     const response = await new GoogleGenAI({ apiKey }).models.generateContent({
       model: MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }, ...images] }] as any,

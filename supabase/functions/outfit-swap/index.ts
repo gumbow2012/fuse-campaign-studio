@@ -195,14 +195,17 @@ function buildKlingEditPrompt(garments: any[], subject: string, imageCount: numb
   const lines = personElement
     ? [`Replace ${who} in @Video1 with the person in @Element${personElement}: their face, hair, skin tone and build, in every shot, keeping the same pose, motion, expressions and framing. Take only the person from @Element${personElement}, never their clothing: everything they wear comes from @Video1 and the garment elements. The original person's face and hair must not appear anywhere.`]
     : [];
+  const location = garments.some((g) => g?.type === "Location");
   lines.push(...garments.map((g, i) =>
-    `Replace the ${/bottom|pant|short|jean/i.test(String(g?.type ?? "")) ? "pants or shorts" : "top layer (shirt, hoodie or jacket)"} worn by ${who} in @Video1 with the exact garment @Element${i + 1}: same colors, print, graphics, logos and fit${g?.backUrl ? ", with its back print when they face away" : ". The back of this garment is plain solid fabric with no print: never show the front graphic on the back"}.`,
+    g?.type === "Location"
+      ? `Replace the location in every shot of @Video1 with the place in @Element${i + 1}: its architecture, surfaces, colors and light, seen from the same camera positions. People, their motion and the camera move stay exactly as in @Video1.`
+      : g?.type === "Product"
+      ? `Replace the product or object that ${who} holds, uses or shows in @Video1 with the exact product @Element${i + 1}: same shape, colors, logo and branding, held and moved the same way.`
+      : `Replace the ${/bottom|pant|short|jean/i.test(String(g?.type ?? "")) ? "pants or shorts" : "top layer (shirt, hoodie or jacket)"} worn by ${who} in @Video1 with the exact garment @Element${i + 1}: same colors, print, graphics, logos and fit${g?.backUrl ? ", with its back print when they face away" : ". The back of this garment is plain solid fabric with no print: never show the front graphic on the back"}.`,
   ));
   if (imageCount) lines.push(`@Image1${imageCount > 1 ? ` to @Image${imageCount}` : ""} show frames of this video already wearing it; match them.`);
   lines.push(
-    personElement
-      ? "Keep everything else in @Video1 identical: pose, motion, timing, camera, background, lighting, other people and all other clothing. Apply it in every shot where they appear. No added text."
-      : "Keep everything else in @Video1 identical: same person, face, hair, body, pose, motion, timing, camera, background, lighting and all other clothing. Apply it in every shot where they appear. No added text.",
+    `Keep everything else in @Video1 identical: ${personElement ? "" : "same person, face, hair, body, "}pose, motion, timing, camera${location ? "" : ", background, lighting"}, other people and all other clothing. Apply it in every shot where they appear. No added text.`,
   );
   if (extra?.trim()) lines.push(extra.trim());
   return lines.join(" ");
@@ -612,7 +615,7 @@ async function startReconstruction(admin: AdminClient, args: {
     const aspectRatio = videoModel.aspectRatios?.includes(aspect) ? aspect : "9:16";
 
     const imageUrls = (await resolveExecutionUrls(admin, referenceUrls)) as string[];
-    const klingGarments = (Array.isArray(args.garments) ? args.garments : []).filter((g: any) => g?.frontUrl ?? g?.url).slice(0, 2) as any[];
+    const klingGarments = (Array.isArray(args.garments) ? args.garments : []).filter((g: any) => g?.frontUrl ?? g?.url).slice(0, 3) as any[];
     const klingElements = await Promise.all(
       klingGarments.map(async (g) => {
         const [front, other] = (await resolveExecutionUrls(admin, [g.frontUrl ?? g.url, g.backUrl ?? g.frontUrl ?? g.url])) as string[];
@@ -628,7 +631,9 @@ async function startReconstruction(admin: AdminClient, args: {
     }
     // Styled frames can disagree on who is in them (one restyled, one still the original
     // person) and Kling then keeps the original: when replacing, the elements carry it all.
-    const klingImages = replacement ? [] : imageUrls.slice(0, KLING_VIDEO_EDIT_MAX_REFERENCES - klingElements.length);
+    // Styled frames only carry clothes: with a product or location they'd show the old one.
+    const onlyClothes = klingGarments.every((g) => g?.type !== "Product" && g?.type !== "Location");
+    const klingImages = replacement || !onlyClothes ? [] : imageUrls.slice(0, KLING_VIDEO_EDIT_MAX_REFERENCES - klingElements.length);
     const { input: falInput } = kling
       ? buildKlingVideoEditInput({
           prompt: buildKlingEditPrompt(klingGarments, String(args.subject ?? ""), klingImages.length, args.extraPrompt, replacement ? klingElements.length : undefined),
