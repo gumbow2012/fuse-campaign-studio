@@ -916,10 +916,15 @@ export default function MaddenAIStudio() {
         const verdicts = (
           await Promise.all(batches.map((batch) => judgeOutfitSwapFrames({ garmentUrls, itemKinds: items.map((i) => i.kind), rules: note.trim(), subject: subjectDescription, replacingPerson: replacing, model: replacing ? model : undefined, restyled: look !== "real", frames: batch })))
         ).flat();
+        // A failed moment counts its whole shot, except in long shots (one-take clips), where
+        // only the stretch around it does: one bad frame must not re-render the whole take.
         const failedShots = verdicts
           .filter((v) => v.personVisible && (v.wearingGarment === "no" || v.facingMatches === "no" || v.samePerson === "no" || v.renderedCleanly === "no"))
-          .map((v) => samples[v.id]?.shot)
-          .filter((sh): sh is Shot => !!sh);
+          .map((v) => samples[v.id])
+          .filter((sample): sample is (typeof samples)[number] => !!sample)
+          .map(({ time, shot }) =>
+            shot.end - shot.start > 3 ? { start: Math.max(shot.start, time - 0.75), end: Math.min(shot.end, time + 0.75) } : shot,
+          );
         const grid: number[] = [];
         for (let t = 0.25; t < length; t += 0.5) grid.push(t);
         return grid.filter((t) => sourceStart + t >= transitionAt && failedShots.some((sh) => t >= sh.start && t < sh.end));
