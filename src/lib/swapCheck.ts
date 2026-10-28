@@ -200,13 +200,13 @@ export async function detectShots(
 }
 
 /**
- * Where to grab reference frames: one mid-shot frame per shot, plus one per extra ~3s
+ * Where to grab frames: one mid-shot frame per shot, plus one per extra `spacing` seconds
  * of a long shot (turns, walk-aways). Over `max`, long shots give up extras first,
  * then the shortest shots are dropped.
  */
-export function shotFrameTimes(shots: Shot[], max: number): { time: number; shot: Shot }[] {
+export function shotFrameTimes(shots: Shot[], max: number, spacing = 3): { time: number; shot: Shot }[] {
   const usable = shots.filter((s) => s.end - s.start >= 0.2);
-  const counts = usable.map((s) => Math.max(1, Math.round((s.end - s.start) / 3)));
+  const counts = usable.map((s) => Math.max(1, Math.round((s.end - s.start) / spacing)));
   const total = () => counts.reduce((a, b) => a + b, 0);
   while (total() > max && counts.some((c) => c > 1)) counts[counts.indexOf(Math.max(...counts))]--;
   let keep = usable.map((_, i) => i);

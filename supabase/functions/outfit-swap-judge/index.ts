@@ -64,7 +64,7 @@ function buildPrompt(garmentCount: number, subject: string, frames: JudgeFrame[]
     "Then come PAIRS: an ORIGINAL video frame followed by the RENDERED frame at the same moment.",
     "For each pair, about that person in the RENDERED frame, answer:",
     "- person_visible: is that person visible at all (false for empty rooms, title cards, text-only frames, or only other people).",
-    "- wearing_garment: yes = they wear THE GARMENT (same colors and the same print/graphic as the product photos; the back print counts when seen from behind). no = they still wear their ORIGINAL clothing, or a different garment. unclear = the garment area is not visible enough to tell.",
+    "- wearing_garment: yes = they wear THE GARMENT (same colors and the same print/graphic as the product photos; the back print counts when seen from behind). no = they still wear their ORIGINAL clothing, or a different garment. Close-ups count: if the visible fabric, zipper, hood, collar or texture belongs to the ORIGINAL clothing rather than THE GARMENT, answer no. unclear = the garment area truly is not visible at all.",
     "- facing_matches: does the person face the same way (toward camera / side / away) and hold roughly the same pose as in the ORIGINAL frame? no = turned the other way, e.g. back shown where the original shows the front.",
     replacingPerson
       ? "- same_person: always answer unclear (the person is intentionally replaced)."
