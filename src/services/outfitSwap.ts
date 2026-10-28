@@ -645,6 +645,8 @@ export async function judgeOutfitSwapFrames(args: {
   garmentUrls: string[];
   subject: string;
   replacingPerson: boolean;
+  /** Who should appear instead, when replacing (photos or an avatar); the judge checks it's them. */
+  model?: OutfitSwapSubjectModel;
   frames: { id: number; sourceUrl: string; outputUrl: string }[];
 }): Promise<OutfitSwapJudgeFrame[]> {
   const {
