@@ -55,12 +55,13 @@ const TYPE_BY_EXTENSION: Record<string, string> = {
 export async function uploadToStorage(folder: string, file: File | Blob, filename: string) {
   const path = `${folder}/${crypto.randomUUID()}-${safeName(filename)}`;
   const extension = filename.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() ?? "";
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+  // A blank or generic octet-stream label is as good as none: name it by extension. supabase-js
+  // sends a Blob with its own type (contentType is ignored for Blobs), so re-wrap it typed.
+  const known = file.type && file.type !== "application/octet-stream" ? file.type : TYPE_BY_EXTENSION[extension];
+  const body = known && known !== file.type ? new Blob([file], { type: known }) : file;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, body, {
     upsert: true,
-    // A generic octet-stream label is as good as none: name it by extension instead.
-    contentType:
-      ((file as File).type && (file as File).type !== "application/octet-stream" ? (file as File).type : TYPE_BY_EXTENSION[extension]) ||
-      "application/octet-stream",
+    contentType: known || "application/octet-stream",
   });
   if (error) throw new Error(error.message);
 
