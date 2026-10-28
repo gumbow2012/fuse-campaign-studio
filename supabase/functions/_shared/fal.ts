@@ -588,6 +588,23 @@ export function buildVideoModelInput(
 }
 
 
+/**
+ * fal bills Seedance in video tokens, not seconds (pricing page, checked 2026-10-27):
+ * tokens = height × width × (input video seconds + output seconds) × 24 / 1024,
+ * $0.014 per 1K tokens, or $0.0086016 per 1K when a video is an input (4K: $0.008 / $0.0048).
+ * The live pricing record's per-token unit price is therefore never multiplied by seconds.
+ */
+export function seedanceUsd(args: { resolution?: string | null; outputSeconds: number; inputVideoSeconds?: number | null }) {
+  const res = String(args.resolution ?? "720p").toLowerCase();
+  const short = ({ "480p": 480, "720p": 720, "1080p": 1080, "4k": 2160, "2160p": 2160 } as Record<string, number>)[res] ?? 720;
+  const long = Math.round((short * 16) / 9);
+  const input = Math.max(0, Number(args.inputVideoSeconds ?? 0) || 0);
+  const output = Math.max(1, Number(args.outputSeconds) || 5);
+  const tokens = (short * long * (input + output) * 24) / 1024;
+  const per1k = short >= 2160 ? (input > 0 ? 0.0048 : 0.008) : input > 0 ? 0.0086016 : 0.014;
+  return Number(((tokens / 1000) * per1k).toFixed(4));
+}
+
 export function videoFallbackUsdPerSecond(
   model: VideoModelDefinition,
   generateAudio?: boolean | null,
