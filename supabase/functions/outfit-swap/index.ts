@@ -193,7 +193,7 @@ type GarmentReference = { url?: string; type?: string; label?: string; person?: 
 function buildKlingEditPrompt(garments: any[], subject: string, imageCount: number, extra?: string, personElement?: number) {
   const who = subject ? `the ${subject.replace(/[.\s]+$/, "").replace(/^(a|an|the)\s+/i, "")}` : "the main person";
   const lines = personElement
-    ? [`Replace ${who} in @Video1 with the person in @Element${personElement}: their face, hair, skin tone and build, in every shot, keeping the same pose, motion, expressions and framing. The original person's face and hair must not appear anywhere.`]
+    ? [`Replace ${who} in @Video1 with the person in @Element${personElement}: their face, hair, skin tone and build, in every shot, keeping the same pose, motion, expressions and framing. Take only the person from @Element${personElement}, never their clothing: everything they wear comes from @Video1 and the garment elements. The original person's face and hair must not appear anywhere.`]
     : [];
   lines.push(...garments.map((g, i) =>
     `Replace the ${/bottom|pant|short|jean/i.test(String(g?.type ?? "")) ? "pants or shorts" : "top layer (shirt, hoodie or jacket)"} worn by ${who} in @Video1 with the exact garment @Element${i + 1}: same colors, print, graphics, logos and fit${g?.backUrl ? ", with its back print when they face away" : ". The back of this garment is plain solid fabric with no print: never show the front graphic on the back"}.`,
@@ -329,6 +329,7 @@ async function resolveSubjectModels(
         avatarId: String(row.id),
         label: typeof row.name === "string" ? row.name : null,
         identityRefs: identityReferencePack(row),
+        sheetUrl: typeof readConsistencyProfile(row).character_sheet === "string" ? readConsistencyProfile(row).character_sheet : null,
         identityAngles: (readConsistencyProfile(row).approved ?? {}) as Record<string, string | null>,
       };
       continue;
@@ -621,10 +622,13 @@ async function startReconstruction(admin: AdminClient, args: {
     // A replacement person rides along as one more element (their photos / character sheet).
     const replacement = Object.values(resolvedVideoModels).find((m: any) => m?.modelSource !== "keep_original" && m?.identityRefs?.length) as any;
     if (kling && replacement) {
-      const refs = (await resolveExecutionUrls(admin, replacement.identityRefs.slice(0, 3))) as string[];
+      const pack = [...new Set([...replacement.identityRefs, replacement.sheetUrl].filter(Boolean))].slice(0, 3);
+      const refs = (await resolveExecutionUrls(admin, pack)) as string[];
       klingElements.push({ frontal_image_url: refs[0], reference_image_urls: refs.length > 1 ? refs.slice(1) : [refs[0]] });
     }
-    const klingImages = imageUrls.slice(0, KLING_VIDEO_EDIT_MAX_REFERENCES - klingElements.length);
+    // Styled frames can disagree on who is in them (one restyled, one still the original
+    // person) and Kling then keeps the original: when replacing, the elements carry it all.
+    const klingImages = replacement ? [] : imageUrls.slice(0, KLING_VIDEO_EDIT_MAX_REFERENCES - klingElements.length);
     const { input: falInput } = kling
       ? buildKlingVideoEditInput({
           prompt: buildKlingEditPrompt(klingGarments, String(args.subject ?? ""), klingImages.length, args.extraPrompt, replacement ? klingElements.length : undefined),

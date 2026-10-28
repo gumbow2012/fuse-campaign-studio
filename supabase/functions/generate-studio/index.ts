@@ -653,6 +653,8 @@ async function startGeneration(
  * every poll, fanning out an ever-growing pile of hanging provider calls.
  */
 const STUCK_AFTER_MS = 20 * 60 * 1000;
+// Kling video edits of a 15s clip routinely take 18+ minutes in fal's queue.
+const VIDEO_STUCK_AFTER_MS = 45 * 60 * 1000;
 const PROVIDER_CALL_TIMEOUT_MS = 10_000;
 const MAX_RECONCILE_PER_CALL = 6;
 
@@ -680,7 +682,7 @@ function ageMs(row: any) {
 }
 
 function isStuck(row: any) {
-  return isInFlight(row) && ageMs(row) > STUCK_AFTER_MS;
+  return isInFlight(row) && ageMs(row) > (row?.kind === "video" ? VIDEO_STUCK_AFTER_MS : STUCK_AFTER_MS);
 }
 
 /** Terminal-fail an in-flight row that never produced a provider result. */
@@ -689,7 +691,7 @@ async function expireGeneration(admin: AdminClient, row: any, privileged = false
     .from("studio_generations")
     .update({
       status: "failed",
-      error_log: "Generation timed out (no provider result within 20m)",
+      error_log: `Generation timed out (no provider result within ${row?.kind === "video" ? 45 : 20}m)`,
       completed_at: new Date().toISOString(),
     })
     .eq("id", row.id)

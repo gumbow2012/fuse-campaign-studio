@@ -62,7 +62,7 @@ const failedRender = (g?: SwapGeneration | null) => g?.status === "failed" || g?
 const friendlyError = (message?: string | null) =>
   /\b422\b/.test(message ?? "") ? "The video engine refused this clip (usually a face it won't render)." : message ?? "That render didn't finish.";
 const VIDEO_USD_PER_SECOND = 0.3024; // matches the Pro editor's Seedance 2.0 rate
-const VIDEO_RESOLUTION = "1080p";
+const VIDEO_RESOLUTION = "720p"; // Seedance only (the fallback); 1080p costs ~2.5x for a backup render
 const MAX_PIECES = 4;
 const MAX_CLIP_SECONDS = 60;
 const PART_MAX_SECONDS = 15; // Seedance's per-render limit
@@ -1142,6 +1142,7 @@ export default function MaddenAIStudio() {
     setStageVideoId(null);
     setPartJobs([]);
     setStitched(null);
+    setCuts({});
     setSwaps({});
     setAuto(true);
     void styleAll();
