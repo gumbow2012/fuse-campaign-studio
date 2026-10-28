@@ -835,6 +835,12 @@ export default function MaddenAIStudio() {
           .filter((sh) => sh.end - sh.start >= 0.2);
         // Denser than the reference frames: a short close-up inside a long shot must not slip by.
         const samples = shotFrameTimes(local.length ? local : [{ start: 0, end: length }], 24, 1.5);
+        // Kling tends to break in the last moments before a cut (an invented reframe, a melted
+        // face), which the mid-shot samples miss: judge the tail of every shot too.
+        for (const shot of local) {
+          const time = Number((shot.end - 0.15).toFixed(2));
+          if (shot.end - shot.start >= 0.6 && !samples.some((s) => Math.abs(s.time - time) < 0.3)) samples.push({ time, shot });
+        }
         const pairs: { id: number; sourceUrl: string; outputUrl: string }[] = [];
         for (const [id, sample] of samples.entries()) {
           const before = await captureFrameAt(src, sourceStart + sample.time, 768);
@@ -847,7 +853,7 @@ export default function MaddenAIStudio() {
           await Promise.all(batches.map((batch) => judgeOutfitSwapFrames({ garmentUrls, subject: subjectDescription, replacingPerson: replacing, frames: batch })))
         ).flat();
         const failedShots = verdicts
-          .filter((v) => v.personVisible && (v.wearingGarment === "no" || v.facingMatches === "no" || v.samePerson === "no"))
+          .filter((v) => v.personVisible && (v.wearingGarment === "no" || v.facingMatches === "no" || v.samePerson === "no" || v.renderedCleanly === "no"))
           .map((v) => samples[v.id]?.shot)
           .filter((sh): sh is Shot => !!sh);
         const grid: number[] = [];
