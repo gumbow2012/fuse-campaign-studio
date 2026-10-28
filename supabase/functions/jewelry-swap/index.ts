@@ -21,6 +21,7 @@ import {
   referenceToVideoEndpoint,
   submitFalJob,
   videoFallbackUsdPerSecond,
+  seedanceUsd,
 } from "../_shared/fal.ts";
 import { conditionImageForKling } from "./animateInput.ts";
 import {
@@ -97,7 +98,17 @@ async function estimateUsd(args: {
   seconds?: number | null;
   fallbackUsdPerSecond?: number | null;
   fallbackFlatUsd?: number | null;
+  /** Seedance only: output resolution and the length of any input video (both change the token bill). */
+  resolution?: string | null;
+  inputVideoSeconds?: number | null;
 }) {
+  if (args.endpointId.includes("seedance") && args.seconds) {
+    // Never below the model's known per-second rate (Seedance 2.5 runs above 2.0's token price).
+    return Math.max(
+      seedanceUsd({ resolution: args.resolution, outputSeconds: Number(args.seconds), inputVideoSeconds: args.inputVideoSeconds }),
+      Number(((args.fallbackUsdPerSecond ?? 0) * Number(args.seconds)).toFixed(4)),
+    );
+  }
   try {
     const pricing = await getFalPricing(args.endpointId);
     if (pricing) {

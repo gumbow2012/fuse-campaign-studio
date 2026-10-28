@@ -274,6 +274,7 @@ export async function handleGenerate(body: any, userId: string) {
       endpointId: videoModel.endpointId,
       seconds: durationSeconds,
       fallbackUsdPerSecond: videoUsdPerSecond(videoModel, native.generateAudio),
+      resolution: native.resolution ?? null,
     });
 
     let endpointId = videoModel.endpointId;

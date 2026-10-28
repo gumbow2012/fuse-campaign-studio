@@ -25,6 +25,7 @@ import {
   referenceToVideoEndpoint,
   submitFalJob,
   videoFallbackUsdPerSecond,
+  seedanceUsd,
 } from "../_shared/fal.ts";
 import {
   IDENTITY_AUTHORITY_BLOCK,
@@ -105,7 +106,17 @@ async function estimateUsd(args: {
   seconds?: number | null;
   fallbackUsdPerSecond?: number | null;
   fallbackFlatUsd?: number | null;
+  /** Seedance only: output resolution and the length of any input video (both change the token bill). */
+  resolution?: string | null;
+  inputVideoSeconds?: number | null;
 }) {
+  if (args.endpointId.includes("seedance") && args.seconds) {
+    // Never below the model's known per-second rate (Seedance 2.5 runs above 2.0's token price).
+    return Math.max(
+      seedanceUsd({ resolution: args.resolution, outputSeconds: Number(args.seconds), inputVideoSeconds: args.inputVideoSeconds }),
+      Number(((args.fallbackUsdPerSecond ?? 0) * Number(args.seconds)).toFixed(4)),
+    );
+  }
   try {
     const pricing = await getFalPricing(args.endpointId);
     if (pricing) {
@@ -581,15 +592,16 @@ async function startReconstruction(admin: AdminClient, args: {
 
   try {
     const generateAudio = args.generateAudio !== false;
+    const resolution = videoModel.resolutions?.includes(String(args.resolution ?? "").toLowerCase())
+      ? String(args.resolution).toLowerCase()
+      : "1080p";
     const estimatedCostUsd = await estimateUsd({
       endpointId,
       seconds: duration,
       fallbackUsdPerSecond: videoFallbackUsdPerSecond(videoModel, generateAudio) ?? null,
+      resolution,
+      inputVideoSeconds: Number.isFinite(sourceSeconds) ? sourceSeconds : duration,
     });
-
-    const resolution = videoModel.resolutions?.includes(String(args.resolution ?? "").toLowerCase())
-      ? String(args.resolution).toLowerCase()
-      : "1080p";
     const aspect = String(args.aspectRatio ?? "").trim();
     const aspectRatio = videoModel.aspectRatios?.includes(aspect) ? aspect : "9:16";
 
