@@ -80,6 +80,13 @@ async function demux(url: string): Promise<Demuxed> {
   const file: any = createFile();
   const out: Demuxed = {};
   const collected = new Map<number, Chunk[]>();
+  // Where playback starts in each track's media time (the edit list). Encoders with B-frames
+  // shift it (Kling: 0.167s); ignoring it puts every trim a few frames early.
+  const startOffset = new Map<number, number>();
+  const editStart = (trak: any) => {
+    const entry = trak?.edts?.elst?.entries?.find((e: any) => e.media_time >= 0);
+    return entry ? entry.media_time / trak.mdia.mdhd.timescale : 0;
+  };
 
   return await new Promise<Demuxed>((resolve, reject) => {
     file.onError = (error: unknown) => reject(new Error(String(error)));
@@ -98,6 +105,7 @@ async function demux(url: string): Promise<Demuxed> {
           chunks: [],
         };
         collected.set(videoTrack.id, out.video.chunks);
+        startOffset.set(videoTrack.id, editStart(trak));
         file.setExtractionOptions(videoTrack.id, null, { nbSamples: Number.MAX_SAFE_INTEGER });
       }
       if (audioTrack) {
@@ -110,6 +118,7 @@ async function demux(url: string): Promise<Demuxed> {
           chunks: [],
         };
         collected.set(audioTrack.id, out.audio.chunks);
+        startOffset.set(audioTrack.id, editStart(trak));
         file.setExtractionOptions(audioTrack.id, null, { nbSamples: Number.MAX_SAFE_INTEGER });
       }
       file.start();
@@ -123,7 +132,7 @@ async function demux(url: string): Promise<Demuxed> {
         sink.push({
           data: new Uint8Array(sample.data),
           key: !!sample.is_sync,
-          ptsUs: Math.round((sample.cts / sample.timescale) * 1e6),
+          ptsUs: Math.round((sample.cts / sample.timescale - (startOffset.get(id) ?? 0)) * 1e6),
           durUs: Math.round((sample.duration / sample.timescale) * 1e6),
         });
       }
