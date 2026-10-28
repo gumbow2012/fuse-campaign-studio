@@ -99,7 +99,7 @@ const TIPS = [
   "Clean product photos on a plain background give the sharpest fit.",
   "One person facing the camera swaps best.",
   "Add the back of a piece so turns and walk-aways stay right.",
-  "You can leave this page. Your video lands in Your videos.",
+  "Keep this tab open. If you reload, the same run picks up where it left off.",
   "Clips over 15 seconds render in parts and get stitched back together.",
 ];
 
@@ -185,6 +185,8 @@ export default function MaddenAIStudio() {
   const [clipPreview, setClipPreview] = useState<string | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [sourceVideo, setSourceVideo] = useState<SourceVideo | null>(null);
+  /** Signed link to the uploaded clip, so a reloaded run can load it again (clipPreview is a local blob). */
+  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [frames, setFrames] = useState<Frame[]>([]);
   const [shots, setShots] = useState<Shot[]>([]);
   /** Which tracked person gets the outfit when a clip has several (null = the first one found). */
@@ -355,6 +357,8 @@ export default function MaddenAIStudio() {
       const folder = await createOutfitSwapFolder();
       setRunFolder(folder);
       const stored = await uploadToStorage(folder, file, file.name);
+      setSourceUrl(stored.url);
+      localStorageRemove(RUN_KEY); // a new clip starts a new run
       // One reference per shot (a montage cuts between outfits and angles), more for long shots.
       const shots = await detectShots(el, m.duration, (d, t) => setClipProgress(Math.round((d / t) * 40)));
       setShots(shots);
@@ -860,13 +864,13 @@ export default function MaddenAIStudio() {
     const renders = partJobs.map((job, k) => ({ start: job?.range.start ?? 0, gen: partGens[k] }));
     if (stageVideo && stageFromSession) renders.push({ start: 0, gen: stageVideo });
     for (const { start, gen } of renders) {
-      if (gen?.status !== "complete" || !gen.outputUrl || checkingIds.current.has(gen.id)) continue;
+      if (gen?.status !== "complete" || !gen.outputUrl || checkingIds.current.has(gen.id) || unswapped[gen.id] !== undefined) continue;
       checkingIds.current.add(gen.id);
       void checkRender(start, gen.outputUrl)
         .catch(() => [] as number[]) // can't read it: don't block the result
         .then((times) => setUnswapped((prev) => ({ ...prev, [gen.id]: times })));
     }
-  }, [engine, clipPreview, partJobs, partGens, stageVideo, stageFromSession, checkRender]);
+  }, [engine, clipPreview, partJobs, partGens, stageVideo, stageFromSession, checkRender, unswapped]);
   const unswappedSecs = (g?: SwapGeneration | null) => (g ? (unswapped[g.id]?.length ?? 0) * 0.5 : 0);
   const isUnswapped = (g?: SwapGeneration | null) => unswappedSecs(g) > MAX_UNSWAPPED_SECONDS;
   const isChecked = (g?: SwapGeneration | null) => engine === "kling" || (!!g && unswapped[g.id] !== undefined);
@@ -1092,6 +1096,100 @@ export default function MaddenAIStudio() {
     setAuto(true);
     void styleAll();
   }, [styleAll]);
+
+  /* ------------------------- survive a reload ------------------------- */
+  // The run lives in this tab; save it after every change and pick it back up on reload.
+  const restoring = useRef(true);
+  useEffect(() => {
+    const saved = (() => {
+      try {
+        return JSON.parse(localStorageGet(RUN_KEY) ?? "null");
+      } catch {
+        return null;
+      }
+    })();
+    if (!saved || Date.now() - saved.savedAt > RUN_MAX_AGE_MS || !saved.sourceUrl) {
+      restoring.current = false;
+      return;
+    }
+    setClipPreview(saved.sourceUrl);
+    setSourceUrl(saved.sourceUrl);
+    setMeta(saved.meta);
+    setSourceVideo(saved.sourceVideo);
+    setRunFolder(saved.runFolder);
+    setFrames(saved.frames);
+    setShots(saved.shots);
+    setAnalysis(saved.analysis);
+    setAnalysisState(saved.analysis ? "done" : "idle");
+    setPieces(saved.pieces);
+    setModel(saved.model);
+    setChosenSubjectId(saved.chosenSubjectId);
+    setNote(saved.note);
+    setLowPoly(saved.lowPoly);
+    setEngine(saved.engine);
+    setSwaps(saved.swaps);
+    setPartJobs(saved.partJobs);
+    setStageVideoId(saved.stageVideoId);
+    setSessionVideoIds(saved.sessionVideoIds);
+    setStitched(saved.stitched);
+    setPatches(saved.patches);
+    setUnswapped(saved.unswapped);
+    genModel.current = new Map(saved.genModel);
+    fixPasses.current = saved.fixPasses;
+    engineTried.current = new Set(saved.engineTried);
+    setAuto(!!saved.auto);
+    resumeParts.current = saved.partJobs.length > 0;
+    setScreen("setup");
+    // Make sure every render of this run is in the list the page watches.
+    const ids: string[] = [...saved.partJobs.map((j: PartJob | null) => j?.generationId), saved.stageVideoId].filter(Boolean);
+    if (ids.length) {
+      void callOutfitSwap<{ generations: SwapGeneration[] }>({ action: "status", generationIds: ids })
+        .then((data) => setVideos((prev) => [...(data.generations ?? []).filter((g) => !prev.some((v) => v.id === g.id)), ...prev]))
+        .catch(() => null);
+    }
+    restoring.current = false;
+  }, []);
+  // A reload in the middle of starting parts leaves some never started: start them.
+  const resumeParts = useRef(false);
+  useEffect(() => {
+    if (!resumeParts.current || rendering || engine === "kling" || parts.length < 2 || !clipPreview || !sourceVideo) return;
+    resumeParts.current = false;
+    const missing = parts.map((_, k) => k).filter((k) => !partJobs[k]);
+    if (missing.length) void renderParts(missing);
+  });
+  useEffect(() => {
+    if (restoring.current || !sourceUrl || !sourceVideo) return;
+    localStorageSet(
+      RUN_KEY,
+      JSON.stringify({
+        savedAt: Date.now(),
+        sourceUrl,
+        meta,
+        sourceVideo,
+        runFolder,
+        frames: frames.map(({ gray: _g, ...f }) => f),
+        shots,
+        analysis,
+        pieces: cleanPieces,
+        model,
+        chosenSubjectId,
+        note,
+        lowPoly,
+        engine,
+        swaps,
+        partJobs,
+        stageVideoId,
+        sessionVideoIds,
+        stitched,
+        patches,
+        unswapped,
+        genModel: [...genModel.current],
+        fixPasses: fixPasses.current,
+        engineTried: [...engineTried.current],
+        auto,
+      }),
+    );
+  });
 
   /* --------------------------------- view --------------------------------- */
   return (
@@ -1637,6 +1735,30 @@ function LoadingScreen({ tiles, stylingDone, total, renderingVideo, lowPoly, sta
       </p>
     </div>
   );
+}
+
+const RUN_KEY = "maddenai-run-v1";
+const RUN_MAX_AGE_MS = 20 * 60 * 60 * 1000; // the clip's signed link lasts 24h
+function localStorageGet(key: string) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function localStorageSet(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // saving progress is best-effort; the run still works without it
+  }
+}
+function localStorageRemove(key: string) {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // nothing saved to clear
+  }
 }
 
 function sessionStorageGet(key: string) {
