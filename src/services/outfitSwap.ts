@@ -645,6 +645,8 @@ export async function judgeOutfitSwapFrames(args: {
   garmentUrls: string[];
   /** What each garmentUrls image is ("Shirt / Top", "Product", "Location (back)"…). */
   itemKinds?: string[];
+  /** The customer's note for this run: the judge fails frames that break it. */
+  rules?: string;
   subject: string;
   replacingPerson: boolean;
   /** Who should appear instead, when replacing (photos or an avatar); the judge checks it's them. */

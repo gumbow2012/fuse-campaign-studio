@@ -203,6 +203,7 @@ function buildKlingEditPrompt(garments: any[], subject: string, imageCount: numb
       ? `Replace the product or object that ${who} holds, uses or shows in @Video1 with the exact product @Element${i + 1}: same shape, colors, logo and branding, held and moved the same way.`
       : `Replace the ${/bottom|pant|short|jean/i.test(String(g?.type ?? "")) ? "pants or shorts" : "top layer (shirt, hoodie or jacket)"} worn by ${who} in @Video1 with the exact garment @Element${i + 1}: same colors, print, graphics, logos and fit${g?.backUrl ? ", with its back print when they face away" : ". The back of this garment is plain solid fabric with no print: never show the front graphic on the back"}.`,
   ));
+  if (garments.some((g) => g?.type !== "Location" && g?.type !== "Product")) lines.push("Inner neck labels, size tags and care labels visible inside the collar of a product photo are sewn inside the garment: never print them on the outside.");
   if (imageCount) lines.push(`@Image1${imageCount > 1 ? ` to @Image${imageCount}` : ""} show frames of this video already wearing it; match them.`);
   lines.push(
     `Keep everything else in @Video1 identical: ${personElement ? "" : "same person, face, hair, body, "}pose, motion, timing, camera${location ? "" : ", background, lighting"}, other people and all other clothing. Apply it in every shot where they appear. No added text.`,
@@ -258,6 +259,7 @@ function buildSwapPrompt(args: {
     `Modify only these clothing categories: ${categories || "the supplied garments"}.`,
     instructions,
     "Match each product's exact colors, graphics, logos, text, materials, construction, and fit as shown in its reference image.",
+    "Inner neck labels, size tags and care labels visible inside the collar of a product photo are sewn inside the garment: never print them on the outside.",
     "Preserve all unrelated clothing, jewelry, shoes, and accessories that were not supplied as references.",
     target,
     String(args.extra ?? "").trim(),

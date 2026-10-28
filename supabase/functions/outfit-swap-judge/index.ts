@@ -59,7 +59,7 @@ async function inlineImage(url: string) {
   }
 }
 
-function buildPrompt(garmentCount: number, subject: string, frames: JudgeFrame[], replacingPerson: boolean, modelCount: number, restyled: boolean, kinds: string[]) {
+function buildPrompt(garmentCount: number, subject: string, frames: JudgeFrame[], replacingPerson: boolean, modelCount: number, restyled: boolean, kinds: string[], rules: string) {
   const before = garmentCount + modelCount;
   const nonWear = kinds.some((k) => /^(Product|Location)/.test(k));
   return [
@@ -82,6 +82,8 @@ function buildPrompt(garmentCount: number, subject: string, frames: JudgeFrame[]
     "- rendered_cleanly: no = the RENDERED frame is visibly broken where the ORIGINAL is not: a melted, smeared or faceless face, warped or extra limbs, or the garment print smeared into noise. Motion blur that the ORIGINAL also has is fine. yes = it looks like a normal video frame.",
     "- notes: at most 100 characters, the main problem, or empty.",
     ...(restyled ? ["The RENDERED video is intentionally restyled (e.g. anime, claymation, low-poly game, film look). Judge garment, person and facing by design and colors, not photorealism; that style alone is never a reason for rendered_cleanly = no."] : []),
+    ...(kinds.length && !kinds.some((k) => /\(back\)$/.test(k)) ? ["No back photo was given: THE GARMENT's back is plain solid fabric. Seen from behind, any print or graphic on its back means wearing_garment = no."] : []),
+    ...(rules ? [`The customer's own rules for this video (a rendered frame that breaks any of them is wearing_garment = no): ${rules}`] : []),
     "Judge each pair on its own. When unsure, answer unclear rather than guessing.",
     ...frames.map((f, i) => `PAIR ${i + 1}: id ${f.id}. Images ${before + i * 2 + 1} (ORIGINAL) and ${before + i * 2 + 2} (RENDERED).`),
   ].join("\n");
@@ -125,7 +127,7 @@ Deno.serve(async (req) => {
     modelUrls = modelUrls.slice(0, MAX_MODEL_IMAGES);
 
     const images = await Promise.all([...garmentUrls, ...modelUrls, ...frames.flatMap((f) => [f.sourceUrl, f.outputUrl])].map(inlineImage));
-    const prompt = buildPrompt(garmentUrls.length, String(body?.subject ?? "").slice(0, 200), frames, replacingPerson, modelUrls.length, body?.restyled === true, (Array.isArray(body?.itemKinds) ? body.itemKinds : []).slice(0, garmentUrls.length).map((k: unknown) => String(k).slice(0, 40)));
+    const prompt = buildPrompt(garmentUrls.length, String(body?.subject ?? "").slice(0, 200), frames, replacingPerson, modelUrls.length, body?.restyled === true, (Array.isArray(body?.itemKinds) ? body.itemKinds : []).slice(0, garmentUrls.length).map((k: unknown) => String(k).slice(0, 40)), String(body?.rules ?? "").slice(0, 1200));
     const response = await new GoogleGenAI({ apiKey }).models.generateContent({
       model: MODEL,
       contents: [{ role: "user", parts: [{ text: prompt }, ...images] }] as any,
