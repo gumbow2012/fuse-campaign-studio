@@ -631,6 +631,8 @@ export type OutfitSwapJudgeFrame = {
   wearingGarment: "yes" | "no" | "unclear";
   facingMatches: "yes" | "no" | "unclear";
   samePerson: "yes" | "no" | "unclear";
+  /** Absent from an older judge deploy. */
+  renderedCleanly?: "yes" | "no" | "unclear";
   notes: string;
 };
 
