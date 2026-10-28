@@ -358,7 +358,7 @@ export default function MaddenAIStudio() {
       setRunFolder(folder);
       const stored = await uploadToStorage(folder, file, file.name);
       setSourceUrl(stored.url);
-      localStorageRemove(RUN_KEY); // a new clip starts a new run
+      runStorageRemove(RUN_KEY); // a new clip starts a new run
       // One reference per shot (a montage cuts between outfits and angles), more for long shots.
       const shots = await detectShots(el, m.duration, (d, t) => setClipProgress(Math.round((d / t) * 40)));
       setShots(shots);
@@ -1103,7 +1103,7 @@ export default function MaddenAIStudio() {
   useEffect(() => {
     const saved = (() => {
       try {
-        return JSON.parse(localStorageGet(RUN_KEY) ?? "null");
+        return JSON.parse(runStorageGet(RUN_KEY) ?? "null");
       } catch {
         return null;
       }
@@ -1159,7 +1159,7 @@ export default function MaddenAIStudio() {
   });
   useEffect(() => {
     if (restoring.current || !sourceUrl || !sourceVideo) return;
-    localStorageSet(
+    runStorageSet(
       RUN_KEY,
       JSON.stringify({
         savedAt: Date.now(),
@@ -1737,25 +1737,26 @@ function LoadingScreen({ tiles, stylingDone, total, renderingVideo, lowPoly, sta
   );
 }
 
+/** Saved per tab (sessionStorage survives a reload of that tab, and two tabs never share a run). */
 const RUN_KEY = "maddenai-run-v1";
 const RUN_MAX_AGE_MS = 20 * 60 * 60 * 1000; // the clip's signed link lasts 24h
-function localStorageGet(key: string) {
+function runStorageGet(key: string) {
   try {
-    return window.localStorage.getItem(key);
+    return window.sessionStorage.getItem(key);
   } catch {
     return null;
   }
 }
-function localStorageSet(key: string, value: string) {
+function runStorageSet(key: string, value: string) {
   try {
-    window.localStorage.setItem(key, value);
+    window.sessionStorage.setItem(key, value);
   } catch {
     // saving progress is best-effort; the run still works without it
   }
 }
-function localStorageRemove(key: string) {
+function runStorageRemove(key: string) {
   try {
-    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
   } catch {
     // nothing saved to clear
   }
