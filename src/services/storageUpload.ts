@@ -40,7 +40,7 @@ export async function cinemaReferenceFolder() {
  * Upload straight to Supabase Storage from the browser — large videos and frame
  * batches never pass through an edge function.
  */
-/** Browsers often leave a phone .MOV (and some files) untyped; name the common ones by extension. */
+/** Browsers often leave a phone .MOV untyped or label it octet-stream; name the common ones by extension. */
 const TYPE_BY_EXTENSION: Record<string, string> = {
   mp4: "video/mp4",
   m4v: "video/mp4",
@@ -57,7 +57,10 @@ export async function uploadToStorage(folder: string, file: File | Blob, filenam
   const extension = filename.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase() ?? "";
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
     upsert: true,
-    contentType: (file as File).type || TYPE_BY_EXTENSION[extension] || "application/octet-stream",
+    // A generic octet-stream label is as good as none: name it by extension instead.
+    contentType:
+      ((file as File).type && (file as File).type !== "application/octet-stream" ? (file as File).type : TYPE_BY_EXTENSION[extension]) ||
+      "application/octet-stream",
   });
   if (error) throw new Error(error.message);
 
