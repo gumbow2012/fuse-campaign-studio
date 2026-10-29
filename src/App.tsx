@@ -62,6 +62,7 @@ import MaddenAIStudio from "@/pages/maddenai/MaddenAIStudio";
 import CinemaStudio from "@/pages/app/cinema/CinemaStudio";
 import CinemaControlLab from "@/pages/app/cinema/CinemaControlLab";
 import MaddenMediaStudio from "@/pages/app/madden-media/MaddenMediaStudio";
+import CampaignDirector from "@/pages/app/campaign-director/CampaignDirector";
 import CreatorProfile from "@/pages/app/creator/CreatorProfile";
 import CreatorDashboard from "@/pages/app/creator/CreatorDashboard";
 import CreatorPayouts from "@/pages/app/creator/CreatorPayouts";
@@ -372,6 +373,14 @@ const App = () => (
               element={
                 <BuilderRoute>
                   <MaddenMediaStudio />
+                </BuilderRoute>
+              }
+            />
+            <Route
+              path="/app/lab/campaign-director"
+              element={
+                <BuilderRoute>
+                  <CampaignDirector />
                 </BuilderRoute>
               }
             />
