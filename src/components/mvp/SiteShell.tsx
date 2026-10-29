@@ -125,6 +125,7 @@ export default function SiteShell({ children }: { children: ReactNode }) {
     { to: "/app/lab/studio", label: "Image Studio", icon: Sparkles },
     { to: "/app/lab/cinema", label: "Cinema Studio", icon: Clapperboard, featureKey: "cinema_studio" },
     { to: "/app/lab/madden-media", label: "Madden Media Studio", icon: Film },
+    { to: "/app/lab/campaign-director", label: "Campaign Director", icon: Clapperboard },
     { to: "/app/lab/outfit-swap", label: "Outfit Swap", icon: Shirt },
     { to: "/app/lab/jewelry-swap", label: "Jewelry Swap", icon: Gem },
     { to: "/admin/audits", label: "Output Audit", icon: ClipboardCheck },

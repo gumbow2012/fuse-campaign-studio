@@ -168,6 +168,9 @@ verify_jwt = false
 [functions.madden-media-studio]
 verify_jwt = false
 
+[functions.campaign-director]
+verify_jwt = false
+
 [functions.cinema-studio]
 verify_jwt = false
 
