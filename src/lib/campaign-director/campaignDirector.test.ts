@@ -4,6 +4,7 @@ import { normalizeProject, normalizeShot } from "./state";
 import { compileImageRequest, compileVideoRequest, isShotReadyForImage } from "./promptCompiler";
 import { issueSummary, shotsFromScript, validateScript } from "./script";
 import { estimateRun } from "./costEstimate";
+import { friendlyError } from "./errors";
 import type { DirectorProduct, DirectorProject, DirectorShot } from "./types";
 
 const product = (id: string, name: string): DirectorProduct => ({
@@ -122,13 +123,13 @@ describe("compileImageRequest", () => {
 });
 
 describe("compileVideoRequest", () => {
-  it("animates one motion and locks a hero product", () => {
+  it("animates one motion and keeps a hero product unchanged", () => {
     const p = project();
     const s = shot({ productIds: ["a"], productRole: "hero", motion: "he raises the pouch toward camera" });
     s.image.url = "https://cdn.test/still.png";
     const out = compileVideoRequest(s, p.world);
     expect(out.prompt).toContain("PRIMARY MOTION (only this): he raises the pouch toward camera");
-    expect(out.prompt).toContain("LOCKED");
+    expect(out.prompt).toContain("stays exactly as shown");
     expect(out.prompt).toContain("3 percent push-in");
     expect(out.imageUrl).toBe("https://cdn.test/still.png");
     expect(out.seconds).toBe(3);
@@ -136,7 +137,7 @@ describe("compileVideoRequest", () => {
   it("makes artists move instead of freezing", () => {
     const p = project();
     const out = compileVideoRequest(shot({ productIds: ["a"], artistProductIds: ["a"] }), p.world);
-    expect(out.prompt).toContain("never frozen like a poster");
+    expect(out.prompt).toContain("small performance gestures");
   });
 });
 
@@ -218,5 +219,38 @@ describe("shot qa", () => {
     expect(normalizeShot({}, 0).qa).toEqual({ verdict: "", issues: [], checkedUrl: "" });
     const s = normalizeShot({ qa: { verdict: "maybe", issues: ["a", 3], checkedUrl: "u" } }, 0);
     expect(s.qa).toEqual({ verdict: "", issues: ["a"], checkedUrl: "u" });
+  });
+});
+
+describe("product thumbnails", () => {
+  it("keeps a valid thumbUrl and drops a bad one", () => {
+    const p = normalizeProject({
+      products: [
+        { id: "a", imageUrl: "https://cdn.test/a.png", thumbUrl: "https://cdn.test/a-small.jpg" },
+        { id: "b", imageUrl: "https://cdn.test/b.png", thumbUrl: "javascript:x" },
+      ],
+    });
+    expect(p.products[0].thumbUrl).toBe("https://cdn.test/a-small.jpg");
+    expect(p.products[1].thumbUrl).toBeUndefined();
+  });
+});
+
+describe("plain prompt wording and friendly errors", () => {
+  it("never puts the world or brand name into the image or video prompt", () => {
+    const p = project();
+    p.world.characterName = "the Spray Mafia protagonist";
+    p.world.name = "Spray Mafia";
+    const s = shot({ productIds: ["a"], productRole: "hero" });
+    s.image.url = "https://cdn.test/still.png";
+    expect(compileImageRequest(s, p).prompt).not.toMatch(/mafia/i);
+    expect(compileVideoRequest(s, p.world).prompt).not.toMatch(/mafia|melt|locked/i);
+  });
+
+  it("turns a provider safety refusal into one plain sentence with no links", () => {
+    const raw = 'fal queue result lookup failed: 422 {"type":"content_policy_violation","input":"https://x.supabase.co/a.png?token=SECRET"}';
+    const msg = friendlyError(raw);
+    expect(msg).toMatch(/safety check declined/i);
+    expect(msg).not.toMatch(/token|SECRET|http/);
+    expect(friendlyError("boom https://x.test/a?token=SECRET happened")).toBe("boom [link] happened");
   });
 });

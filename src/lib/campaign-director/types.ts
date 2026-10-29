@@ -64,6 +64,8 @@ export interface DirectorProduct {
   flavor: string;
   /** The uploaded flat design (front of the pouch). */
   imageUrl: string;
+  /** Small preview of the design, sent to the script writer so many designs fit in one request. */
+  thumbUrl?: string;
 }
 
 export type CameraKind =

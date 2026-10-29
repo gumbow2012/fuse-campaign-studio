@@ -11,6 +11,9 @@ import type { DirectorProduct, DirectorProject, DirectorShot, DirectorWorld } fr
  * A shot description may never override identity or product artwork.
  */
 
+/** Prompts refer to him plainly. The reference images carry his identity; a brand or world name adds nothing. */
+const HERO = "the protagonist";
+
 export const MAX_CHARACTER_REFS = 2;
 export const MAX_STYLE_REFS = 1;
 export const MAX_REFLECTIVE_REFS = 1;
@@ -82,11 +85,11 @@ export function compileImageRequest(shot: DirectorShot, project: DirectorProject
 
   if (characterNumbers.length) {
     lines.push(
-      `${refList(characterNumbers)} are the MASTER REFERENCES of ${world.characterName}. ${world.characterLock} ${world.scaleRule} ` +
+      `${refList(characterNumbers)} are the MASTER REFERENCES of ${HERO}. ${world.characterLock} ${world.scaleRule} ` +
         `Copy the character from the references, do not invent him from text. If a master reference shows him holding a product, ignore that product completely: it is not part of this shot. The shot description below has no permission to change his identity.`,
     );
   } else {
-    lines.push(`${world.characterName}: ${world.characterLock} ${world.scaleRule}`);
+    lines.push(`${HERO}: ${world.characterLock} ${world.scaleRule}`);
   }
 
   for (const product of shotProducts) {
@@ -100,7 +103,7 @@ export function compileImageRequest(shot: DirectorShot, project: DirectorProject
   for (const { product, ref, fromMaster } of artistNumbers) {
     lines.push(
       fromMaster
-        ? `Reference ${ref} is the approved 3D render of the artist ${product.artist || product.name}. Keep this artist's face, hair, build and style identical. They are a separate physical character from ${world.characterName}.`
+        ? `Reference ${ref} is the approved 3D render of the artist ${product.artist || product.name}. Keep this artist's face, hair, build and style identical. They are a separate physical character from ${HERO}.`
         : `The artist ${product.artist || product.name} appears as a SEPARATE physical 3D character, translated from how the artist is drawn on Reference ${ref} into the same animated-film look. Not a poster, not a screen, not artwork pasted into the scene.`,
     );
   }
@@ -146,18 +149,18 @@ export function compileVideoRequest(shot: DirectorShot, world: DirectorWorld): C
   const lines: string[] = [
     `One continuous ${world.clipSeconds}-second shot, no cuts. Animate exactly the world in the starting frame; do not invent a new scene.`,
     `PRIMARY MOTION (only this): ${shot.motion || "subtle natural movement"}.`,
-    `${world.characterName} keeps the identical face, skin tone, hat, outfit and height from start to end.`,
+    `${HERO} keeps the identical face, skin tone, hat, outfit and height from start to end.`,
   ];
   if (productVisible) {
     lines.push(
-      "The product pouch is LOCKED: its printed artwork, text, colors and shape must not morph, melt, swap or change flavor. " +
+      "The product pouch stays exactly as shown: its printed artwork, text, colors and shape do not change. " +
         (heroProduct
           ? "Camera movement is subtle only: a slow 3 percent push-in, a tiny tilt, moving light across the foil."
           : "Keep the pouch steady in the hand."),
     );
   }
   if (shot.artistProductIds.length > 0) {
-    lines.push("The artist character is alive: small performance gestures, head and body rhythm, natural movement, never frozen like a poster.");
+    lines.push("The artist character is alive: small performance gestures, head and body rhythm, natural movement.");
   }
   lines.push("Cinematic stylized 3D animated-film look, steady camera, natural motion, no morphing, no added text.");
   return { prompt: lines.join(" "), imageUrl: shot.image.url, seconds: world.clipSeconds };
