@@ -150,7 +150,7 @@ async function signOwnUrls<T>(admin: ReturnType<typeof createAdminClient>, userI
   return value;
 }
 
-async function inlineImage(url: string) {
+async function inlineImage(url: string, maxBytes = Infinity) {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), IMAGE_FETCH_TIMEOUT_MS);
   try {
@@ -159,6 +159,7 @@ async function inlineImage(url: string) {
     const mimeType = (response.headers.get("content-type") ?? "image/jpeg").split(";")[0].trim();
     if (!/^image\//.test(mimeType)) throw new Error("Only still images can be read");
     const buffer = new Uint8Array(await response.arrayBuffer());
+    if (buffer.length > maxBytes) throw new Error("Image too large to attach");
     let binary = "";
     for (let i = 0; i < buffer.length; i += 8192) {
       binary += String.fromCharCode(...buffer.subarray(i, i + 8192));
@@ -250,7 +251,10 @@ const SHOT_SCHEMA = {
   required: ["shots"],
 };
 
-type ProductInput = { id: string; name: string; artist: string; collab: string; flavor: string };
+type ProductInput = { id: string; name: string; artist: string; collab: string; flavor: string; thumbUrl: string };
+
+const MAX_DESIGN_IMAGES = 16;
+const DESIGN_IMAGE_MAX_BYTES = 1_500_000;
 
 function readProducts(value: unknown): ProductInput[] {
   const list = Array.isArray(value) ? value : [];
@@ -263,6 +267,7 @@ function readProducts(value: unknown): ProductInput[] {
         artist: text(raw.artist, 120),
         collab: text(raw.collab, 160),
         flavor: text(raw.flavor, 160),
+        thumbUrl: urlList([raw.thumbUrl], 1)[0] ?? "",
       };
     })
     .filter((p) => p.id)
@@ -286,8 +291,10 @@ function buildScriptPrompt(body: Body, products: ProductInput[], shotCount: numb
     `LOOK: ${text(world.styleLock)}`,
     `AVOID: ${text(world.avoid)}`,
     "",
-    `CAMPAIGN THEME / IDEA: ${text(brief.theme, 3000) || "(none given: invent a strong, specific story)"}`,
+    `CAMPAIGN THEME / IDEA: ${text(brief.theme, 3000) || "(none given: build the concept yourself FROM THE PRODUCT DESIGNS below: the artists, franchises, flavors, colors and mood printed on them decide the story, places and set pieces)"}`,
     `EXTRA DIRECTION: ${text(brief.notes, 4000) || "(none)"}`,
+    "",
+    "You are also shown the front design image of each product. LOOK at them: let each design's artist, colors, imagery and mood drive where and how its scene happens.",
     "",
     "PRODUCT LEDGER (use ONLY these ids):",
     ledger || "- (no products)",
@@ -305,6 +312,7 @@ function buildScriptPrompt(body: Body, products: ProductInput[], shotCount: numb
     "10. `motion` = the ONE primary movement for a 3-second clip (an artist dancing, the boat accelerating, the product being raised, a slow push-in, a crowd moving). For hero product shots prefer subtle camera movement.",
     "11. Compositions must be animatable: clear hands, separated subjects, no fused or overlapping limbs, a clear subject hierarchy.",
     "12. `setting` and `lighting` are specific (time of day, place, practical light), never generic.",
+    "13. Keep every field in plain, wholesome, brand-safe wording: describe places, objects and gentle physical actions in neutral terms. No violent, weapon, crime, romantic or suggestive language anywhere, and never refer to the world or its brand by a gang, mob or crime-style name.",
     "",
     "Return strict JSON matching the schema. No prose.",
   ].join("\n");
@@ -319,9 +327,27 @@ async function writeScript(body: Body) {
 
   try {
     const parts = await Promise.all(visual.map((url) => inlineImage(url)));
+    // A design we cannot fetch is skipped; the text ledger still describes it.
+    const designs = (
+      await Promise.all(
+        products
+          .filter((p) => p.thumbUrl)
+          .slice(0, MAX_DESIGN_IMAGES)
+          .map(async (p) => {
+            try {
+              return [{ text: `Front design of product id=${p.id} (${p.name}):` }, await inlineImage(p.thumbUrl, DESIGN_IMAGE_MAX_BYTES)];
+            } catch {
+              return [];
+            }
+          }),
+      )
+    ).flat();
     const parsed = await askGemini({
       prompt: buildScriptPrompt(body, products, shotCount),
-      parts: parts.length ? [{ text: "Reference frames of the world and its recurring character follow, for continuity only:" }, ...parts] : [],
+      parts: [
+        ...(parts.length ? [{ text: "Reference frames of the world and its recurring character follow, for continuity only:" }, ...parts] : []),
+        ...designs,
+      ],
       schema: SHOT_SCHEMA,
       maxOutputTokens: 16384,
       temperature: 0.8,

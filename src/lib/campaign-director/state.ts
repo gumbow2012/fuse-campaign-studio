@@ -124,7 +124,7 @@ export function normalizeProject(value: unknown): DirectorProject {
 
   const products = Array.isArray(raw.products)
     ? raw.products
-        .map((p) => {
+        .map((p): DirectorProject["products"][number] | null => {
           const item = (p ?? {}) as Partial<DirectorProject["products"][number]>;
           const imageUrl = str(item.imageUrl);
           if (!/^https?:\/\//.test(imageUrl)) return null;
@@ -135,6 +135,7 @@ export function normalizeProject(value: unknown): DirectorProject {
             collab: str(item.collab),
             flavor: str(item.flavor),
             imageUrl,
+            thumbUrl: /^https?:\/\//.test(str(item.thumbUrl)) ? str(item.thumbUrl) : undefined,
           };
         })
         .filter((p): p is DirectorProject["products"][number] => p !== null)

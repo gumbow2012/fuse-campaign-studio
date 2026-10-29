@@ -10,11 +10,13 @@ import ProductsPanel from "@/components/campaign-director/ProductsPanel";
 import BriefPanel from "@/components/campaign-director/BriefPanel";
 import ShotBoard from "@/components/campaign-director/ShotBoard";
 import SimpleStart from "@/components/campaign-director/SimpleStart";
+import ScriptEditor from "@/components/campaign-director/ScriptEditor";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import RunBar from "@/components/campaign-director/RunBar";
 import SpendDialog from "@/components/campaign-director/SpendDialog";
 import { createEmptyProject } from "@/lib/campaign-director/defaults";
 import { emptyQa } from "@/lib/campaign-director/state";
+import { friendlyError } from "@/lib/campaign-director/errors";
 import type { RunEstimate, UnitPrices } from "@/lib/campaign-director/costEstimate";
 import type { DirectorProduct, DirectorProject, DirectorProjectSummary, DirectorShot } from "@/lib/campaign-director/types";
 import {
@@ -185,10 +187,10 @@ export default function CampaignDirector() {
               patchShot(
                 shot.id,
                 kind === "image"
-                  ? { status: "failed", image: { ...shot.image, error: result.error } }
-                  : { status: "failed", video: { ...shot.video, error: result.error } },
+                  ? { status: "failed", image: { ...shot.image, error: friendlyError(result.error) } }
+                  : { status: "failed", video: { ...shot.video, error: friendlyError(result.error) } },
               );
-              toast.error(`Shot ${shot.index} failed: ${result.error}`);
+              toast.error(`Shot ${shot.index}: ${friendlyError(result.error)}`);
             }
           } catch {
             /* transient poll error: try again next tick */
@@ -230,7 +232,7 @@ export default function CampaignDirector() {
             submitted += 1;
             await persistNow();
           } catch (error) {
-            const message = error instanceof Error ? error.message : "Submit failed";
+            const message = friendlyError(error instanceof Error ? error.message : "Submit failed");
             patchShot(id, estimate.mode === "images" ? { status: "failed", image: { ...shot.image, error: message } } : { status: "failed", video: { ...shot.video, error: message } });
             toast.error(`Shot ${shot.index}: ${message}`);
           }
@@ -316,6 +318,9 @@ export default function CampaignDirector() {
     return () => clearTimeout(timer);
   }, [activeId, name]);
 
+  // Once any image has been requested the script is locked in and the shot board takes over.
+  const started = project.shots.some((s) => s.image.requestId || s.image.url || s.status !== "draft");
+
   const saveLabel = saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : activeId ? "Up to date" : "No campaign";
 
   return (
@@ -369,7 +374,19 @@ export default function CampaignDirector() {
               onWrite={() => void onWrite()}
             />
 
-            {project.shots.length > 0 ? (
+            {project.shots.length > 0 && !started ? (
+              <Section step="Your script" title="Edit it, then generate">
+                <ScriptEditor
+                  project={project}
+                  prices={prices}
+                  onUpdateShot={patchShot}
+                  onShotsChange={(shots) => setProject((prev) => ({ ...prev, shots }))}
+                  onRequest={setPending}
+                />
+              </Section>
+            ) : null}
+
+            {project.shots.length > 0 && started ? (
               <>
                 <Section step="Your shots" title="Review, approve, animate">
                   <ShotBoard

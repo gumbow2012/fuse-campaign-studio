@@ -107,7 +107,7 @@ export async function writeScript(project: DirectorProject): Promise<DirectorSho
       characterUrls: world.characters.map((r) => r.url),
       styleUrls: world.styleRefs.map((r) => r.url),
     },
-    products: products.map((p) => ({ id: p.id, name: p.name, artist: p.artist, collab: p.collab, flavor: p.flavor })),
+    products: products.map((p) => ({ id: p.id, name: p.name, artist: p.artist, collab: p.collab, flavor: p.flavor, thumbUrl: p.thumbUrl ?? p.imageUrl })),
     brief,
   });
   return shotsFromScript(result.shots, products);
