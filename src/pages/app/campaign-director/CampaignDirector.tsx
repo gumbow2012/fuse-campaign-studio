@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,12 +9,14 @@ import WorldPanel from "@/components/campaign-director/WorldPanel";
 import ProductsPanel from "@/components/campaign-director/ProductsPanel";
 import BriefPanel from "@/components/campaign-director/BriefPanel";
 import ShotBoard from "@/components/campaign-director/ShotBoard";
+import SimpleStart from "@/components/campaign-director/SimpleStart";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import RunBar from "@/components/campaign-director/RunBar";
 import SpendDialog from "@/components/campaign-director/SpendDialog";
 import { createEmptyProject } from "@/lib/campaign-director/defaults";
 import { emptyQa } from "@/lib/campaign-director/state";
 import type { RunEstimate, UnitPrices } from "@/lib/campaign-director/costEstimate";
-import type { DirectorProject, DirectorProjectSummary, DirectorShot } from "@/lib/campaign-director/types";
+import type { DirectorProduct, DirectorProject, DirectorProjectSummary, DirectorShot } from "@/lib/campaign-director/types";
 import {
   createProject,
   deleteProject,
@@ -89,6 +91,12 @@ export default function CampaignDirector() {
         const rows = await listProjects();
         setProjects(rows);
         if (rows[0]) await open(rows[0].id);
+        else {
+          // First visit: start a campaign right away so the drop zone is usable.
+          const created = await createProject("My first campaign");
+          setProjects(await listProjects());
+          await open(created.id);
+        }
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Could not load your campaigns");
       }
@@ -252,6 +260,11 @@ export default function CampaignDirector() {
     }
   };
 
+  const addProduct = (product: DirectorProduct) => setProject((prev) => ({ ...prev, products: [...prev.products, product] }));
+  const updateProduct = (id: string, patch: Partial<DirectorProduct>) =>
+    setProject((prev) => ({ ...prev, products: prev.products.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
+  const removeProduct = (id: string) => setProject((prev) => ({ ...prev, products: prev.products.filter((p) => p.id !== id) }));
+
   const onSetArtistMaster = (shot: DirectorShot) => {
     setProject((prev) => {
       const masters = { ...prev.artistMasters };
@@ -308,77 +321,92 @@ export default function CampaignDirector() {
   return (
     <SiteShell>
       <div className="mx-auto w-full max-w-6xl space-y-6 px-3 py-6 sm:px-4 sm:py-8">
-        <header>
-          <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Campaign Director</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Script, shoot and animate a whole campaign</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Upload your product designs and a theme. The director writes the shot list, renders each frame from a locked character and the exact
-            product, then animates what you approve. Spend only starts after you approve a count and a price.
-          </p>
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">Campaign Director</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Drop your mylars. Type the idea.</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{saveLabel}</span>
+            <Button size="sm" variant="secondary" onClick={() => void onCreate()}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> New campaign
+            </Button>
+          </div>
         </header>
 
-        <div className="rounded-2xl border border-border/60 bg-card/60 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="flex-1">
-              <label className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Campaign name</label>
-              <Input className="mt-1" value={name} placeholder="Untitled campaign" disabled={!activeId} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{saveLabel}</span>
-              <Button size="sm" variant="secondary" onClick={() => void onCreate()}>
-                <Plus className="mr-1.5 h-3.5 w-3.5" /> New campaign
-              </Button>
-            </div>
+        {projects.length > 1 ? (
+          <div className="flex flex-wrap gap-2">
+            {projects.map((p) => (
+              <div
+                key={p.id}
+                className={cn(
+                  "flex items-center gap-1 rounded-full border px-1 pl-3 text-xs",
+                  p.id === activeId ? "border-primary/40 bg-primary/10" : "border-border/60 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <button type="button" className="py-1.5" onClick={() => void open(p.id)}>
+                  {p.name}
+                </button>
+                <button type="button" aria-label={`Delete ${p.name}`} className="rounded-full p-1.5 hover:text-destructive" onClick={() => void onDelete(p.id)}>
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {projects.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No campaigns yet. Create one to start.</p>
-            ) : (
-              projects.map((p) => (
-                <div
-                  key={p.id}
-                  className={cn(
-                    "flex items-center gap-1 rounded-full border px-1 pl-3 text-xs",
-                    p.id === activeId ? "border-primary/40 bg-primary/10" : "border-border/60 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <button type="button" className="py-1.5" onClick={() => void open(p.id)}>
-                    {p.name}
-                  </button>
-                  <button type="button" aria-label={`Delete ${p.name}`} className="rounded-full p-1.5 hover:text-destructive" onClick={() => void onDelete(p.id)}>
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        ) : null}
 
         {!activeId ? (
-          <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center text-sm text-muted-foreground">Create a campaign to begin.</div>
+          <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center text-sm text-muted-foreground">Setting up your campaign…</div>
         ) : (
           <div className="space-y-5">
-            <Section step="Step 1" title="The world and the character">
-              <WorldPanel world={project.world} onChange={(world) => setProject((prev) => ({ ...prev, world }))} />
-            </Section>
-            <Section step="Step 2" title="Product designs">
-              <ProductsPanel products={project.products} onChange={(products) => setProject((prev) => ({ ...prev, products }))} />
-            </Section>
-            <Section step="Step 3" title="Theme and script">
-              <BriefPanel project={project} writing={writing} onBriefChange={(brief) => setProject((prev) => ({ ...prev, brief }))} onWrite={() => void onWrite()} />
-            </Section>
-            <Section step="Step 4" title="Shots: review, approve, animate">
-              <ShotBoard
-                project={project}
-                prices={prices}
-                busy={running}
-                onUpdateShot={patchShot}
-                onRequest={setPending}
-                onSetArtistMaster={onSetArtistMaster}
-                onCheck={(shot) => void runQa(shot, shot.image.url)}
-              />
-            </Section>
-            <RunBar project={project} prices={prices} running={running} onRequest={setPending} />
+            <SimpleStart
+              project={project}
+              writing={writing}
+              onAddProduct={addProduct}
+              onUpdateProduct={updateProduct}
+              onRemoveProduct={removeProduct}
+              onThemeChange={(theme) => setProject((prev) => ({ ...prev, brief: { ...prev.brief, theme } }))}
+              onWrite={() => void onWrite()}
+            />
+
+            {project.shots.length > 0 ? (
+              <>
+                <Section step="Your shots" title="Review, approve, animate">
+                  <ShotBoard
+                    project={project}
+                    prices={prices}
+                    busy={running}
+                    onUpdateShot={patchShot}
+                    onRequest={setPending}
+                    onSetArtistMaster={onSetArtistMaster}
+                    onCheck={(shot) => void runQa(shot, shot.image.url)}
+                  />
+                </Section>
+                <RunBar project={project} prices={prices} running={running} onRequest={setPending} />
+              </>
+            ) : null}
+
+            <Collapsible className="rounded-2xl border border-border/60 bg-card/30">
+              <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-4 py-3 text-sm text-muted-foreground hover:text-foreground">
+                <span>Advanced: character photos, look, product details, shot count</span>
+                <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-5 px-3 pb-4 sm:px-4">
+                <div>
+                  <label className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Campaign name</label>
+                  <Input className="mt-1" value={name} placeholder="Untitled campaign" onChange={(e) => setName(e.target.value)} />
+                </div>
+                <Section step="Character and world" title="Same look in every campaign">
+                  <WorldPanel world={project.world} onChange={(world) => setProject((prev) => ({ ...prev, world }))} />
+                </Section>
+                <Section step="Product details" title="Names the script and prompts use">
+                  <ProductsPanel products={project.products} onChange={(products) => setProject((prev) => ({ ...prev, products }))} />
+                </Section>
+                <Section step="Script options" title="Extra direction and shot count">
+                  <BriefPanel project={project} writing={writing} onBriefChange={(brief) => setProject((prev) => ({ ...prev, brief }))} onWrite={() => void onWrite()} />
+                </Section>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         )}
       </div>

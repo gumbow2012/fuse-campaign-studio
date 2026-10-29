@@ -3,6 +3,7 @@ import { Loader2, ScanText, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { SignedImg } from "./Signed";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { readProductDesign } from "@/services/campaignDirector";
 import { newId } from "@/lib/campaign-director/state";
@@ -75,7 +76,7 @@ export default function ProductsPanel({ products, onChange }: Props) {
         <div className="space-y-2">
           {products.map((product, i) => (
             <div key={product.id} className="grid gap-2 rounded-md border p-2 sm:grid-cols-[72px_1fr]">
-              <img src={product.imageUrl} alt={product.name} className="h-24 w-[72px] rounded object-cover" />
+              <SignedImg src={product.imageUrl} alt={product.name} className="h-24 w-[72px] rounded object-cover" />
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="w-6 text-xs text-muted-foreground">{String(i + 1).padStart(2, "0")}</span>

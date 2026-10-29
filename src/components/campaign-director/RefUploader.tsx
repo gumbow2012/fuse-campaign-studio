@@ -3,6 +3,7 @@ import { Loader2, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { SignedImg } from "./Signed";
 import { uploadRunInputFile } from "@/services/runInputUpload";
 import { newId } from "@/lib/campaign-director/state";
 import type { DirectorRef, DirectorRefKind } from "@/lib/campaign-director/types";
@@ -61,7 +62,7 @@ export default function RefUploader({ title, hint, kind, refs, max, onChange }: 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {refs.map((ref) => (
             <div key={ref.id} className="space-y-1 rounded-md border p-1.5">
-              <img src={ref.url} alt={ref.label} className="aspect-[3/4] w-full rounded object-cover" />
+              <SignedImg src={ref.url} alt={ref.label} className="aspect-[3/4] w-full rounded object-cover" />
               <Input
                 value={ref.label}
                 className="h-7 text-xs"

@@ -11,6 +11,7 @@ import { estimateRun, type RunEstimate, type UnitPrices } from "@/lib/campaign-d
 import { compileImageRequest, isShotReadyForImage } from "@/lib/campaign-director/promptCompiler";
 import { CAMERA_KINDS, type CameraKind, type DirectorProject, type DirectorShot, type ShotStatus } from "@/lib/campaign-director/types";
 import { cn } from "@/lib/utils";
+import { SignedImg, SignedLink, SignedVideo } from "./Signed";
 
 type Props = {
   project: DirectorProject;
@@ -79,9 +80,9 @@ export default function ShotBoard({ project, prices, busy, onUpdateShot, onReque
 
             <div className={cn("relative bg-muted", project.world.aspectRatio === "16:9" ? "aspect-video" : project.world.aspectRatio === "1:1" ? "aspect-square" : "aspect-[9/16] max-h-[420px]")}>
               {shot.video.url ? (
-                <video src={shot.video.url} poster={shot.image.url || undefined} controls loop playsInline className="h-full w-full object-contain" />
+                <SignedVideo src={shot.video.url} poster={shot.image.url || undefined} controls loop playsInline className="h-full w-full object-contain" />
               ) : shot.image.url ? (
-                <img src={shot.image.url} alt={shot.title} className="h-full w-full object-contain" />
+                <SignedImg src={shot.image.url} alt={shot.title} className="h-full w-full object-contain" />
               ) : (
                 <div className="flex h-full min-h-[160px] items-center justify-center p-4 text-center text-xs text-muted-foreground">
                   {rendering ? <Loader2 className="h-6 w-6 animate-spin" /> : "No image yet"}
@@ -148,9 +149,9 @@ export default function ShotBoard({ project, prices, busy, onUpdateShot, onReque
                 {shot.status === "video_ready" ? (
                   <>
                     <Button size="sm" variant="outline" asChild>
-                      <a href={shot.video.url} download target="_blank" rel="noreferrer">
+                      <SignedLink href={shot.video.url} download target="_blank" rel="noreferrer">
                         <Download className="mr-1 h-3.5 w-3.5" /> Clip
-                      </a>
+                      </SignedLink>
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => onUpdateShot(shot.id, { status: "approved", video: { ...shot.video, url: "", requestId: "" } })}>
                       <RotateCcw className="mr-1 h-3.5 w-3.5" /> Re-animate
