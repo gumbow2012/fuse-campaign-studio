@@ -83,7 +83,7 @@ export function compileImageRequest(shot: DirectorShot, project: DirectorProject
   if (characterNumbers.length) {
     lines.push(
       `${refList(characterNumbers)} are the MASTER REFERENCES of ${world.characterName}. ${world.characterLock} ${world.scaleRule} ` +
-        `Copy the character from the references, do not invent him from text. The shot description below has no permission to change his identity.`,
+        `Copy the character from the references, do not invent him from text. If a master reference shows him holding a product, ignore that product completely: it is not part of this shot. The shot description below has no permission to change his identity.`,
     );
   } else {
     lines.push(`${world.characterName}: ${world.characterLock} ${world.scaleRule}`);

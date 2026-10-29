@@ -28,6 +28,7 @@ import {
   submitImageJob,
   submitVideoJob,
 } from "../_shared/fal.ts";
+import { extractFuseAssetPath, resolveExecutionUrl } from "../_shared/asset-access.ts";
 import {
   corsHeaders,
   createAdminClient,
@@ -126,6 +127,27 @@ async function askGemini(args: {
     }
   }
   throw new Error(errorMessage(lastError) || "Gemini could not produce a readable answer.");
+}
+
+/**
+ * `fuse-assets` is a private bucket, so a stored (canonical) URL cannot be fetched by Gemini or fal.
+ * Swap the caller's OWN storage URLs for short-lived signed ones right before use. Anything else is
+ * left alone, so one builder can never mint access to another user's files.
+ */
+async function signOwnUrls<T>(admin: ReturnType<typeof createAdminClient>, userId: string, value: T): Promise<T> {
+  if (typeof value === "string") {
+    if (!/^https?:\/\//i.test(value)) return value;
+    const path = extractFuseAssetPath(value);
+    if (!path || !path.startsWith(`${userId}/`)) return value;
+    return ((await resolveExecutionUrl(admin, value)) ?? value) as T;
+  }
+  if (Array.isArray(value)) return (await Promise.all(value.map((v) => signOwnUrls(admin, userId, v)))) as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) out[key] = await signOwnUrls(admin, userId, entry);
+    return out as T;
+  }
+  return value;
 }
 
 async function inlineImage(url: string) {
@@ -528,7 +550,8 @@ Deno.serve(async (req) => {
   try {
     const admin = createAdminClient();
     const access = await requireBuilderUser(req, admin);
-    const body = (await req.json().catch(() => ({}))) as Body;
+    const raw = (await req.json().catch(() => ({}))) as Body;
+    const body = await signOwnUrls(admin, access.user.id, raw);
     const action = String(body.action ?? "").trim();
 
     switch (action) {
