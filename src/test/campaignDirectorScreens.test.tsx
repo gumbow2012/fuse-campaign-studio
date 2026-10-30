@@ -5,6 +5,7 @@ import { normalizeShot } from "@/lib/campaign-director/state";
 import type { DirectorProject } from "@/lib/campaign-director/types";
 import ScriptEditor from "@/components/campaign-director/ScriptEditor";
 import SimpleStart from "@/components/campaign-director/SimpleStart";
+import FinalVideo from "@/components/campaign-director/FinalVideo";
 
 vi.mock("@/integrations/supabase/client", () => ({
   SUPABASE_URL: "https://x.supabase.co",
@@ -36,5 +37,15 @@ describe("campaign director screens", () => {
     expect(screen.getByText(/drag your mylar designs here/i)).toBeTruthy();
     expect(screen.getByPlaceholderText(/optional: any direction/i)).toBeTruthy();
     expect(screen.getByText("Lab Rats")).toBeTruthy();
+  });
+
+  it("final video panel counts finished clips, names the missing shots, and offers editor + zip", () => {
+    const p = project();
+    p.shots[0].video.url = "https://x.supabase.co/storage/v1/object/public/fuse-assets/u/campaign-director/p/a.mp4";
+    render(<FinalVideo project={p} name="Spray" onOpenEditor={vi.fn()} />);
+    expect(screen.getByText(/1 of 2 clips are finished/i)).toBeTruthy();
+    expect(screen.getByText(/no clip yet for shot 2/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /edit and export final video/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /download all clips/i })).toBeTruthy();
   });
 });

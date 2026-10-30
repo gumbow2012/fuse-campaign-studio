@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import SiteShell from "@/components/mvp/SiteShell";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,8 @@ import BriefPanel from "@/components/campaign-director/BriefPanel";
 import ShotBoard from "@/components/campaign-director/ShotBoard";
 import SimpleStart from "@/components/campaign-director/SimpleStart";
 import ScriptEditor from "@/components/campaign-director/ScriptEditor";
+import FinalVideo from "@/components/campaign-director/FinalVideo";
+import { sendToEditor } from "@/services/campaignDirectorEdit";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import RunBar from "@/components/campaign-director/RunBar";
 import SpendDialog from "@/components/campaign-director/SpendDialog";
@@ -53,6 +56,7 @@ function Section({ step, title, children }: { step: string; title: string; child
 }
 
 export default function CampaignDirector() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<DirectorProjectSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -267,6 +271,17 @@ export default function CampaignDirector() {
     setProject((prev) => ({ ...prev, products: prev.products.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
   const removeProduct = (id: string) => setProject((prev) => ({ ...prev, products: prev.products.filter((p) => p.id !== id) }));
 
+  /** Sends the finished clips to the Campaign Editor and opens it. */
+  const onOpenEditor = async () => {
+    const sent = await sendToEditor(projectRef.current, name);
+    const id = activeRef.current;
+    // Remember the edit so the next visit reopens the same one. Saved directly: state would be a render behind.
+    if (id) await saveProject(id, { ...projectRef.current, editProjectId: sent.id });
+    setProject((prev) => ({ ...prev, editProjectId: sent.id }));
+    if (sent.added > 0 && project.editProjectId) toast.success(`${sent.added} new clip${sent.added === 1 ? "" : "s"} added to Available media.`);
+    navigate(`/editor/${sent.id}`);
+  };
+
   const onSetArtistMaster = (shot: DirectorShot) => {
     setProject((prev) => {
       const masters = { ...prev.artistMasters };
@@ -388,6 +403,7 @@ export default function CampaignDirector() {
 
             {project.shots.length > 0 && started ? (
               <>
+                {project.shots.some((s) => s.video.url) ? <FinalVideo project={project} name={name} onOpenEditor={onOpenEditor} /> : null}
                 <Section step="Your shots" title="Review, approve, animate">
                   <ShotBoard
                     project={project}
