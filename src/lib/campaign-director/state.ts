@@ -151,6 +151,7 @@ export function normalizeProject(value: unknown): DirectorProject {
 
   return {
     version: 1,
+    editProjectId: str(raw.editProjectId) || undefined,
     world,
     products,
     brief: { theme: str(briefRaw.theme), notes: str(briefRaw.notes), shotCount },

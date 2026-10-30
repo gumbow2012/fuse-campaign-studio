@@ -173,6 +173,8 @@ export interface DirectorBrief {
 
 export interface DirectorProject {
   version: 1;
+  /** The Campaign Editor project that holds this campaign's clips, once sent there. */
+  editProjectId?: string;
   world: DirectorWorld;
   products: DirectorProduct[];
   brief: DirectorBrief;

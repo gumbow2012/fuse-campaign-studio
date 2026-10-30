@@ -5,6 +5,7 @@ import { compileImageRequest, compileVideoRequest, isShotReadyForImage } from ".
 import { issueSummary, shotsFromScript, validateScript } from "./script";
 import { estimateRun } from "./costEstimate";
 import { friendlyError } from "./errors";
+import { clipFileName, readyClips, segmentRows } from "./finalVideo";
 import type { DirectorProduct, DirectorProject, DirectorShot } from "./types";
 
 const product = (id: string, name: string): DirectorProduct => ({
@@ -252,5 +253,38 @@ describe("plain prompt wording and friendly errors", () => {
     expect(msg).toMatch(/safety check declined/i);
     expect(msg).not.toMatch(/token|SECRET|http/);
     expect(friendlyError("boom https://x.test/a?token=SECRET happened")).toBe("boom [link] happened");
+  });
+});
+
+describe("final video helpers", () => {
+  const withClip = (id: string, index: number, title: string, url: string) => {
+    const s = shot({ id, index, title });
+    s.video.url = url;
+    return s;
+  };
+  const base = "https://x.supabase.co/storage/v1/object/public/fuse-assets/u1/campaign-director/p/";
+
+  it("keeps finished clips in script order and skips shots without one", () => {
+    const p = project();
+    p.shots = [withClip("a", 1, "One", `${base}a.mp4`), shot({ id: "b", index: 2 }), withClip("c", 3, "Three", `${base}c.mp4?x=1`)];
+    const clips = readyClips(p);
+    expect(clips.map((c) => c.key)).toEqual(["u1/campaign-director/p/a.mp4", "u1/campaign-director/p/c.mp4"]);
+  });
+
+  it("first send puts every clip on the timeline; a later send only adds new ones off the timeline", () => {
+    const p = project();
+    p.shots = [withClip("a", 1, "One", `${base}a.mp4`), withClip("c", 3, "Three", `${base}c.mp4`)];
+    const clips = readyClips(p);
+    const first = segmentRows("proj", clips, 3);
+    expect(first.map((r) => [r.position, r.on_timeline, r.trim_end_ms])).toEqual([[0, true, 3000], [1, true, 3000]]);
+
+    p.shots.push(withClip("d", 4, "Four", `${base}d.mp4`));
+    const later = segmentRows("proj", readyClips(p), 3, first.map((r) => r.source_path), 2);
+    expect(later).toHaveLength(1);
+    expect(later[0]).toMatchObject({ source_path: "u1/campaign-director/p/d.mp4", on_timeline: false, position: 2 });
+  });
+
+  it("names zip files by shot number and title", () => {
+    expect(clipFileName(shot({ index: 3, title: "Secret Agent Inspection!" }))).toBe("03-secret-agent-inspection.mp4");
   });
 });
