@@ -15,8 +15,8 @@ import {
   HelpCircle,
   Images,
   Loader2,
-  Plus,
   Upload,
+  UploadCloud,
   Users,
   XCircle,
 } from "lucide-react";
@@ -111,6 +111,22 @@ export default function TemplateInputCard({
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [castOpen, setCastOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
+
+  /* Drag-and-drop on the whole card: an empty slot takes the file, a filled one swaps it. */
+  const dropHandlers = {
+    onDragOver: (event: React.DragEvent) => {
+      event.preventDefault();
+      setDragging(true);
+    },
+    onDragLeave: () => setDragging(false),
+    onDrop: (event: React.DragEvent) => {
+      event.preventDefault();
+      setDragging(false);
+      const dropped = Array.from(event.dataTransfer?.files ?? []).find((f) => f.type.startsWith("image/"));
+      if (dropped) onFileChange(dropped);
+    },
+  };
 
   /* One stable preview URL per selected file — revoked only when the file is
      replaced/removed or the card unmounts, so the preview never flickers. */
@@ -290,9 +306,12 @@ export default function TemplateInputCard({
   if (compact) {
     return (
       <div
+        {...dropHandlers}
         className={cn(
           "flex min-h-[68px] items-center gap-3 rounded-2xl border bg-black/25 px-3 py-2.5",
-          state === "error"
+          dragging
+            ? "border-dashed border-cyan-300 bg-cyan-300/10"
+            : state === "error"
             ? "border-rose-300/40"
             : showWarning
               ? "border-amber-300/40"
@@ -352,9 +371,12 @@ export default function TemplateInputCard({
 
   return (
     <div
+      {...dropHandlers}
       className={cn(
         "rounded-[1.25rem] border bg-black/25 p-3 transition-colors motion-safe:transition-all",
-        state === "error"
+        dragging
+          ? "border-dashed border-cyan-300 bg-cyan-300/10"
+          : state === "error"
           ? "border-rose-300/40"
           : showWarning
             ? "border-amber-300/40"
@@ -442,21 +464,16 @@ export default function TemplateInputCard({
         <button
           type="button"
           onClick={() => setAddOpen(true)}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
-            event.preventDefault();
-            const dropped = event.dataTransfer?.files?.[0];
-            if (dropped) onFileChange(dropped);
-          }}
-          className="mt-3 flex h-[76px] w-full items-center justify-center gap-3 rounded-[0.9rem] border border-dashed border-cyan-200/25 bg-white/[0.02] text-center transition hover:border-cyan-200/60 hover:bg-cyan-300/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60"
+          className={cn(
+            "mt-3 flex min-h-[112px] w-full flex-col items-center justify-center gap-1.5 rounded-[0.9rem] border-2 border-dashed px-3 py-4 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60",
+            dragging ? "border-cyan-300 bg-cyan-300/10" : "border-cyan-200/25 bg-white/[0.02] hover:border-cyan-200/60 hover:bg-cyan-300/[0.04]",
+          )}
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-cyan-200/35 text-cyan-100">
-            <Plus className="h-3.5 w-3.5" />
+          <UploadCloud className="h-6 w-6 text-cyan-100" />
+          <span className="max-w-full truncate text-sm font-semibold text-white">
+            {dragging ? "Drop it here" : `Drag ${heading} here`}
           </span>
-          <span className="truncate font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-200">
-            Add {heading}
-          </span>
-
+          <span className="text-[11px] text-slate-400">or click to choose a file</span>
         </button>
       )}
 

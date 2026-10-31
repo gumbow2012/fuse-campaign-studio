@@ -1446,6 +1446,17 @@ export default function TemplateStudioPage() {
         ready={groupIsReady(group.id)}
         preview={groupPreview(group.id)}
         onOpen={() => setOpenGroupId(group.id)}
+        onDropFiles={(dropped) => {
+          // Fill this group's empty photo slots in order; extra files are ignored, never overwrite.
+          const empty = group.members.map((member) => member.input).filter((input) => input.type === "image" && !isFieldFilled(input));
+          empty.slice(0, dropped.length).forEach((input, index) => setSlotFile(input.key, dropped[index]));
+          if (dropped.length > empty.length) {
+            toast({
+              title: empty.length ? `Added ${empty.length} of ${dropped.length} photos` : "Those slots are already filled",
+              description: empty.length ? "The rest didn't fit. Remove a photo to swap one in." : "Remove a photo first to swap one in.",
+            });
+          }
+        }}
       />
     );
     return (
@@ -1718,6 +1729,27 @@ export default function TemplateStudioPage() {
       });
   };
 
+  /** Puts a file in one slot. Clicking, dropping on a card and dropping on a group all go through here. */
+  const setSlotFile = (key: string, nextFile: File | null) => {
+    setFiles((current) => ({ ...current, [key]: nextFile }));
+    setLibraryAssets((current) => ({ ...current, [key]: null }));
+    releaseAutofill(key);
+    if (nextFile) advanceFromInput(key);
+    // P6a: logged-out uploads go to temporary storage so the
+    // asset survives an OAuth redirect. No generation starts.
+    if (!user) {
+      if (!nextFile) {
+        setAnonUploads((current) => {
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
+        return;
+      }
+      startAnonUpload(key, nextFile);
+    }
+  };
+
   /*
    * Single source of truth for an input slot's UI. Rendered by the desktop
    * builder (compact = false) AND the mobile inline builder (compact = true).
@@ -1756,26 +1788,7 @@ export default function TemplateStudioPage() {
               />
             ) : undefined
           }
-          onFileChange={(nextFile) => {
-            setFiles((current) => ({ ...current, [field.key]: nextFile }));
-            setLibraryAssets((current) => ({ ...current, [field.key]: null }));
-            releaseAutofill(field.key);
-            if (nextFile) advanceFromInput(field.key);
-            // P6a: logged-out uploads go to temporary storage so the
-            // asset survives an OAuth redirect. No generation starts.
-            if (!user) {
-              if (!nextFile) {
-                setAnonUploads((current) => {
-                  const next = { ...current };
-                  delete next[field.key];
-                  return next;
-                });
-                return;
-              }
-              startAnonUpload(field.key, nextFile);
-
-            }
-          }}
+          onFileChange={(nextFile) => setSlotFile(field.key, nextFile)}
           libraryAsset={libraryAssets[field.key] ?? null}
           // P1: saved-library / brand pickers are account features.
           // Logged-out visitors configure with local files only.
