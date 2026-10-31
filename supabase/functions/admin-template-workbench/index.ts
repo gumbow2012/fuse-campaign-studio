@@ -1,3 +1,4 @@
+import { normalizeVisibility, type TemplateVisibility } from "../_shared/template-visibility.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -92,6 +93,7 @@ type QuickPublishGateResult = {
   finalOutputCount: number;
   completedRunCount: number;
   latestTestJobId: string | null;
+  visibility: TemplateVisibility;
 };
 
 type InputSlotDraft = {
@@ -612,6 +614,9 @@ async function getQuickPublishGate(
     finalOutputCount,
     completedRunCount: jobsWithOutputs.length,
     latestTestJobId: jobsWithOutputs[0]?.id ?? null,
+    visibility: normalizeVisibility(
+      (await admin.from("fuse_templates").select("visibility").eq("id", (version as any).template_id).maybeSingle()).data?.visibility,
+    ),
   };
 }
 
@@ -1242,9 +1247,17 @@ Deno.serve(async (req) => {
         .eq("id", versionId);
       if (activateError) throw new Error(activateError.message);
 
+      if ("visibility" in body) {
+        const { error: visibilityError } = await admin
+          .from("fuse_templates")
+          .update({ visibility: normalizeVisibility(body.visibility) })
+          .eq("id", quickGate.templateId);
+        if (visibilityError) throw new Error(visibilityError.message);
+      }
+
       const { data: templateRow } = await admin
         .from("fuse_templates")
-        .select("id, name")
+        .select("id, name, visibility")
         .eq("id", quickGate.templateId)
         .maybeSingle();
 
@@ -1274,7 +1287,8 @@ Deno.serve(async (req) => {
         versionNumber: quickGate.versionNumber,
         isActive: true,
         reviewStatus: "Approved",
-        quickGate: { ...quickGate, isActive: true },
+        visibility: normalizeVisibility((templateRow as any)?.visibility),
+        quickGate: { ...quickGate, isActive: true, visibility: normalizeVisibility((templateRow as any)?.visibility) },
       });
     }
 
@@ -1312,6 +1326,10 @@ Deno.serve(async (req) => {
       if ("name" in body) patch.name = cleanText(body.name);
       if ("description" in body) patch.description = nullableText(body.description);
       if ("previewUrl" in body) patch.preview_url = nullableText(body.previewUrl);
+      if ("visibility" in body) {
+        assertCanPublish(access); // who can see a published template is an admin decision
+        patch.visibility = normalizeVisibility(body.visibility);
+      }
       if ("previewAssetType" in body) patch.preview_asset_type = patch.preview_url ? cleanPreviewAssetType(body.previewAssetType) : null;
       if (body.clearPreview === true) {
         patch.preview_url = null;

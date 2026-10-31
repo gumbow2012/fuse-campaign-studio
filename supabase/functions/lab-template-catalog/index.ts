@@ -1,3 +1,4 @@
+import { canSeeTemplate, normalizeVisibility } from "../_shared/template-visibility.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import {
@@ -78,7 +79,7 @@ Deno.serve(async (req) => {
 
     const { data: templates, error: templateError } = await admin
       .from("fuse_templates")
-      .select("id, name, description, preview_url, preview_asset_type, created_at, created_by, free_preview_enabled, activation_video_node_id");
+      .select("id, name, description, preview_url, preview_asset_type, created_at, created_by, free_preview_enabled, activation_video_node_id, visibility");
     if (templateError) throw new Error(templateError.message);
 
     /**
@@ -251,6 +252,7 @@ Deno.serve(async (req) => {
     const visibleVersions = (versions ?? []).filter((version: any) => {
       if (isPrivileged) return true;
       const template = templateMap.get(version.template_id) as any;
+      if (!canSeeTemplate(template?.visibility, roles)) return false;
       if (String(version.review_status ?? "") === "Approved") return true;
       return Boolean(isCreator && userId && template?.created_by === userId);
     });
@@ -293,6 +295,7 @@ Deno.serve(async (req) => {
           reviewStatus: version.review_status ?? "Unreviewed",
           // F5/F6 — whether this campaign offers the FREE FIRST VIDEO. Display flag only.
           freePreviewEnabled: template?.free_preview_enabled === true,
+          visibility: normalizeVisibility(template?.visibility),
           activationVideoNodeId: template?.activation_video_node_id ?? null,
           castConfig: readCastConfig(version.cast_config),
           createdAt: template?.created_at ?? null,
