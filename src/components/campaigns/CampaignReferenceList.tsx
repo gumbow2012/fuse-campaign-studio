@@ -6,6 +6,7 @@
  */
 
 import CampaignReferenceRow from "@/components/campaigns/CampaignReferenceRow";
+import BulkReferenceDrop from "@/components/campaigns/BulkReferenceDrop";
 import type { CampaignField } from "@/lib/campaignFields";
 
 interface Props {
@@ -70,6 +71,10 @@ export default function CampaignReferenceList({
           </p>
         ) : null}
       </div>
+
+      {fields.filter((field) => field.kind === "image").length >= 2 ? (
+        <BulkReferenceDrop fields={fields} files={files} assets={assets} onFileChange={onFileChange} />
+      ) : null}
 
       {required.length ? (
         <>
