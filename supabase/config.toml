@@ -239,3 +239,6 @@ verify_jwt = false
 
 [functions.fuse-mcp-staging]
 verify_jwt = false
+
+[functions.sort-references]
+verify_jwt = false
