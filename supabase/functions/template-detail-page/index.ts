@@ -6,6 +6,9 @@ const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers
 const RATIOS = new Set(["9:16", "16:9", "1:1", "4:5", "3:4", "2:3", "4:3", "3:2", "5:4", "21:9"]);
 const INTERNAL = /swap\s*frame|approved|reference\s*frame|\bframe\s*\d|\bframe\b/i;
 const PLACEHOLDER = /^(new\s*input|input|untitled|node|slot|reference)\s*\d*$/i;
+/** Same rule as the site's templateSlug(): "Hat Brand Studio" -> "hat-brand-studio". */
+const slugify = (name: string) => String(name ?? "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
 function friendly(name: string): string {
   const raw = String(name ?? "").trim();
   const parts = raw.split("·");
@@ -25,9 +28,16 @@ Deno.serve(async (req) => {
   else { const b = await req.json().catch(() => ({})) as any; slug = b.slug ?? null; tid = b.template_id ?? null; }
   if (!slug && !tid) return json({ error: "slug or template_id required" }, 400);
 
-  let q = admin.from("fuse_templates").select("id,slug,name,description,preview_url,preview_asset_type,allow_customer_edit");
+  const COLS = "id,slug,name,description,preview_url,preview_asset_type,allow_customer_edit";
+  let q = admin.from("fuse_templates").select(COLS);
   q = slug ? q.eq("slug", slug) : q.eq("id", tid!);
-  const { data: t } = await q.maybeSingle();
+  let { data: t } = await q.maybeSingle();
+  // Cards link by the stored slug when the catalog has one, otherwise by the name. Resolve both, so a
+  // template never shows "Campaign not found" just because its link was built from its name.
+  if (!t && slug) {
+    const { data: all } = await admin.from("fuse_templates").select(COLS);
+    t = (all ?? []).find((row: any) => slugify(row.name) === slug) ?? null;
+  }
   if (!t) return json({ error: "not found" }, 404);
 
   const { data: ver } = await admin.from("template_versions").select("id").eq("template_id", t.id).eq("is_active", true).order("version_number", { ascending: false }).limit(1).maybeSingle();
@@ -82,7 +92,24 @@ Deno.serve(async (req) => {
   const gallery = [];
   for (const m of media ?? []) gallery.push({ id: m.id, media_type: m.media_type, url: await sign(m.source_path), poster_url: await sign(m.poster_path), alt: m.alt, label: m.label, category: m.category ?? null, is_primary: m.is_primary });
 
-  const featured = gallery.find((g) => g.is_primary) ?? gallery[0]
+  // No cover and no curated gallery: show one of the template's own results (newest finished run, video first).
+  let fromRun: any = null;
+  if (!gallery.length && !t.preview_url && vid) {
+    const { data: job } = await admin.from("execution_jobs").select("id").eq("version_id", vid).eq("status", "complete")
+      .order("started_at", { ascending: false }).limit(1).maybeSingle();
+    if (job) {
+      const { data: steps } = await admin.from("execution_steps")
+        .select("nodes!execution_steps_node_id_fkey(node_type,prompt_config), assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
+        .eq("job_id", job.id).not("output_asset_id", "is", null).order("created_at", { ascending: true });
+      const outs = (steps ?? []).filter((x: any) => x.assets?.supabase_storage_url && x.nodes?.prompt_config?.output_exposed !== false);
+      const pick: any = outs.find((x: any) => x.nodes?.node_type === "video_gen") ?? outs.find((x: any) => x.nodes?.node_type === "image_gen");
+      if (pick) {
+        fromRun = { id: null, media_type: pick.nodes.node_type === "video_gen" ? "video" : "image", url: await sign(pick.assets.supabase_storage_url), poster_url: null, category: null, is_primary: true };
+      }
+    }
+  }
+
+  const featured = gallery.find((g) => g.is_primary) ?? gallery[0] ?? fromRun
     ?? { id: null, media_type: t.preview_asset_type ?? "image", url: await sign(t.preview_url), poster_url: null, category: null, is_primary: true };
   const hero = (featured.media_type === "video" ? featured : null) ?? gallery.find((g) => g.media_type === "video") ?? featured;
 

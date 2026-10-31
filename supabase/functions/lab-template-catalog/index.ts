@@ -132,29 +132,37 @@ Deno.serve(async (req) => {
       : { data: [], error: null };
     if (edgeError) throw new Error(edgeError.message);
 
-    const { data: recentJobs, error: recentJobsError } = versionIds.length
-      ? await admin
-          .from("execution_jobs")
-          .select("id, version_id, started_at")
-          .in("version_id", versionIds)
-          .eq("status", "complete")
-          .order("started_at", { ascending: false })
-          .limit(250)
-      : { data: [], error: null };
-    if (recentJobsError) throw new Error(recentJobsError.message);
-
-    const recentJobIds = (recentJobs ?? []).map((job: any) => job.id);
-    const { data: outputSteps, error: outputStepError } = recentJobIds.length
-      ? await admin
-          .from("execution_steps")
-          .select("id, job_id, node_id, created_at, nodes!execution_steps_node_id_fkey(node_type), assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
-          .in("job_id", recentJobIds)
-          .not("output_asset_id", "is", null)
-          .order("created_at", { ascending: true })
-      : { data: [], error: null };
-    if (outputStepError) throw new Error(outputStepError.message);
-
     const templateMap = new Map((templates ?? []).map((template: any) => [template.id, template]));
+
+    // Covers: a version with no cover of its own uses an output of its own newest finished runs. Queried per
+    // version and per run: one query across all runs returned 3000+ rows, the API's 1000-row cap kept the
+    // OLDEST, and the newest templates silently got blank cards (a 250-run window also missed rarely-run ones).
+    const coverlessVersions = (versions ?? []).filter((version: any) => {
+      const template = templateMap.get(version.template_id) as any;
+      return template && !template.preview_url && !CURATED_TEMPLATE_COVERS.has(String(template.name ?? "").trim().toLowerCase());
+    });
+    const recentJobs = (await Promise.all(coverlessVersions.map(async (version: any) => {
+      const { data, error } = await admin
+        .from("execution_jobs")
+        .select("id, version_id, started_at")
+        .eq("version_id", version.id)
+        .eq("status", "complete")
+        .order("started_at", { ascending: false })
+        .limit(2);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    }))).flat();
+    const outputSteps = (await Promise.all(recentJobs.map(async (job: any) => {
+      const { data, error } = await admin
+        .from("execution_steps")
+        .select("id, job_id, node_id, created_at, nodes!execution_steps_node_id_fkey(node_type), assets!execution_steps_output_asset_id_fkey(supabase_storage_url)")
+        .eq("job_id", job.id)
+        .not("output_asset_id", "is", null)
+        .order("created_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    }))).flat();
+
     const nodeById = new Map((nodes ?? []).map((node: any) => [node.id, node]));
     const connectedExecutionNodeIdsByVersion = new Map<string, Set<string>>();
     for (const edge of edges ?? []) {
