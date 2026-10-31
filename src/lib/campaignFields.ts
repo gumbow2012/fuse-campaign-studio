@@ -129,7 +129,9 @@ export function categoryArtwork(category: CampaignRefCategory): string {
 function looksInternal(label: string, key: string) {
   const value = label.trim();
   if (!value) return true;
-  if (value.toLowerCase() === key.toLowerCase()) return true;
+  // A label equal to its key is internal only when the key looks machine-made ("hat_1", "ref-2"),
+  // so a plain word like "Website" (key "website") stays as written.
+  if (value.toLowerCase() === key.toLowerCase() && /[_\d-]/.test(key)) return true;
   if (/_/.test(value)) return true;
   if (/reference\s*\d*$/i.test(value)) return true;
   if (/^(input|image|asset|slot|upload)\b/i.test(value)) return true;
