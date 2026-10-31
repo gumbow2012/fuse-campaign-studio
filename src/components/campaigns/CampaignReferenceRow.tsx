@@ -87,9 +87,16 @@ export default function CampaignReferenceRow({
         setDragging(false);
         void accept(event.dataTransfer.files?.[0] ?? null);
       }}
+      // An empty row is one big drop zone: drag a file onto it or click anywhere on it.
+      onClick={filled || checking ? undefined : openPicker}
       className={cn(
-        "flex items-center gap-4 px-1 py-4 transition-colors",
-        dragging && "rounded-2xl bg-primary/10",
+        "flex items-center gap-4 transition-colors",
+        filled
+          ? cn("px-1 py-4", dragging && "rounded-2xl bg-primary/10")
+          : cn(
+              "my-2 cursor-pointer rounded-2xl border-2 border-dashed px-4 py-5",
+              dragging ? "border-primary bg-primary/10" : "border-border/80 hover:border-primary/60 hover:bg-primary/[0.04]",
+            ),
       )}
     >
       <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-muted/40">
@@ -131,7 +138,12 @@ export default function CampaignReferenceRow({
             Image added.
           </p>
         ) : (
-          <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{field.helper}</p>
+          <>
+            <p className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{field.helper}</p>
+            <p className="mt-1 text-[13px] font-medium leading-5 text-foreground/80">
+              {dragging ? "Drop to add" : `Drag ${field.kind === "video" ? "a video" : "an image"} here, or click to add`}
+            </p>
+          </>
         )}
 
       </div>
@@ -178,7 +190,10 @@ export default function CampaignReferenceRow({
         ) : (
           <button
             type="button"
-            onClick={openPicker}
+            onClick={(event) => {
+              event.stopPropagation(); // the row itself also opens the picker
+              openPicker();
+            }}
             className="min-h-[44px] rounded-full border border-border px-4 text-[14px] font-medium text-foreground transition hover:border-primary/60 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {error ? "Try again" : "Add image"}
