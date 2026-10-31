@@ -514,6 +514,13 @@ export default function InlineCampaignRunPanel({
             setFiles((current) => ({ ...current, [key]: null }));
             setLibraryAssets((current) => ({ ...current, [key]: null }));
           }}
+          onAssetChange={(key, asset) => {
+            setError(null);
+            setFiles((current) => ({ ...current, [key]: null }));
+            setLibraryAssets((current) => ({ ...current, [key]: asset }));
+            void refreshProfile?.(); // the fill just used credits
+          }}
+          canFill={!!user}
         />
       ) : (
         <section className="rounded-[20px] border border-border/70 bg-muted/25 p-6">

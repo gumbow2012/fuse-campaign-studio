@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Check, ImagePlus, Loader2 } from "lucide-react";
+import { AlertCircle, Check, ImagePlus, Loader2, Sparkles } from "lucide-react";
 import { runUploadChecks } from "@/lib/uploadChecks";
 import { categoryArtwork, type CampaignField } from "@/lib/campaignFields";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,14 @@ interface Props {
   onFileChange: (file: File | null) => void;
   onClear: () => void;
   showRequirement?: boolean;
+  /** Offer to make this missing view from the customer's other hat photos (back, sides, inside). */
+  fill?: {
+    credits: number;
+    /** Why it can't run yet (signed out, no hat photo yet), or null when it can. */
+    blocked: string | null;
+    generate: () => Promise<string>;
+    use: (url: string) => void;
+  };
 }
 
 export default function CampaignReferenceRow({
@@ -29,11 +37,14 @@ export default function CampaignReferenceRow({
   onFileChange,
   onClear,
   showRequirement = false,
+  fill,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  /** AI fill: idle -> working -> a preview to approve, or an error. Nothing is used until "Use it". */
+  const [fillState, setFillState] = useState<"idle" | "working" | { url: string } | { error: string }>("idle");
   /** A missing artwork file must never render as a broken image. */
   const [artOk, setArtOk] = useState(true);
 
@@ -43,9 +54,10 @@ export default function CampaignReferenceRow({
     if (previewUrl) URL.revokeObjectURL(previewUrl);
   }, [previewUrl]);
 
-  const thumbnail = previewUrl ?? assetUrl ?? null;
+  const fillPreview = typeof fillState === "object" && "url" in fillState ? fillState.url : null;
+  const thumbnail = previewUrl ?? assetUrl ?? fillPreview ?? null;
   const artwork = categoryArtwork(field.category);
-  const filled = !!thumbnail;
+  const filled = !!(previewUrl ?? assetUrl);
 
   /** Validates before accepting; a rejected file keeps any previous valid one. */
   const accept = useCallback(
@@ -143,6 +155,49 @@ export default function CampaignReferenceRow({
             <p className="mt-1 text-[13px] font-medium leading-5 text-foreground/80">
               {dragging ? "Drop to add" : `Drag ${field.kind === "video" ? "a video" : "an image"} here, or click to add`}
             </p>
+            {fill ? (
+              // Buttons inside the clickable row must not also open the file picker.
+              <div className="mt-2 flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
+                {fillState === "working" ? (
+                  <span className="flex items-center gap-2 text-[13px] text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Making the {field.label.toLowerCase()} view from your hat…
+                  </span>
+                ) : fillPreview ? (
+                  <>
+                    <span className="text-[13px] text-muted-foreground">AI-made from your photos ({fill.credits} credits used). Check it matches your hat.</span>
+                    <button type="button" className="min-h-[36px] rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground" onClick={() => { fill.use(fillPreview); setFillState("idle"); }}>
+                      Use it
+                    </button>
+                    <button type="button" className="min-h-[36px] rounded-full px-3 text-[13px] font-medium text-muted-foreground hover:text-foreground" onClick={() => setFillState("idle")}>
+                      Discard
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={!!fill.blocked}
+                      title={fill.blocked ?? undefined}
+                      onClick={async () => {
+                        setFillState("working");
+                        try {
+                          setFillState({ url: await fill.generate() });
+                        } catch (fillError) {
+                          setFillState({ error: fillError instanceof Error ? fillError.message : "The view could not be made." });
+                        }
+                      }}
+                      className="flex min-h-[36px] items-center gap-1.5 rounded-full border border-primary/40 px-3 text-[13px] font-medium text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" aria-hidden /> Generate from your hat · {fill.credits} credits
+                    </button>
+                    {fill.blocked ? <span className="text-[12px] text-muted-foreground">{fill.blocked}</span> : null}
+                    {typeof fillState === "object" && "error" in fillState ? (
+                      <span className="text-[12px] text-[hsl(var(--status-negative))]">{fillState.error}</span>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ) : null}
           </>
         )}
 

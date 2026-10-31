@@ -8,6 +8,7 @@
 import CampaignReferenceRow from "@/components/campaigns/CampaignReferenceRow";
 import BulkReferenceDrop from "@/components/campaigns/BulkReferenceDrop";
 import type { CampaignField } from "@/lib/campaignFields";
+import { FILL_VIEW_CREDITS, fillReferenceView, isProductPhotoLabel, viewForLabel } from "@/services/fillReferenceView";
 
 interface Props {
   fields: CampaignField[];
@@ -18,31 +19,57 @@ interface Props {
   /** "0 of 2 added" — omitted when nothing is required. */
   addedCount: number;
   requiredCount: number;
+  /** Puts an image URL in a slot (used by the AI view fill). Fill is offered only when this is set. */
+  onAssetChange?: (key: string, asset: { url: string; name?: string | null } | null) => void;
+  /** Signed in, so credits can be charged for an AI fill. */
+  canFill?: boolean;
 }
 
 function List({
   fields,
+  allFields,
   files,
   assets,
   onFileChange,
   onClear,
+  onAssetChange,
+  canFill,
   showRequirement,
-}: Pick<Props, "fields" | "files" | "assets" | "onFileChange" | "onClear"> & {
+}: Pick<Props, "fields" | "files" | "assets" | "onFileChange" | "onClear" | "onAssetChange" | "canFill"> & {
+  allFields: CampaignField[];
   showRequirement: boolean;
 }) {
+  // Photos of the product the customer already added: the only material an AI fill may use.
+  const hatPhotos = allFields
+    .filter((f) => f.kind === "image" && isProductPhotoLabel(f.label))
+    .map((f) => files[f.id] ?? assets[f.id]?.url ?? null)
+    .filter((source): source is File | string => source !== null);
   return (
     <div className="divide-y divide-border/60">
-      {fields.map((field) => (
-        <CampaignReferenceRow
-          key={field.id}
-          field={field}
-          file={files[field.id] ?? null}
-          assetUrl={assets[field.id]?.url ?? null}
-          showRequirement={showRequirement}
-          onFileChange={(file) => onFileChange(field.id, file)}
-          onClear={() => onClear(field.id)}
-        />
-      ))}
+      {fields.map((field) => {
+        const view = field.kind === "image" ? viewForLabel(field.label) : null;
+        return (
+          <CampaignReferenceRow
+            key={field.id}
+            field={field}
+            file={files[field.id] ?? null}
+            assetUrl={assets[field.id]?.url ?? null}
+            showRequirement={showRequirement}
+            onFileChange={(file) => onFileChange(field.id, file)}
+            onClear={() => onClear(field.id)}
+            fill={
+              view && onAssetChange
+                ? {
+                    credits: FILL_VIEW_CREDITS,
+                    blocked: !canFill ? "Sign in to generate it." : !hatPhotos.length ? "Add a photo of your hat first." : null,
+                    generate: () => fillReferenceView(view, hatPhotos),
+                    use: (url) => onAssetChange(field.id, { url, name: `AI ${field.label}` }),
+                  }
+                : undefined
+            }
+          />
+        );
+      })}
     </div>
   );
 }
@@ -55,6 +82,8 @@ export default function CampaignReferenceList({
   onClear,
   addedCount,
   requiredCount,
+  onAssetChange,
+  canFill,
 }: Props) {
   const required = fields.filter((field) => field.required);
   const optional = fields.filter((field) => !field.required);
@@ -82,6 +111,9 @@ export default function CampaignReferenceList({
             Add one image for each required reference.
           </p>
           <List
+            allFields={fields}
+            onAssetChange={onAssetChange}
+            canFill={canFill}
             fields={required}
             files={files}
             assets={assets}
@@ -101,6 +133,9 @@ export default function CampaignReferenceList({
             These are optional — add them only if you want them in the campaign.
           </p>
           <List
+            allFields={fields}
+            onAssetChange={onAssetChange}
+            canFill={canFill}
             fields={optional}
             files={files}
             assets={assets}
