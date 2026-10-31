@@ -38,7 +38,7 @@ describe("template drop zones", () => {
 
   it("an empty reference row on the campaign page is a drop zone", async () => {
     const onFileChange = vi.fn();
-    const field = { id: "top", label: "Top", category: "garment", kind: "image", required: true, helper: "Show the front of the garment.", accept: "image/*" } as CampaignField;
+    const field = { id: "top", label: "Top", category: "garment", kind: "image", required: true, helper: "Show the front of the garment.", accept: "image/*" } as unknown as CampaignField;
     render(<CampaignReferenceRow field={field} file={null} onFileChange={onFileChange} onClear={vi.fn()} />);
     expect(screen.getByText("Drag an image here, or click to add")).toBeTruthy();
     const row = screen.getByText("Top").closest("div[class*='border-dashed']")!;
