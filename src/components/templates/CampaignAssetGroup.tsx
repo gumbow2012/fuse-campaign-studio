@@ -42,6 +42,8 @@ interface GroupCardProps {
   preview: File | string | null;
   compact?: boolean;
   onOpen: () => void;
+  /** Photos dropped on the card; the page fills the group's empty slots in order. */
+  onDropFiles?: (files: File[]) => void;
 }
 
 export function CampaignAssetGroupCard({
@@ -52,8 +54,10 @@ export function CampaignAssetGroupCard({
   preview,
   compact = false,
   onOpen,
+  onDropFiles,
 }: GroupCardProps) {
   const previewUrl = usePreviewUrl(preview);
+  const [dragging, setDragging] = useState(false);
   const started = filledCount > 0;
   const requiredGroup = group.requiredKeys.length > 0;
 
@@ -61,10 +65,27 @@ export function CampaignAssetGroupCard({
     <button
       type="button"
       onClick={onOpen}
+      onDragOver={(event) => {
+        if (!onDropFiles) return;
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(event) => {
+        if (!onDropFiles) return;
+        event.preventDefault();
+        setDragging(false);
+        const images = Array.from(event.dataTransfer?.files ?? []).filter((file) => file.type.startsWith("image/"));
+        if (images.length) onDropFiles(images);
+      }}
       className={cn(
         "group flex w-full items-center gap-3 rounded-[1.25rem] border bg-black/25 text-left transition",
         compact ? "p-2.5" : "p-3.5",
-        ready ? "border-emerald-300/30 hover:border-emerald-300/50" : "border-white/10 hover:border-cyan-300/45",
+        dragging
+          ? "border-dashed border-cyan-300 bg-cyan-300/10"
+          : ready
+            ? "border-emerald-300/30 hover:border-emerald-300/50"
+            : "border-white/10 hover:border-cyan-300/45",
       )}
     >
       <span
@@ -101,12 +122,14 @@ export function CampaignAssetGroupCard({
           ) : null}
         </span>
         <span className="mt-1 block text-[11px] leading-4 text-slate-400">
-          {ready
+          {dragging
+            ? `Drop to fill ${totalCount - filledCount} empty slot${totalCount - filledCount === 1 ? "" : "s"}`
+            : ready
             ? `${filledCount} photo${filledCount === 1 ? "" : "s"} added`
             : started
               ? `${filledCount} / ${totalCount} photos`
               : group.multi
-                ? `${totalCount} photos needed`
+                ? `${totalCount} photos needed${onDropFiles ? " · drag them here" : ""}`
                 : "Not added yet"}
         </span>
       </span>
