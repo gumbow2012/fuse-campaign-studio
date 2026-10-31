@@ -25,3 +25,34 @@ describe("drop all photos at once", () => {
     expect(await screen.findByText(/Placed 2 of 3\. Couldn't place random\.png/)).toBeTruthy();
   });
 });
+
+import CampaignReferenceRow from "@/components/campaigns/CampaignReferenceRow";
+
+describe("AI fill on an empty view row", () => {
+  it("shows the generated view for approval and only uses it on 'Use it'", async () => {
+    const use = vi.fn();
+    const generate = vi.fn(async () => "https://cdn.test/back.png");
+    render(
+      <CampaignReferenceRow
+        field={field("back", "Back")}
+        file={null}
+        onFileChange={vi.fn()}
+        onClear={vi.fn()}
+        fill={{ credits: 4, blocked: null, generate, use }}
+      />,
+    );
+    fireEvent.click(screen.getByText(/Generate from your hat · 4 credits/));
+    expect(await screen.findByText(/AI-made from your photos \(4 credits used\)/)).toBeTruthy();
+    expect(use).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Use it"));
+    expect(use).toHaveBeenCalledWith("https://cdn.test/back.png");
+  });
+
+  it("is disabled with a reason when the customer is signed out", () => {
+    render(
+      <CampaignReferenceRow field={field("back", "Back")} file={null} onFileChange={vi.fn()} onClear={vi.fn()} fill={{ credits: 4, blocked: "Sign in to generate it.", generate: vi.fn(), use: vi.fn() }} />,
+    );
+    expect((screen.getByText(/Generate from your hat/).closest("button") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Sign in to generate it.")).toBeTruthy();
+  });
+});
