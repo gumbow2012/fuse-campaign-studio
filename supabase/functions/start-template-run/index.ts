@@ -1,3 +1,4 @@
+import { canSeeTemplate } from "../_shared/template-visibility.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import {
@@ -649,7 +650,7 @@ Deno.serve(async (req) => {
 
     const { data: version, error: versionError } = await admin
       .from("template_versions")
-      .select("id, template_id, cast_config, fuse_templates!inner(name)")
+      .select("id, template_id, cast_config, fuse_templates!inner(name, visibility)")
       .eq("id", versionId)
       .single();
     if (versionError || !version) throw new Error(versionError?.message ?? "Version not found");
@@ -718,6 +719,12 @@ Deno.serve(async (req) => {
     }
 
     const userRoles = user ? await getUserRoles(user.id, admin) : [];
+    // Template visibility ("creators" / "admins"): enforced here too, so a hidden template cannot be run by id.
+    const templateRow = (version as any).fuse_templates;
+    const visibility = String((Array.isArray(templateRow) ? templateRow[0] : templateRow)?.visibility ?? "public");
+    if (!runnerAccess && !canSeeTemplate(visibility, userRoles)) {
+      return json({ error: "Template not found" }, 404);
+    }
     const bypassCredits = runnerAccess || userRoles.some((role) => role === "admin" || role === "dev");
     const templateName = getVersionTemplateName(version);
 

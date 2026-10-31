@@ -30,7 +30,16 @@ export type QuickPublishGate = {
   finalOutputCount: number;
   completedRunCount: number;
   latestTestJobId: string | null;
+  visibility?: TemplateVisibility;
 };
+
+export type TemplateVisibility = "public" | "creators" | "admins";
+
+const VISIBILITY_OPTIONS: { value: TemplateVisibility; label: string; hint: string }[] = [
+  { value: "public", label: "Everyone", hint: "Listed in the marketplace for all customers." },
+  { value: "creators", label: "Creators and admins", hint: "Hidden from customers. Creators, admins and devs can see and run it." },
+  { value: "admins", label: "Admins only", hint: "Hidden from everyone except admins and devs." },
+];
 
 type Props = {
   versionId: string | null | undefined;
@@ -70,6 +79,7 @@ export default function QuickPublishButton({
   const [gateError, setGateError] = useState<string | null>(null);
   const [published, setPublished] = useState<{ name: string; version: number } | null>(null);
   const [confirmUntested, setConfirmUntested] = useState(false);
+  const [visibility, setVisibility] = useState<TemplateVisibility>("public");
 
 
   const loadGate = useCallback(async () => {
@@ -84,6 +94,7 @@ export default function QuickPublishButton({
       const payload = data as { quickGate?: QuickPublishGate; error?: string } | null;
       if (payload?.error) throw new Error(payload.error);
       setGate(payload?.quickGate ?? null);
+      setVisibility(payload?.quickGate?.visibility ?? "public");
     } catch (error) {
       setGate(null);
       setGateError(error instanceof Error ? error.message : "Could not check publish requirements");
@@ -103,7 +114,7 @@ export default function QuickPublishButton({
     setPublishing(true);
     try {
       const { data, error } = await supabase.functions.invoke("admin-template-workbench", {
-        body: { action: "quick_publish_version", versionId },
+        body: { action: "quick_publish_version", versionId, visibility },
       });
       if (error) throw error;
       const payload = data as
@@ -126,7 +137,7 @@ export default function QuickPublishButton({
     } finally {
       setPublishing(false);
     }
-  }, [gate?.templateId, gate?.versionNumber, onPublished, templateName, versionId, versionNumber]);
+  }, [gate?.templateId, gate?.versionNumber, onPublished, templateName, versionId, versionNumber, visibility]);
 
   if (!canQuickPublish || !versionId) return null;
 
@@ -155,7 +166,8 @@ export default function QuickPublishButton({
                   LIVE
                 </DialogTitle>
                 <DialogDescription>
-                  {published.name} v{published.version} is now the marketplace version.
+                  {published.name} v{published.version} is live
+                  {visibility === "public" ? " for everyone." : visibility === "creators" ? " for creators and admins only." : " for admins only."}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter className="gap-2 sm:justify-between">
@@ -206,6 +218,31 @@ export default function QuickPublishButton({
                       NOT TESTED — output quality has not been verified.
                     </p>
                   )}
+
+                  <fieldset className="space-y-1.5">
+                    <legend className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Who can see it</legend>
+                    {VISIBILITY_OPTIONS.map((option) => (
+                      <label
+                        key={option.value}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2",
+                          visibility === option.value ? "border-cyan-300/50 bg-cyan-300/[0.06]" : "border-border/60",
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="template-visibility"
+                          className="mt-1"
+                          checked={visibility === option.value}
+                          onChange={() => setVisibility(option.value)}
+                        />
+                        <span>
+                          <span className="block text-sm font-medium">{option.label}</span>
+                          <span className="block text-xs text-muted-foreground">{option.hint}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
 
                   {gate.reasons.length ? (
                     <ul className="space-y-1 text-xs text-muted-foreground">

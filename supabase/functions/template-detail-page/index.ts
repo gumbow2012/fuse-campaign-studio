@@ -1,5 +1,6 @@
 // Public customer-facing template PDP bundle for /templates/:slug — friendly customer inputs, customer counts, video hero, merchandised published gallery.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { canSeeTemplate } from "../_shared/template-visibility.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
@@ -28,7 +29,7 @@ Deno.serve(async (req) => {
   else { const b = await req.json().catch(() => ({})) as any; slug = b.slug ?? null; tid = b.template_id ?? null; }
   if (!slug && !tid) return json({ error: "slug or template_id required" }, 400);
 
-  const COLS = "id,slug,name,description,preview_url,preview_asset_type,allow_customer_edit";
+  const COLS = "id,slug,name,description,preview_url,preview_asset_type,allow_customer_edit,visibility";
   let q = admin.from("fuse_templates").select(COLS);
   q = slug ? q.eq("slug", slug) : q.eq("id", tid!);
   let { data: t } = await q.maybeSingle();
@@ -39,6 +40,12 @@ Deno.serve(async (req) => {
     t = (all ?? []).find((row: any) => slugify(row.name) === slug) ?? null;
   }
   if (!t) return json({ error: "not found" }, 404);
+  if ((t as any).visibility && (t as any).visibility !== "public") {
+    const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+    const { data: who } = token ? await admin.auth.getUser(token) : { data: { user: null } };
+    const { data: roleRows } = who?.user ? await admin.from("user_roles").select("role").eq("user_id", who.user.id) : { data: [] };
+    if (!canSeeTemplate((t as any).visibility, (roleRows ?? []).map((r: any) => String(r.role)))) return json({ error: "not found" }, 404);
+  }
 
   const { data: ver } = await admin.from("template_versions").select("id").eq("template_id", t.id).eq("is_active", true).order("version_number", { ascending: false }).limit(1).maybeSingle();
   const vid = ver?.id;
