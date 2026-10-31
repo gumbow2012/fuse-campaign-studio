@@ -29,7 +29,8 @@ function prompt(view: View) {
     `Create one clean product photo of ${VIEW_TEXT[view]} of exactly this hat.`,
     "Keep everything the photos show identical: crown shape and height, number of panels, seams, eyelets, top button, brim shape and curve, every color, fabric and texture, and every logo, embroidery, patch and label in its exact place and size.",
     "Anything no photo shows stays plain and consistent with the hat: the same fabric and color as the matching panel, and the usual construction for this hat style (fitted caps have a solid back, snapbacks a plastic snap strap, trucker caps mesh). Never invent new logos, text, patches or graphics.",
-    "Light grey seamless studio background, soft even light, the hat centered and fully in frame. No hands, no people, no props, no text.",
+    "Replace the whole background with plain light grey seamless studio paper, edge to edge: nothing from the photos' own backgrounds (ground, floor, plants, walls, hands) may remain anywhere in the image.",
+    "Soft even light, the hat centered and fully in frame. No hands, no people, no props, no text.",
   ].join("\n");
 }
 
