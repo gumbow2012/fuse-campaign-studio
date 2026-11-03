@@ -1,3 +1,4 @@
+import { ALL_OVER_PRINT_RULE } from "./defaults";
 import type { DirectorProduct, DirectorProject, DirectorShot, DirectorWorld } from "./types";
 
 /**
@@ -100,6 +101,8 @@ export function compileImageRequest(shot: DirectorShot, project: DirectorProject
     );
   }
 
+  if (shotProducts.length) lines.push(ALL_OVER_PRINT_RULE);
+
   for (const { product, ref, fromMaster } of artistNumbers) {
     lines.push(
       fromMaster
@@ -129,7 +132,8 @@ export function compileImageRequest(shot: DirectorShot, project: DirectorProject
   lines.push(`AVOID: ${world.avoid}`);
   lines.push("No on-screen text except what is printed on the product artwork.");
 
-  const prompt = shot.promptOverride.trim() ? shot.promptOverride.trim() : lines.join("\n\n");
+  const override = shot.promptOverride.trim();
+  const prompt = override ? [override, ...(shotProducts.length ? [ALL_OVER_PRINT_RULE] : [])].join("\n\n") : lines.join("\n\n");
   return { prompt, referenceUrls: urls, referenceLabels: labels };
 }
 
@@ -153,9 +157,9 @@ export function compileVideoRequest(shot: DirectorShot, world: DirectorWorld): C
   ];
   if (productVisible) {
     lines.push(
-      "The product pouch stays exactly as shown: its printed artwork, text, colors and shape do not change. " +
+      "The product pouch stays exactly as shown: its all-over printed artwork, text, colors and shape do not change, and no silver edge appears. " +
         (heroProduct
-          ? "Camera movement is subtle only: a slow 3 percent push-in, a tiny tilt, moving light across the foil."
+          ? "Camera movement is subtle only: a slow 3 percent push-in, a tiny tilt, moving light across the glossy print."
           : "Keep the pouch steady in the hand."),
     );
   }

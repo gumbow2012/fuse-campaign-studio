@@ -1,5 +1,5 @@
 import { CAMERA_KINDS, type CameraKind, type DirectorJob, type DirectorQa, type DirectorProject, type DirectorRef, type DirectorShot, type ProductRole, type ShotStatus } from "./types";
-import { createEmptyProject, createEmptyWorld } from "./defaults";
+import { LEGACY_PRODUCT_SPEC, LEGACY_REFLECTIVE_LOOK, createEmptyProject, createEmptyWorld } from "./defaults";
 
 const STATUSES: ShotStatus[] = [
   "draft",
@@ -94,6 +94,9 @@ export function normalizeShot(value: unknown, index: number): DirectorShot {
   };
 }
 
+/** Text someone edited stays; an untouched old default moves to the current one. */
+const replaceLegacy = (value: string, legacy: string, current: string) => (value === legacy ? current : value);
+
 export function normalizeProject(value: unknown): DirectorProject {
   const base = createEmptyProject();
   const raw = (value ?? {}) as Partial<DirectorProject>;
@@ -106,8 +109,8 @@ export function normalizeProject(value: unknown): DirectorProject {
     characterLock: str(worldRaw.characterLock, empty.characterLock),
     scaleRule: str(worldRaw.scaleRule, empty.scaleRule),
     styleLock: str(worldRaw.styleLock, empty.styleLock),
-    productSpec: str(worldRaw.productSpec, empty.productSpec),
-    reflectiveLook: str(worldRaw.reflectiveLook, empty.reflectiveLook),
+    productSpec: replaceLegacy(str(worldRaw.productSpec, empty.productSpec), LEGACY_PRODUCT_SPEC, empty.productSpec),
+    reflectiveLook: replaceLegacy(str(worldRaw.reflectiveLook, empty.reflectiveLook), LEGACY_REFLECTIVE_LOOK, empty.reflectiveLook),
     avoid: str(worldRaw.avoid, empty.avoid),
     characters: refs(worldRaw.characters, "character"),
     styleRefs: refs(worldRaw.styleRefs, "style"),

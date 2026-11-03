@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createEmptyProject } from "./defaults";
+import { ALL_OVER_PRINT_RULE, createEmptyProject } from "./defaults";
 import { normalizeProject, normalizeShot } from "./state";
 import { compileImageRequest, compileVideoRequest, isShotReadyForImage } from "./promptCompiler";
 import { issueSummary, shotsFromScript, validateScript } from "./script";
@@ -118,7 +120,7 @@ describe("compileImageRequest", () => {
   it("lets a manual override replace the compiled text but keeps the same references", () => {
     const p = project();
     const out = compileImageRequest(shot({ promptOverride: "custom words", productIds: ["c"] }), p);
-    expect(out.prompt).toBe("custom words");
+    expect(out.prompt.startsWith("custom words")).toBe(true);
     expect(out.referenceUrls).toContain("https://cdn.test/c.png");
   });
 });
@@ -286,5 +288,51 @@ describe("final video helpers", () => {
 
   it("names zip files by shot number and title", () => {
     expect(clipFileName(shot({ index: 3, title: "Secret Agent Inspection!" }))).toBe("03-secret-agent-inspection.mp4");
+  });
+});
+
+describe("all-over print rule", () => {
+  const LEGACY_SPEC =
+    "Every product is the SAME real physical flat stand-up mylar pouch: identical dimensions, heat-sealed " +
+    "top and side seams of equal width, flexible foil film with a soft glossy sheen, mild crinkles, visible " +
+    "thickness at the bottom, a realistic contact shadow and environment reflections. The supplied design " +
+    "is printed exactly on the FRONT: every word, the artist graphics, the flavor name, the branding, the " +
+    "colors and the layout stay unchanged. Do not redraw, translate, crop, restyle or add text to it.";
+
+  it("goes on every shot that shows a product", () => {
+    const out = compileImageRequest(shot({ productIds: ["a"], productRole: "hero" }), project());
+    expect(out.prompt).toContain(ALL_OVER_PRINT_RULE);
+    expect(ALL_OVER_PRINT_RULE).toMatch(/edge to edge/i);
+    expect(ALL_OVER_PRINT_RULE).toMatch(/silver/i);
+  });
+  it("survives a manual prompt override", () => {
+    const out = compileImageRequest(shot({ promptOverride: "custom words", productIds: ["a"] }), project());
+    expect(out.prompt).toContain("custom words");
+    expect(out.prompt).toContain(ALL_OVER_PRINT_RULE);
+  });
+  it("survives a world whose product text was edited", () => {
+    const p = project();
+    p.world.productSpec = "A shiny silver bag.";
+    expect(compileImageRequest(shot({ productIds: ["a"] }), p).prompt).toContain(ALL_OVER_PRINT_RULE);
+  });
+  it("stays off shots with no product, so they do not grow a pouch", () => {
+    expect(compileImageRequest(shot({ productIds: [] }), project()).prompt).not.toContain(ALL_OVER_PRINT_RULE);
+    expect(compileImageRequest(shot({ productIds: [], promptOverride: "custom words" }), project()).prompt).toBe("custom words");
+  });
+  it("no default text describes the pouch as foil or sealed seams", () => {
+    const { world } = project();
+    expect(world.productSpec).not.toMatch(/foil|heat-sealed|seams of equal/i);
+    expect(world.reflectiveLook).not.toMatch(/foil/i);
+    expect(compileVideoRequest(shot({ productIds: ["a"], productRole: "hero" }), world).prompt).not.toMatch(/foil/i);
+  });
+  it("moves saved campaigns off the old foil text but keeps custom text", () => {
+    const migrated = normalizeProject({ world: { productSpec: LEGACY_SPEC } });
+    expect(migrated.world.productSpec).toBe(createEmptyProject().world.productSpec);
+    expect(normalizeProject({ world: { productSpec: "My own spec" } }).world.productSpec).toBe("My own spec");
+  });
+  it("the server copy of the rule matches, because stale tabs rely on it", () => {
+    const fn = readFileSync(resolve(process.cwd(), "supabase/functions/campaign-director/index.ts"), "utf8");
+    expect(fn).toContain(ALL_OVER_PRINT_RULE);
+    expect(fn).toMatch(/allOverPrint/);
   });
 });
