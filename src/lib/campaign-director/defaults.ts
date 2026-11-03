@@ -26,6 +26,22 @@ export const DEFAULT_STYLE_LOCK =
   "must not drift from shot to shot.";
 
 export const DEFAULT_PRODUCT_SPEC =
+  "Every product is the SAME real physical flat stand-up pouch, fully printed: identical dimensions, " +
+  "flexible film with a soft glossy sheen, mild crinkles, visible thickness at the bottom, a realistic " +
+  "contact shadow and environment reflections on the glossy print. The supplied design covers the whole " +
+  "FRONT edge to edge: every word, the artist graphics, the flavor name, the branding, the colors and the " +
+  "layout stay unchanged. Do not redraw, translate, crop, restyle or add text to it.";
+
+/**
+ * Sent on every shot that shows a product, whatever the world text says. Kade's rule: bags are all-over
+ * print, never silver or holographic around the art. Keep identical to the copy in
+ * supabase/functions/campaign-director/index.ts, which covers tabs still running an older bundle.
+ */
+export const ALL_OVER_PRINT_RULE =
+  "ALL-OVER PRINT RULE, this overrides any other description of the pouch: the supplied artwork covers the ENTIRE pouch edge to edge, including the top seal, the side seams and the bottom. The design's own colors and imagery run right off every edge of the bag, and the pouch has the same proportions as the artwork, so there is no empty band above, below or beside it. No silver, chrome, foil, metallic, mirrored, clear, rainbow or holographic material is visible anywhere on the pouch: no outline, border, frame, margin or strip around the art. Any pouch shown in a character, style or lighting reference has no authority here; never copy its edges or material.";
+
+/** Old defaults saved inside existing campaigns. Their foil and seam wording caused silver-edged bags. */
+export const LEGACY_PRODUCT_SPEC =
   "Every product is the SAME real physical flat stand-up mylar pouch: identical dimensions, heat-sealed " +
   "top and side seams of equal width, flexible foil film with a soft glossy sheen, mild crinkles, visible " +
   "thickness at the bottom, a realistic contact shadow and environment reflections. The supplied design " +
@@ -33,6 +49,12 @@ export const DEFAULT_PRODUCT_SPEC =
   "colors and the layout stay unchanged. Do not redraw, translate, crop, restyle or add text to it.";
 
 export const DEFAULT_REFLECTIVE_LOOK =
+  "REFLECTIVE-ENVIRONMENT TREATMENT (match the reflective reference): the scene's dominant colored light " +
+  "(fire, neon, sunset, screens) must visibly reflect across the printed pouch surface, the character's skin " +
+  "highlights and fabric edges. Add atmosphere that fits the place (sparks, dust, haze, rain). The pouch " +
+  "shows glossy colored highlights and a believable reflection, never a flat sticker look.";
+
+export const LEGACY_REFLECTIVE_LOOK =
   "REFLECTIVE-ENVIRONMENT TREATMENT (match the reflective reference): the scene's dominant colored light " +
   "(fire, neon, sunset, screens) must visibly reflect across the foil pouch surface, the character's skin " +
   "highlights and fabric edges. Add atmosphere that fits the place (sparks, dust, haze, rain). The pouch " +

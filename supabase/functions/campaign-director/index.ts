@@ -308,11 +308,12 @@ function buildScriptPrompt(body: Body, products: ProductInput[], shotCount: numb
     "6. Reveal rhythm: story shot, action shot, product payoff, story continues. Put a product in no more than 55 percent of shots. A shot may show at most 3 products. Product ids must come from the ledger.",
     "7. When the shot features a product's ARTIST as a separate physical character, put that product id in artistProductIds and describe the artist's role in `supporting`. The artist is never the protagonist and never a poster or screen.",
     "8. Vary the camera. Allowed cameras: " + CAMERAS.join(", ") + ". Never the same camera three shots in a row; no camera above 35 percent of the film.",
-    "9. Set `reflective` true when strong colored environment light (fire, neon, sunset, rain, night) should reflect off the foil pouch and skin and a product is visible.",
+    "9. Set `reflective` true when strong colored environment light (fire, neon, sunset, rain, night) should reflect off the glossy printed pouch and skin and a product is visible.",
     "10. `motion` = the ONE primary movement for a 3-second clip (an artist dancing, the boat accelerating, the product being raised, a slow push-in, a crowd moving). For hero product shots prefer subtle camera movement.",
     "11. Compositions must be animatable: clear hands, separated subjects, no fused or overlapping limbs, a clear subject hierarchy.",
     "12. `setting` and `lighting` are specific (time of day, place, practical light), never generic.",
     "13. Keep every field in plain, wholesome, brand-safe wording: describe places, objects and gentle physical actions in neutral terms. No violent, weapon, crime, romantic or suggestive language anywhere, and never refer to the world or its brand by a gang, mob or crime-style name.",
+    "14. Every pouch is all-over print, artwork edge to edge. Never describe a pouch as foil, silver, chrome, metallic or holographic in any field.",
     "",
     "Return strict JSON matching the schema. No prose.",
   ].join("\n");
@@ -411,9 +412,10 @@ const QA_SCHEMA = {
     scaleOk: { type: Type.BOOLEAN },
     productMatch: { type: Type.BOOLEAN },
     unexpectedProducts: { type: Type.BOOLEAN },
+    allOverPrint: { type: Type.BOOLEAN },
     issues: { type: Type.ARRAY, items: { type: Type.STRING } },
   },
-  required: ["characterMatch", "scaleOk", "productMatch", "unexpectedProducts", "issues"],
+  required: ["characterMatch", "scaleOk", "productMatch", "unexpectedProducts", "allOverPrint", "issues"],
 };
 
 async function qaCheck(body: Body) {
@@ -444,6 +446,7 @@ async function qaCheck(body: Body) {
         "- scaleOk: is the protagonist's height and body proportion consistent with the references, compared with anyone standing beside him? If unclear, answer true.",
         "- productMatch: true ONLY if every expected product is visible, its printed artwork matches its design (same layout, colors, graphics) and its main text is readable and spelled like the design. If no product is expected, answer true.",
         "- unexpectedProducts: true if a package with different artwork that is NOT one of the expected products is clearly visible.",
+        "- allOverPrint: false if any pouch in the still shows silver, chrome, foil, metallic, mirrored, clear, rainbow or holographic material around its artwork, including a border, an outline, or a blank band at the top or bottom. The artwork must run edge to edge on the whole bag. If no pouch is visible, answer true.",
         "- issues: short, concrete problems (empty list if none).",
         "Return strict JSON.",
       ].join("\n"),
@@ -452,17 +455,20 @@ async function qaCheck(body: Body) {
       maxOutputTokens: 8192,
     });
     const issues = Array.isArray(parsed.issues) ? (parsed.issues as unknown[]).map((i) => text(i, 240)).filter(Boolean).slice(0, 8) : [];
+    const allOverPrint = parsed.allOverPrint !== false;
+    if (!allOverPrint) issues.unshift("The pouch has a silver or holographic edge. It must be all-over print: regenerate this still.");
     const characterMatch = parsed.characterMatch !== false;
     const scaleOk = parsed.scaleOk !== false;
     const productMatch = parsed.productMatch !== false;
     const unexpectedProducts = parsed.unexpectedProducts === true;
     return {
       ok: true as const,
-      pass: characterMatch && scaleOk && productMatch && !unexpectedProducts,
+      pass: characterMatch && scaleOk && productMatch && !unexpectedProducts && allOverPrint,
       characterMatch,
       scaleOk,
       productMatch,
       unexpectedProducts,
+      allOverPrint,
       issues,
     };
   } catch (error) {
@@ -484,9 +490,18 @@ function requireConfirmed(body: Body) {
   }
 }
 
+// Keep identical to ALL_OVER_PRINT_RULE in src/lib/campaign-director/defaults.ts. Added here too so a tab
+// still running an older bundle, or a pasted prompt, can never send a pouch shot without it.
+const ALL_OVER_PRINT_RULE = "ALL-OVER PRINT RULE, this overrides any other description of the pouch: the supplied artwork covers the ENTIRE pouch edge to edge, including the top seal, the side seams and the bottom. The design's own colors and imagery run right off every edge of the bag, and the pouch has the same proportions as the artwork, so there is no empty band above, below or beside it. No silver, chrome, foil, metallic, mirrored, clear, rainbow or holographic material is visible anywhere on the pouch: no outline, border, frame, margin or strip around the art. Any pouch shown in a character, style or lighting reference has no authority here; never copy its edges or material.";
+
+function withAllOverPrint(prompt: string): string {
+  if (prompt.includes(ALL_OVER_PRINT_RULE) || !/exact front artwork|pouch|mylar/i.test(prompt)) return prompt;
+  return `${prompt}\n\n${ALL_OVER_PRINT_RULE}`;
+}
+
 async function submitImage(body: Body) {
   requireConfirmed(body);
-  const prompt = text(body.prompt, 12000);
+  const prompt = withAllOverPrint(text(body.prompt, 12000));
   const imageUrls = urlList(body.referenceUrls, MAX_REFERENCES);
   if (!prompt) return { ok: false as const, reason: "Missing prompt." };
   if (imageUrls.length === 0) return { ok: false as const, reason: "At least one reference image is required." };
