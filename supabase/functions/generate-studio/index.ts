@@ -321,7 +321,7 @@ type StartInput = {
   resolution?: string;
   /** gpt-image-2 only. */
   quality?: string;
-  /** seedream-v4 only ("1K" | "2K" | "4K"). */
+  /** seedream-v4 ("1K" | "2K" | "4K") or seedream-v5-flash ("1K" | "1.5K" | "2K"). */
   imageSize?: string;
   generateAudio?: boolean;
   aspectRatio?: string;

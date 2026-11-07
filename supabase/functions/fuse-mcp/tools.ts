@@ -57,7 +57,7 @@ const videoModelSchema = () => str(`Video model. Default kling-3.0-pro. ${MODEL_
 const imageOptionSchemas = () => ({
   resolution: str("Optional (nano-banana-pro: 1K, 2K or 4K; Seedance video: per model)"),
   quality: str("Optional (gpt-image-2): auto, low, medium, high"),
-  image_size: str("Optional (seedream-v4): 1K, 2K or 4K"),
+  image_size: str("Optional. seedream-v4: 1K, 2K or 4K. seedream-v5-flash: 1K, 1.5K or 2K"),
 });
 
 const BATCH_ITEMS = () => arr(obj({

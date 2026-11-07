@@ -763,8 +763,11 @@ export async function submitSeedanceReferenceVideoJob(args: {
  *       optional mask_url, num_images. NO resolution, NO aspect_ratio.
  *   fal-ai/bytedance/seedream/v4/edit | .../v4/text-to-image
  *     → prompt, image_urls[], image_size { width, height } (default 2048x2048)
+ *   bytedance/seedream/v5/flash/edit | .../v5/flash/text-to-image (no fal-ai/ prefix)
+ *     → prompt, image_urls[] (max 10, provider keeps the LAST 10), image_size
+ *       auto_1K | auto_1.5K | auto_2K (auto keeps the reference aspect), output_format
  */
-export type ImageModelKey = "nano-banana-pro" | "gpt-image-2" | "seedream-v4";
+export type ImageModelKey = "nano-banana-pro" | "gpt-image-2" | "seedream-v4" | "seedream-v5-flash";
 
 export type ImageModelParamKind = "resolution" | "quality" | "image_size";
 
@@ -781,6 +784,8 @@ export type ImageModelDefinition = {
   supportsOutputFormat: boolean;
   /** Only used when the live fal pricing lookup returns nothing. */
   fallbackFlatUsd: number;
+  /** Most reference images the edit endpoint accepts; more are rejected, never trimmed. */
+  maxImages?: number;
 };
 
 export const DEFAULT_IMAGE_MODEL: ImageModelKey = "nano-banana-pro";
@@ -790,6 +795,13 @@ export const SEEDREAM_IMAGE_SIZES: Record<string, { width: number; height: numbe
   "1K": { width: 1024, height: 1024 },
   "2K": { width: 2048, height: 2048 },
   "4K": { width: 4096, height: 4096 },
+};
+
+/** Seedream 5.0 Flash "Size" tiers → its auto_* presets (aspect follows the references). */
+export const SEEDREAM_V5_FLASH_SIZES: Record<string, string> = {
+  "1K": "auto_1K",
+  "1.5K": "auto_1.5K",
+  "2K": "auto_2K",
 };
 
 export const GPT_IMAGE_2_QUALITIES = ["auto", "low", "medium", "high"] as const;
@@ -830,6 +842,19 @@ export const IMAGE_MODELS: Record<ImageModelKey, ImageModelDefinition> = {
     supportsAspectRatio: false,
     supportsOutputFormat: false,
     fallbackFlatUsd: 0.06,
+  },
+  "seedream-v5-flash": {
+    key: "seedream-v5-flash",
+    label: "Seedream 5.0 Flash",
+    editEndpointId: "bytedance/seedream/v5/flash/edit",
+    textEndpointId: "bytedance/seedream/v5/flash/text-to-image",
+    paramKind: "image_size",
+    options: Object.keys(SEEDREAM_V5_FLASH_SIZES),
+    defaultOption: "2K",
+    supportsAspectRatio: false,
+    supportsOutputFormat: true,
+    fallbackFlatUsd: 0.06,
+    maxImages: 10,
   },
 };
 
@@ -873,7 +898,7 @@ export type ImageModelRequest = {
   resolution?: unknown;
   /** gpt-image-2 only. */
   quality?: unknown;
-  /** seedream-v4 only. */
+  /** seedream-v4 / seedream-v5-flash only. */
   imageSize?: unknown;
   maskUrl?: string | null;
 };
@@ -906,6 +931,9 @@ export function buildImageModelInput(modelKey: unknown, request: ImageModelReque
   if (aspect && !model.supportsAspectRatio) {
     throw new Error(`${model.label} has no aspect ratio setting`);
   }
+  if (model.maxImages && imageUrls.length > model.maxImages) {
+    throw new Error(`${model.label} accepts up to ${model.maxImages} reference images (got ${imageUrls.length})`);
+  }
   if (has(request.maskUrl) && model.key !== "gpt-image-2") {
     throw new Error(`${model.label} does not accept a mask`);
   }
@@ -927,6 +955,14 @@ export function buildImageModelInput(modelKey: unknown, request: ImageModelReque
     input.quality = quality;
     if (isEdit && has(request.maskUrl)) input.mask_url = String(request.maskUrl).trim();
     requestedOption = quality;
+  } else if (model.key === "seedream-v5-flash") {
+    const tier = String(request.imageSize ?? "").trim().toUpperCase() || model.defaultOption;
+    const preset = SEEDREAM_V5_FLASH_SIZES[tier];
+    if (!preset) {
+      throw new Error(`Unsupported image size "${tier}" — supported: ${model.options.join(", ")}`);
+    }
+    input.image_size = preset;
+    requestedOption = tier;
   } else {
     const { tier, size } = normalizeSeedreamImageSize(request.imageSize);
     input.image_size = { width: size.width, height: size.height };
