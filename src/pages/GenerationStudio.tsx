@@ -117,6 +117,7 @@ type StudioModelKey =
   | "nano-banana-pro"
   | "gpt-image-2"
   | "seedream-v4"
+  | "seedream-v5-flash"
   | "kling-3.0-pro"
   | "kling-3.0-standard"
   | "seedance-2.0"
@@ -139,6 +140,8 @@ type StudioModel = {
   paramField?: "resolution" | "quality" | "imageSize";
   /** Image models only: whether the provider accepts aspect_ratio. */
   supportsAspectRatio?: boolean;
+  /** Fewer reference images than MAX_REFERENCES accepted by the provider. */
+  maxReferences?: number;
   supportsAudio?: boolean;
   supportsEndFrame?: boolean;
 };
@@ -213,6 +216,16 @@ const STUDIO_MODELS: StudioModel[] = [
     resolutions: SEEDREAM_SIZES,
     paramLabel: "SIZE",
     paramField: "imageSize",
+  },
+  {
+    key: "seedream-v5-flash",
+    label: "Seedream 5.0 Flash",
+    kind: "image",
+    blurb: "ByteDance's fast Seedream 5 — keeps your reference's shape",
+    resolutions: ["1K", "1.5K", "2K"],
+    paramLabel: "SIZE",
+    paramField: "imageSize",
+    maxReferences: 10,
   },
   {
     key: "kling-3.0-pro",
@@ -1594,9 +1607,14 @@ export default function GenerationStudio() {
     const text = movementFragment ? `${base}\n\n${movementFragment}` : base;
 
     // @Name mentions attach that element's images after the manual references.
-    const expanded = expandMentions(text, elements, references.map((entry) => entry.url), MAX_REFERENCES);
+    const maxImages = model.maxReferences ?? MAX_REFERENCES;
+    if (references.length > maxImages) {
+      toast.error(`${model.label} takes up to ${maxImages} reference images. Remove ${references.length - maxImages} first`);
+      return;
+    }
+    const expanded = expandMentions(text, elements, references.map((entry) => entry.url), maxImages);
     const urls = expanded.urls;
-    if (expanded.dropped) toast.message(`${expanded.dropped} element image(s) left out: ${MAX_REFERENCES} image limit`);
+    if (expanded.dropped) toast.message(`${expanded.dropped} element image(s) left out: ${maxImages} image limit`);
     const payload: Record<string, unknown> = {
       action: "start",
       kind: model.kind,
