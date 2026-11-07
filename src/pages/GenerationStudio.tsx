@@ -88,6 +88,8 @@ import { uploadRunInputFile } from "@/services/runInputUpload";
 import { cn } from "@/lib/utils";
 import { useNearViewport } from "@/hooks/useNearViewport";
 import AssetThumbnail from "@/components/studio/AssetThumbnail";
+import { CreateElementDialog, ElementPromptBox } from "@/components/studio/StudioElements";
+import { expandMentions, readElements, writeElements, type StudioElement } from "@/lib/generationStudio/elements";
 import {
   FieldHelper,
   FusePanel,
@@ -901,6 +903,9 @@ export default function GenerationStudio() {
   const [shotPlan, setShotPlan] = useState<ShotPlanEntry[]>([]);
   const [directionExpanded, setDirectionExpanded] = useState(true);
   const [references, setReferences] = useState<Reference[]>([]);
+  const [elements, setElements] = useState<StudioElement[]>(() => readElements());
+  /** Images the New element dialog opens with; null = closed. */
+  const [elementDraft, setElementDraft] = useState<string[] | null>(null);
 
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -1588,12 +1593,15 @@ export default function GenerationStudio() {
     // Video only: append the optional camera movement instruction. Nothing else changes.
     const text = movementFragment ? `${base}\n\n${movementFragment}` : base;
 
-    const urls = references.map((entry) => entry.url);
+    // @Name mentions attach that element's images after the manual references.
+    const expanded = expandMentions(text, elements, references.map((entry) => entry.url), MAX_REFERENCES);
+    const urls = expanded.urls;
+    if (expanded.dropped) toast.message(`${expanded.dropped} element image(s) left out: ${MAX_REFERENCES} image limit`);
     const payload: Record<string, unknown> = {
       action: "start",
       kind: model.kind,
       model: model.key,
-      prompt: text,
+      prompt: expanded.prompt,
 
       // Only send the secondary param the selected model truly accepts.
       ...(model.resolutions.length && quality
@@ -1708,6 +1716,11 @@ export default function GenerationStudio() {
       setTimeout(() => void downloadAsset(asset.url, asset.generationId ?? `ref-${index + 1}`, asset.type), index * 350);
     });
     toast.success(`Downloading ${selectedAssets.length} asset${selectedAssets.length > 1 ? "s" : ""}`);
+  };
+
+  const saveElements = (next: StudioElement[]) => {
+    setElements(next);
+    writeElements(next);
   };
 
   /** Images only — videos can't be reference frames. Respects the 15-max. */
@@ -2188,11 +2201,13 @@ export default function GenerationStudio() {
                 </div>
               ) : (
                 <>
-                  <Textarea
+                  <ElementPromptBox
                     value={prompt}
-                    onChange={(event) => setPrompt(event.target.value)}
-                    placeholder="Describe the shot, motion, lighting, atmosphere, transitions."
-                    rows={8}
+                    onChange={setPrompt}
+                    elements={elements}
+                    onNewElement={() => setElementDraft(references.map((entry) => entry.url))}
+                    onDeleteElement={(id) => saveElements(elements.filter((entry) => entry.id !== id))}
+                    placeholder="Describe the shot, motion, lighting, atmosphere, transitions. Type @ to add a saved person, object or place."
                     className="min-h-[180px] resize-y border-white/12 bg-black/35 text-[15px] leading-relaxed focus-visible:ring-[hsl(var(--electric-blue)/0.5)]"
                   />
                   <FieldHelper>
@@ -2621,6 +2636,18 @@ export default function GenerationStudio() {
                       >
                         <Wand2 size={14} className="mr-1.5" /> Add selected to references
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const urls = selectedAssets.filter((asset) => asset.type === "image").map((asset) => asset.url);
+                          if (urls.length) setElementDraft(urls);
+                          else toast.message("Select at least one image for the element");
+                        }}
+                        className="border-white/15 bg-white/[0.04]"
+                      >
+                        <Plus size={14} className="mr-1.5" /> Create element
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={() => setSelected([])}>
                         Clear selection
                       </Button>
@@ -2646,6 +2673,17 @@ export default function GenerationStudio() {
           </div>
         </div>
       </div>
+
+      <CreateElementDialog
+        open={elementDraft !== null}
+        onOpenChange={(open) => !open && setElementDraft(null)}
+        initialUrls={elementDraft ?? []}
+        existingNames={elements.map((entry) => entry.name)}
+        onCreate={(element) => {
+          saveElements([...elements, element]);
+          toast.success(`Saved @${element.name}. Type it in any prompt`);
+        }}
+      />
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
